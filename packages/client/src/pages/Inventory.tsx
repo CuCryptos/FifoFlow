@@ -2,16 +2,26 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useItems } from '../hooks/useItems';
 import { CATEGORIES, LOW_STOCK_THRESHOLD } from '@fifoflow/shared';
+import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
+import type { Unit } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 
 export function Inventory() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [displayUnits, setDisplayUnits] = useState<Record<number, Unit>>({});
+  const [orderQtys, setOrderQtys] = useState<Record<number, string>>({});
   const { data: items, isLoading } = useItems({
     search: search || undefined,
     category: category || undefined,
   });
+
+  const getDisplayUnit = (itemId: number, storedUnit: Unit): Unit =>
+    displayUnits[itemId] ?? storedUnit;
+
+  const setDisplayUnit = (itemId: number, unit: Unit) =>
+    setDisplayUnits((prev) => ({ ...prev, [itemId]: unit }));
 
   return (
     <div className="space-y-4">
@@ -58,25 +68,58 @@ export function Inventory() {
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Qty</th>
                 <th className="px-4 py-3 font-medium">Unit</th>
+                <th className="px-4 py-3 font-medium">Order Qty</th>
                 <th className="px-4 py-3 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-border hover:bg-navy-lighter/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link to={`/inventory/${item.id}`} className="text-accent-green hover:underline">
-                      {item.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">{item.category}</td>
-                  <td className="px-4 py-3 font-medium">{item.current_qty}</td>
-                  <td className="px-4 py-3 text-text-secondary">{item.unit}</td>
-                  <td className="px-4 py-3">
-                    <StockBadge qty={item.current_qty} />
-                  </td>
-                </tr>
-              ))}
+              {items.map((item) => {
+                const displayUnit = getDisplayUnit(item.id, item.unit);
+                const displayQty = convertQuantity(item.current_qty, item.unit, displayUnit);
+                const compatible = getCompatibleUnits(item.unit);
+                return (
+                  <tr key={item.id} className="border-t border-border hover:bg-navy-lighter/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link to={`/inventory/${item.id}`} className="text-accent-green hover:underline">
+                        {item.name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-text-secondary">{item.category}</td>
+                    <td className="px-4 py-3 font-medium">{displayQty}</td>
+                    <td className="px-4 py-3">
+                      {compatible.length > 1 ? (
+                        <select
+                          value={displayUnit}
+                          onChange={(e) => setDisplayUnit(item.id, e.target.value as Unit)}
+                          className="bg-navy border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-green"
+                        >
+                          {compatible.map((u) => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-text-secondary">{item.unit}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="—"
+                        value={orderQtys[item.id] ?? ''}
+                        onChange={(e) =>
+                          setOrderQtys((prev) => ({ ...prev, [item.id]: e.target.value }))
+                        }
+                        className="w-20 bg-navy border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-green"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StockBadge qty={item.current_qty} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
