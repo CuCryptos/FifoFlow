@@ -11,5 +11,8 @@
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/server && npm run build --workspace=packages/client",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
