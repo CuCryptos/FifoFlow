@@ -39,6 +39,20 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
     CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
   `);
+
+  // Migrations — add new inventory fields
+  const columns = db.pragma('table_info(items)') as Array<{ name: string }>;
+  const columnNames = columns.map((c) => c.name);
+
+  if (!columnNames.includes('order_unit')) {
+    db.exec(`
+      ALTER TABLE items ADD COLUMN order_unit TEXT;
+      ALTER TABLE items ADD COLUMN qty_per_unit REAL;
+      ALTER TABLE items ADD COLUMN item_size TEXT;
+      ALTER TABLE items ADD COLUMN reorder_level REAL;
+      ALTER TABLE items ADD COLUMN reorder_qty REAL;
+    `);
+  }
 }
 
 export function getDb(): Database.Database {

@@ -11,6 +11,11 @@ export interface Item {
   category: Category;
   unit: Unit;
   current_qty: number;
+  order_unit: string | null;
+  qty_per_unit: number | null;
+  item_size: string | null;
+  reorder_level: number | null;
+  reorder_qty: number | null;
   created_at: string;
   updated_at: string;
 }
