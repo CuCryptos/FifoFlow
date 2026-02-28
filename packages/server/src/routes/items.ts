@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { createItemSchema, updateItemSchema } from '@fifoflow/shared';
 import type { Item, Transaction } from '@fifoflow/shared';
+import { createTransactionHandler } from './transactions.js';
 
 export function createItemRoutes(db: Database.Database): Router {
   const router = Router();
@@ -107,6 +108,9 @@ export function createItemRoutes(db: Database.Database): Router {
     db.prepare('DELETE FROM items WHERE id = ?').run(req.params.id);
     res.status(204).send();
   });
+
+  // POST /api/items/:id/transactions
+  router.post('/:id/transactions', createTransactionHandler(db));
 
   return router;
 }
