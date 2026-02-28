@@ -15,6 +15,8 @@ export const UNITS = [
   'oz',
   'gal',
   'qt',
+  'fl oz',
+  'ml',
   'case',
   'bag',
   'box',
