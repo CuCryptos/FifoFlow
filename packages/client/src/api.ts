@@ -3,7 +3,17 @@ import type {
   Transaction,
   TransactionWithItem,
   DashboardStats,
+  ItemCountAdjustmentResult,
+  CountSession,
+  CountSessionChecklistItem,
+  CountSessionEntry,
+  CountSessionSummary,
+  ReorderSuggestion,
+  CloseCountSessionInput,
   CreateItemInput,
+  CreateCountSessionInput,
+  RecordCountEntryInput,
+  SetItemCountInput,
   UpdateItemInput,
   CreateTransactionInput,
 } from '@fifoflow/shared';
@@ -32,13 +42,30 @@ export const api = {
       const query = qs.toString();
       return fetchJson<Item[]>(`/items${query ? `?${query}` : ''}`);
     },
+    reorderSuggestions: () => fetchJson<ReorderSuggestion[]>('/items/reorder-suggestions'),
     get: (id: number) => fetchJson<{ item: Item; transactions: Transaction[] }>(`/items/${id}`),
     create: (data: CreateItemInput) =>
       fetchJson<Item>('/items', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: UpdateItemInput) =>
       fetchJson<Item>(`/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    setCount: (id: number, data: SetItemCountInput) =>
+      fetchJson<ItemCountAdjustmentResult>(`/items/${id}/count`, { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/items/${id}`, { method: 'DELETE' }),
+  },
+  countSessions: {
+    list: () => fetchJson<CountSessionSummary[]>('/count-sessions'),
+    getOpen: () => fetchJson<CountSession | null>('/count-sessions/open'),
+    create: (data: CreateCountSessionInput) =>
+      fetchJson<CountSession>('/count-sessions', { method: 'POST', body: JSON.stringify(data) }),
+    listEntries: (sessionId: number) =>
+      fetchJson<CountSessionEntry[]>(`/count-sessions/${sessionId}/entries`),
+    checklist: (sessionId: number) =>
+      fetchJson<CountSessionChecklistItem[]>(`/count-sessions/${sessionId}/checklist`),
+    recordEntry: (sessionId: number, data: RecordCountEntryInput) =>
+      fetchJson<CountSessionEntry>(`/count-sessions/${sessionId}/entries`, { method: 'POST', body: JSON.stringify(data) }),
+    close: (sessionId: number, data?: CloseCountSessionInput) =>
+      fetchJson<CountSession>(`/count-sessions/${sessionId}/close`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
   },
   transactions: {
     list: (params?: { item_id?: number; type?: string; limit?: number; offset?: number }) => {

@@ -4,13 +4,15 @@ import request from 'supertest';
 import Database from 'better-sqlite3';
 import { initializeDb } from '../db.js';
 import { createItemRoutes } from '../routes/items.js';
+import { createSqliteInventoryStore } from '../store/sqliteStore.js';
 
 function createTestApp() {
   const db = new Database(':memory:');
   initializeDb(db);
+  const store = createSqliteInventoryStore(db);
   const app = express();
   app.use(express.json());
-  app.use('/api/items', createItemRoutes(db));
+  app.use('/api/items', createItemRoutes(store));
   return { app, db };
 }
 

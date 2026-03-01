@@ -1,35 +1,20 @@
 import { Router } from 'express';
-import type Database from 'better-sqlite3';
-import { createTransactionSchema } from '@fifoflow/shared';
-import type { Item, TransactionWithItem } from '@fifoflow/shared';
+import { createTransactionSchema, tryConvertQuantity } from '@fifoflow/shared';
+import type { Item, TransactionWithItem, Unit } from '@fifoflow/shared';
+import type { InventoryStore } from '../store/types.js';
 
-export function createTransactionRoutes(db: Database.Database): Router {
+export function createTransactionRoutes(store: InventoryStore): Router {
   const router = Router();
 
   // GET /api/transactions
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     const { item_id, type, limit = '50', offset = '0' } = req.query;
-    let sql = `
-      SELECT t.*, i.name as item_name, i.unit as item_unit
-      FROM transactions t
-      JOIN items i ON t.item_id = i.id
-      WHERE 1=1
-    `;
-    const params: unknown[] = [];
-
-    if (item_id) {
-      sql += ' AND t.item_id = ?';
-      params.push(item_id);
-    }
-    if (type && typeof type === 'string') {
-      sql += ' AND t.type = ?';
-      params.push(type);
-    }
-
-    sql += ' ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
-    params.push(Number(limit), Number(offset));
-
-    const transactions = db.prepare(sql).all(...params) as TransactionWithItem[];
+    const transactions = await store.listTransactions({
+      item_id: item_id ? Number(item_id) : undefined,
+      type: typeof type === 'string' ? type : undefined,
+      limit: Number(limit),
+      offset: Number(offset),
+    }) as TransactionWithItem[];
     res.json(transactions);
   });
 
@@ -37,10 +22,10 @@ export function createTransactionRoutes(db: Database.Database): Router {
 }
 
 // Handler for POST /api/items/:id/transactions (mounted on item routes)
-export function createTransactionHandler(db: Database.Database) {
-  return (req: any, res: any) => {
+export function createTransactionHandler(store: InventoryStore) {
+  return async (req: any, res: any) => {
     const itemId = Number(req.params.id);
-    const item = db.prepare('SELECT * FROM items WHERE id = ?').get(itemId) as Item | undefined;
+    const item = await store.getItemById(itemId) as Item | undefined;
     if (!item) {
       res.status(404).json({ error: 'Item not found' });
       return;
@@ -52,27 +37,44 @@ export function createTransactionHandler(db: Database.Database) {
       return;
     }
 
-    const { type, quantity, reason, notes } = parsed.data;
-    const delta = type === 'in' ? quantity : -quantity;
+    const { type, quantity, unit, reason, notes } = parsed.data;
+    const transactionUnit = (unit ?? item.unit) as Unit;
+    const normalizedQty = tryConvertQuantity(
+      quantity,
+      transactionUnit,
+      item.unit,
+      {
+        baseUnit: item.unit,
+        orderUnit: item.order_unit,
+        innerUnit: item.inner_unit,
+        qtyPerUnit: item.qty_per_unit,
+        itemSizeValue: item.item_size_value,
+        itemSizeUnit: item.item_size_unit,
+      },
+    );
+
+    if (normalizedQty === null) {
+      res.status(400).json({
+        error: `Cannot convert ${transactionUnit} to item unit ${item.unit}.`,
+      });
+      return;
+    }
+
+    const delta = type === 'in' ? normalizedQty : -normalizedQty;
 
     if (item.current_qty + delta < 0) {
       res.status(400).json({ error: 'Insufficient quantity. Cannot go below zero.' });
       return;
     }
 
-    const execute = db.transaction(() => {
-      const result = db.prepare(
-        'INSERT INTO transactions (item_id, type, quantity, reason, notes) VALUES (?, ?, ?, ?, ?)'
-      ).run(itemId, type, quantity, reason, notes ?? null);
-
-      db.prepare('UPDATE items SET current_qty = current_qty + ? WHERE id = ?').run(delta, itemId);
-
-      const transaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
-      const updatedItem = db.prepare('SELECT * FROM items WHERE id = ?').get(itemId);
-      return { transaction, item: updatedItem };
+    const result = await store.insertTransactionAndAdjustQty({
+      itemId,
+      type,
+      quantity: normalizedQty,
+      reason,
+      notes: notes ?? null,
+      delta,
     });
-
-    const result = execute();
     res.status(201).json(result);
   };
 }

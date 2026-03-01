@@ -29,6 +29,37 @@ export function initializeDb(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS count_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('open', 'closed')) DEFAULT 'open',
+      template_category TEXT,
+      notes TEXT,
+      opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+      closed_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS count_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL REFERENCES count_sessions(id),
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      previous_qty REAL NOT NULL,
+      counted_qty REAL NOT NULL,
+      delta REAL NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(session_id, item_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS count_session_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER NOT NULL REFERENCES count_sessions(id),
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      counted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(session_id, item_id)
+    );
+
     CREATE TRIGGER IF NOT EXISTS update_item_timestamp
     AFTER UPDATE ON items
     BEGIN
@@ -38,21 +69,63 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_transactions_item_id ON transactions(item_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
     CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
+    CREATE INDEX IF NOT EXISTS idx_count_entries_session_id ON count_entries(session_id);
+    CREATE INDEX IF NOT EXISTS idx_count_entries_item_id ON count_entries(item_id);
+    CREATE INDEX IF NOT EXISTS idx_count_session_items_session_id ON count_session_items(session_id);
+    CREATE INDEX IF NOT EXISTS idx_count_session_items_item_id ON count_session_items(item_id);
   `);
 
-  // Migrations — add new inventory fields
+  // Migrations — add inventory fields incrementally
   const columns = db.pragma('table_info(items)') as Array<{ name: string }>;
   const columnNames = columns.map((c) => c.name);
 
-  if (!columnNames.includes('order_unit')) {
-    db.exec(`
-      ALTER TABLE items ADD COLUMN order_unit TEXT;
-      ALTER TABLE items ADD COLUMN qty_per_unit REAL;
-      ALTER TABLE items ADD COLUMN item_size TEXT;
-      ALTER TABLE items ADD COLUMN reorder_level REAL;
-      ALTER TABLE items ADD COLUMN reorder_qty REAL;
-    `);
+  const addColumnIfMissing = (name: string, definition: string) => {
+    if (!columnNames.includes(name)) {
+      db.exec(`ALTER TABLE items ADD COLUMN ${name} ${definition};`);
+      columnNames.push(name);
+    }
+  };
+
+  addColumnIfMissing('order_unit', 'TEXT');
+  addColumnIfMissing('order_unit_price', 'REAL');
+  addColumnIfMissing('qty_per_unit', 'REAL');
+  addColumnIfMissing('inner_unit', 'TEXT');
+  addColumnIfMissing('item_size_value', 'REAL');
+  addColumnIfMissing('item_size_unit', 'TEXT');
+  addColumnIfMissing('item_size', 'TEXT');
+  addColumnIfMissing('reorder_level', 'REAL');
+  addColumnIfMissing('reorder_qty', 'REAL');
+
+  const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;
+  const sessionColumnNames = sessionColumns.map((c) => c.name);
+  if (!sessionColumnNames.includes('template_category')) {
+    db.exec('ALTER TABLE count_sessions ADD COLUMN template_category TEXT;');
   }
+
+  // Backfill checklist rows for legacy sessions created before count_session_items existed.
+  db.exec(`
+    INSERT OR IGNORE INTO count_session_items (session_id, item_id, counted)
+    SELECT e.session_id, e.item_id, 1
+    FROM count_entries e;
+  `);
+
+  db.exec(`
+    INSERT OR IGNORE INTO count_session_items (session_id, item_id, counted)
+    SELECT
+      s.id,
+      i.id,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM count_entries e
+        WHERE e.session_id = s.id
+          AND e.item_id = i.id
+      ) THEN 1 ELSE 0 END
+    FROM count_sessions s
+    JOIN items i ON 1=1
+    WHERE NOT EXISTS (
+      SELECT 1 FROM count_session_items si
+      WHERE si.session_id = s.id
+    );
+  `);
 }
 
 export function getDb(): Database.Database {

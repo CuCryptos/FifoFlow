@@ -1,0 +1,437 @@
+import type {
+  CloseCountSessionInput,
+  CountSession,
+  CountSessionChecklistItem,
+  CountSessionEntry,
+  CountSessionSummary,
+  CreateCountSessionInput,
+  CreateItemInput,
+  DashboardStats,
+  ItemCountAdjustmentResult,
+  Item,
+  ReconciliationResult,
+  Transaction,
+  TransactionWithItem,
+  UpdateItemInput,
+} from '@fifoflow/shared';
+import {
+  type InsertTransactionAndAdjustQtyInput,
+  type InventoryStore,
+  type ItemListFilters,
+  type ReconcileOutcome,
+  type SetItemCountWithAdjustmentInput,
+  type TransactionListFilters,
+} from './types.js';
+
+type CountFilter = { column: string; operator: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | 'ilike' | 'not.is'; value: string | number };
+
+interface SupabaseTransactionRow {
+  id: number;
+  item_id: number;
+  type: string;
+  quantity: number;
+  reason: string;
+  notes: string | null;
+  created_at: string;
+  items?: {
+    name: string;
+    unit: string;
+  };
+}
+
+interface SupabaseRpcTransactionResult {
+  transaction_row: Transaction;
+  item_row: Item;
+}
+
+interface SupabaseRpcCountAdjustmentResult {
+  item_row: Item;
+  transaction_row: Transaction | null;
+  delta: number;
+}
+
+class SupabaseStoreError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'SupabaseStoreError';
+  }
+}
+
+export class SupabaseInventoryStore implements InventoryStore {
+  constructor(
+    private readonly supabaseUrl: string,
+    private readonly supabaseKey: string,
+    private readonly schema: string = 'public',
+  ) {}
+
+  private notImplemented(method: string): never {
+    throw new SupabaseStoreError(501, `${method} is not implemented for Supabase store yet.`);
+  }
+
+  private buildRestUrl(table: string, params: URLSearchParams): string {
+    return `${this.supabaseUrl}/rest/v1/${table}?${params.toString()}`;
+  }
+
+  private async request<T>(args: {
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+    path: string;
+    params?: URLSearchParams;
+    body?: unknown;
+    prefer?: string;
+  }): Promise<T> {
+    const { method, path, params, body, prefer } = args;
+    const query = params ? `?${params.toString()}` : '';
+    const response = await fetch(`${this.supabaseUrl}/rest/v1/${path}${query}`, {
+      method,
+      headers: {
+        apikey: this.supabaseKey,
+        Authorization: `Bearer ${this.supabaseKey}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(prefer ? { Prefer: prefer } : {}),
+        ...(this.schema ? {
+          ...(method === 'GET' ? { 'Accept-Profile': this.schema } : { 'Content-Profile': this.schema }),
+        } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    if (!response.ok) {
+      const raw = await response.text();
+      let message = raw;
+      try {
+        const parsed = JSON.parse(raw) as { message?: string; error?: string };
+        message = parsed.message ?? parsed.error ?? raw;
+      } catch {
+        // keep raw message
+      }
+      throw new SupabaseStoreError(response.status, `Supabase request failed: ${message}`);
+    }
+
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  }
+
+  private async fetchJson<T>(table: string, params: URLSearchParams): Promise<T> {
+    return this.request<T>({
+      method: 'GET',
+      path: table,
+      params,
+    });
+  }
+
+  private async count(table: string, filters: CountFilter[]): Promise<number> {
+    const params = new URLSearchParams();
+    params.set('select', 'id');
+    params.set('limit', '1');
+    for (const filter of filters) {
+      params.set(filter.column, `${filter.operator}.${filter.value}`);
+    }
+
+    const response = await fetch(this.buildRestUrl(table, params), {
+      headers: {
+        apikey: this.supabaseKey,
+        Authorization: `Bearer ${this.supabaseKey}`,
+        Accept: 'application/json',
+        Prefer: 'count=exact',
+        ...(this.schema ? { 'Accept-Profile': this.schema } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Supabase count failed (${response.status}): ${body}`);
+    }
+
+    const contentRange = response.headers.get('content-range');
+    if (!contentRange) return 0;
+    const [, total] = contentRange.split('/');
+    const parsed = Number(total);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  async listItems(filters?: ItemListFilters): Promise<Item[]> {
+    const params = new URLSearchParams();
+    params.set('select', '*');
+    params.set('order', 'name.asc');
+    if (filters?.category) params.set('category', `eq.${filters.category}`);
+    if (filters?.search) params.set('name', `ilike.*${filters.search}*`);
+    return this.fetchJson<Item[]>('items', params);
+  }
+
+  async listItemsWithReorderLevel(): Promise<Item[]> {
+    const params = new URLSearchParams();
+    params.set('select', '*');
+    params.set('reorder_level', 'not.is.null');
+    return this.fetchJson<Item[]>('items', params);
+  }
+
+  async getItemById(id: number): Promise<Item | undefined> {
+    const params = new URLSearchParams();
+    params.set('select', '*');
+    params.set('id', `eq.${id}`);
+    params.set('limit', '1');
+    const rows = await this.fetchJson<Item[]>('items', params);
+    return rows[0];
+  }
+
+  async listTransactionsForItem(itemId: number, limit: number): Promise<Transaction[]> {
+    const params = new URLSearchParams();
+    params.set('select', '*');
+    params.set('item_id', `eq.${itemId}`);
+    params.set('order', 'created_at.desc');
+    params.set('limit', String(limit));
+    return this.fetchJson<Transaction[]>('transactions', params);
+  }
+
+  async createItem(_input: CreateItemInput): Promise<Item> {
+    const {
+      name,
+      category,
+      unit,
+      order_unit = null,
+      order_unit_price = null,
+      qty_per_unit = null,
+      inner_unit = null,
+      item_size_value = null,
+      item_size_unit = null,
+      item_size = null,
+      reorder_level = null,
+      reorder_qty = null,
+    } = _input;
+
+    const payload = {
+      name,
+      category,
+      unit,
+      order_unit,
+      order_unit_price,
+      qty_per_unit,
+      inner_unit,
+      item_size_value,
+      item_size_unit,
+      item_size: item_size ?? (
+        item_size_value && item_size_unit ? `${item_size_value} ${item_size_unit}` : null
+      ),
+      reorder_level,
+      reorder_qty,
+    };
+
+    const rows = await this.request<Item[]>({
+      method: 'POST',
+      path: 'items',
+      params: new URLSearchParams({ select: '*' }),
+      body: payload,
+      prefer: 'return=representation',
+    });
+    const created = rows[0];
+    if (!created) {
+      throw new SupabaseStoreError(500, 'Supabase did not return created item.');
+    }
+    return created;
+  }
+
+  async updateItem(id: number, updates: UpdateItemInput): Promise<Item> {
+    const fields = Object.entries(updates).filter(([, v]) => v !== undefined);
+    if (fields.length === 0) {
+      const existing = await this.getItemById(id);
+      if (!existing) throw new SupabaseStoreError(404, 'Item not found');
+      return existing;
+    }
+
+    const params = new URLSearchParams();
+    params.set('id', `eq.${id}`);
+    params.set('select', '*');
+
+    const rows = await this.request<Item[]>({
+      method: 'PATCH',
+      path: 'items',
+      params,
+      body: updates,
+      prefer: 'return=representation',
+    });
+    const updated = rows[0];
+    if (!updated) throw new SupabaseStoreError(404, 'Item not found');
+    return updated;
+  }
+
+  async countTransactionsForItem(itemId: number): Promise<number> {
+    return this.count('transactions', [{ column: 'item_id', operator: 'eq', value: itemId }]);
+  }
+
+  async deleteItem(id: number): Promise<void> {
+    const params = new URLSearchParams();
+    params.set('id', `eq.${id}`);
+    await this.request<void>({
+      method: 'DELETE',
+      path: 'items',
+      params,
+      prefer: 'return=minimal',
+    });
+  }
+
+  async listTransactions(filters?: TransactionListFilters): Promise<TransactionWithItem[]> {
+    const params = new URLSearchParams();
+    params.set('select', 'id,item_id,type,quantity,reason,notes,created_at,items!inner(name,unit)');
+    params.set('order', 'created_at.desc');
+    params.set('limit', String(filters?.limit ?? 50));
+    params.set('offset', String(filters?.offset ?? 0));
+    if (filters?.item_id !== undefined) params.set('item_id', `eq.${filters.item_id}`);
+    if (filters?.type) params.set('type', `eq.${filters.type}`);
+
+    const rows = await this.fetchJson<SupabaseTransactionRow[]>('transactions', params);
+    return rows.map((row) => ({
+      id: row.id,
+      item_id: row.item_id,
+      type: row.type as TransactionWithItem['type'],
+      quantity: row.quantity,
+      reason: row.reason as TransactionWithItem['reason'],
+      notes: row.notes,
+      created_at: row.created_at,
+      item_name: row.items?.name ?? '',
+      item_unit: row.items?.unit ?? '',
+    }));
+  }
+
+  async insertTransactionAndAdjustQty(input: InsertTransactionAndAdjustQtyInput): Promise<{
+    transaction: Transaction;
+    item: Item;
+  }> {
+    const rows = await this.request<SupabaseRpcTransactionResult[]>({
+      method: 'POST',
+      path: 'rpc/inventory_insert_transaction_and_adjust_qty',
+      body: {
+        p_item_id: input.itemId,
+        p_type: input.type,
+        p_quantity: input.quantity,
+        p_reason: input.reason,
+        p_notes: input.notes,
+      },
+      prefer: 'return=representation',
+    });
+    const row = rows[0];
+    if (!row) {
+      throw new SupabaseStoreError(
+        500,
+        'RPC inventory_insert_transaction_and_adjust_qty returned no rows.',
+      );
+    }
+    return {
+      transaction: row.transaction_row,
+      item: row.item_row,
+    };
+  }
+
+  async setItemCountWithAdjustment(input: SetItemCountWithAdjustmentInput): Promise<ItemCountAdjustmentResult> {
+    const rows = await this.request<SupabaseRpcCountAdjustmentResult[]>({
+      method: 'POST',
+      path: 'rpc/inventory_set_item_count_with_adjustment',
+      body: {
+        p_item_id: input.itemId,
+        p_counted_qty: input.countedQty,
+        p_notes: input.notes,
+      },
+      prefer: 'return=representation',
+    });
+    const row = rows[0];
+    if (!row) {
+      throw new SupabaseStoreError(
+        500,
+        'RPC inventory_set_item_count_with_adjustment returned no rows.',
+      );
+    }
+    return {
+      item: row.item_row,
+      transaction: row.transaction_row,
+      delta: row.delta,
+    };
+  }
+
+  async listCountSessions(): Promise<CountSessionSummary[]> {
+    return this.notImplemented('listCountSessions');
+  }
+
+  async getOpenCountSession(): Promise<CountSession | undefined> {
+    return this.notImplemented('getOpenCountSession');
+  }
+
+  async createCountSession(_input: CreateCountSessionInput): Promise<CountSession> {
+    return this.notImplemented('createCountSession');
+  }
+
+  async closeCountSession(_id: number, _input: CloseCountSessionInput): Promise<CountSession> {
+    return this.notImplemented('closeCountSession');
+  }
+
+  async listCountEntries(_sessionId: number): Promise<CountSessionEntry[]> {
+    return this.notImplemented('listCountEntries');
+  }
+
+  async listCountChecklist(_sessionId: number): Promise<CountSessionChecklistItem[]> {
+    return this.notImplemented('listCountChecklist');
+  }
+
+  async recordCountEntry(
+    _sessionId: number,
+    _input: { itemId: number; countedQty: number; notes: string | null }
+  ): Promise<CountSessionEntry> {
+    return this.notImplemented('recordCountEntry');
+  }
+
+  async getDashboardStats(lowStockThreshold: number): Promise<DashboardStats> {
+    const now = new Date();
+    const startUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const endUtc = new Date(startUtc);
+    endUtc.setUTCDate(endUtc.getUTCDate() + 1);
+
+    const [totalItems, lowStock, outOfStock, todayTx] = await Promise.all([
+      this.count('items', []),
+      this.count('items', [
+        { column: 'current_qty', operator: 'gt', value: 0 },
+        { column: 'current_qty', operator: 'lte', value: lowStockThreshold },
+      ]),
+      this.count('items', [{ column: 'current_qty', operator: 'eq', value: 0 }]),
+      this.count('transactions', [
+        { column: 'created_at', operator: 'gte', value: startUtc.toISOString() },
+        { column: 'created_at', operator: 'lt', value: endUtc.toISOString() },
+      ]),
+    ]);
+
+    return {
+      total_items: totalItems,
+      low_stock_count: lowStock,
+      out_of_stock_count: outOfStock,
+      today_transaction_count: todayTx,
+    };
+  }
+
+  async reconcile(): Promise<ReconcileOutcome> {
+    const result = await this.request<{
+      checked: number;
+      mismatches_found: number;
+      mismatches: ReconciliationResult[];
+      fixed: boolean;
+    }[]>({
+      method: 'POST',
+      path: 'rpc/inventory_reconcile',
+      prefer: 'return=representation',
+    });
+    const row = result[0];
+    if (!row) {
+      throw new SupabaseStoreError(500, 'RPC inventory_reconcile returned no rows.');
+    }
+    return row;
+  }
+}
+
+export function createSupabaseInventoryStoreFromEnv(): SupabaseInventoryStore {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  const schema = process.env.SUPABASE_SCHEMA ?? 'public';
+
+  if (!url || !key) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) are required for Supabase store.');
+  }
+
+  return new SupabaseInventoryStore(url, key, schema);
+}

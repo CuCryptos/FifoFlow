@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import type { CreateItemInput, UpdateItemInput } from '@fifoflow/shared';
+import type { CreateItemInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
 
 export function useItems(params?: { search?: string; category?: string }) {
   return useQuery({
@@ -13,6 +13,13 @@ export function useItem(id: number) {
   return useQuery({
     queryKey: ['items', id],
     queryFn: () => api.items.get(id),
+  });
+}
+
+export function useReorderSuggestions() {
+  return useQuery({
+    queryKey: ['items', 'reorder-suggestions'],
+    queryFn: () => api.items.reorderSuggestions(),
   });
 }
 
@@ -37,5 +44,17 @@ export function useDeleteItem() {
   return useMutation({
     mutationFn: (id: number) => api.items.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
+  });
+}
+
+export function useSetItemCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: SetItemCountInput }) => api.items.setCount(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['items'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }

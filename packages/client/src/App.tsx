@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
 import { ItemDetail } from './pages/ItemDetail';
 import { Activity } from './pages/Activity';
+import { Counts } from './pages/Counts';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/inventory/:id" element={<ItemDetail />} />
             <Route path="/activity" element={<Activity />} />
+            <Route path="/counts" element={<Counts />} />
           </Route>
         </Routes>
       </BrowserRouter>
