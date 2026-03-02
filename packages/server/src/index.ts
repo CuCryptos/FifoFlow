@@ -6,6 +6,7 @@ import { createTransactionRoutes } from './routes/transactions.js';
 import { createDashboardRoutes } from './routes/dashboard.js';
 import { createReconcileRoutes } from './routes/reconcile.js';
 import { createCountSessionRoutes } from './routes/countSessions.js';
+import { createStorageAreaRoutes } from './routes/storageAreas.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
 
@@ -25,6 +26,7 @@ app.use('/api/transactions', createTransactionRoutes(store));
 app.use('/api/dashboard', createDashboardRoutes(store));
 app.use('/api/reconcile', createReconcileRoutes(store));
 app.use('/api/count-sessions', createCountSessionRoutes(store));
+app.use('/api/storage-areas', createStorageAreaRoutes(store));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', store: storeDriver });
