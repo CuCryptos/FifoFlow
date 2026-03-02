@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useItems, useReorderSuggestions, useUpdateItem } from '../hooks/useItems';
+import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
-import type { Unit } from '@fifoflow/shared';
+import type { Unit, ItemStorage } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
 
@@ -237,7 +238,33 @@ export function Inventory() {
   const [showAreasModal, setShowAreasModal] = useState(false);
   const [displayUnits, setDisplayUnits] = useState<Record<number, Unit>>({});
   const [orderQtys, setOrderQtys] = useState<Record<number, string>>({});
+  const [areaFilter, setAreaFilter] = useState('');
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const updateItem = useUpdateItem();
+  const { data: areas } = useStorageAreas();
+  const { data: allItemStorage } = useAllItemStorage();
+
+  // Build a lookup: Map<itemId, ItemStorage[]>
+  const storageByItem = useMemo(() => {
+    const map = new Map<number, ItemStorage[]>();
+    if (allItemStorage) {
+      for (const is of allItemStorage) {
+        const arr = map.get(is.item_id) ?? [];
+        arr.push(is);
+        map.set(is.item_id, arr);
+      }
+    }
+    return map;
+  }, [allItemStorage]);
+
+  const toggleExpand = (itemId: number) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
 
   const { data: items, isLoading } = useItems({
     search: search || undefined,
@@ -246,9 +273,15 @@ export function Inventory() {
   const { data: reorderSuggestions } = useReorderSuggestions();
 
   const reorderIds = new Set((reorderSuggestions ?? []).map((r) => r.item_id));
-  const itemsToRender = (items ?? []).filter((item) =>
-    showReorderOnly ? reorderIds.has(item.id) : true
-  );
+  const itemsToRender = (items ?? []).filter((item) => {
+    if (showReorderOnly && !reorderIds.has(item.id)) return false;
+    if (areaFilter) {
+      const areaId = Number(areaFilter);
+      const storage = storageByItem.get(item.id);
+      if (!storage?.some((s) => s.area_id === areaId && s.quantity > 0)) return false;
+    }
+    return true;
+  });
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
     0,
@@ -300,6 +333,16 @@ export function Inventory() {
             <option key={cat} value={cat}>
               {cat}
             </option>
+          ))}
+        </select>
+        <select
+          value={areaFilter}
+          onChange={(e) => setAreaFilter(e.target.value)}
+          className="bg-navy-light border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+        >
+          <option value="">All Areas</option>
+          {areas?.map((area) => (
+            <option key={area.id} value={String(area.id)}>{area.name}</option>
           ))}
         </select>
         <button
@@ -355,8 +398,14 @@ export function Inventory() {
             <tbody>
               {itemsToRender.map((item) => {
                 const displayUnit = getDisplayUnit(item.id, item.unit);
+                // When area filter is active, show area-specific qty; otherwise total
+                const baseQty = areaFilter
+                  ? (storageByItem.get(item.id)?.find(
+                      (s) => s.area_id === Number(areaFilter),
+                    )?.quantity ?? 0)
+                  : item.current_qty;
                 const displayQty = convertQuantity(
-                  item.current_qty,
+                  baseQty,
                   item.unit,
                   displayUnit,
                   {
@@ -368,6 +417,8 @@ export function Inventory() {
                     itemSizeUnit: item.item_size_unit,
                   },
                 );
+                const itemAreas = storageByItem.get(item.id) ?? [];
+                const hasAreas = itemAreas.length > 0;
                 const compatible = getCompatibleUnits(item.unit, {
                   baseUnit: item.unit,
                   orderUnit: item.order_unit,
@@ -390,18 +441,31 @@ export function Inventory() {
                     : null;
 
                 return (
+                <React.Fragment key={item.id}>
                   <tr
-                    key={item.id}
                     className="border-t border-border hover:bg-navy-lighter/50 transition-colors"
                   >
-                    {/* Name – link to detail */}
+                    {/* Name – link to detail with expand toggle */}
                     <td className="px-3 py-2">
-                      <Link
-                        to={`/inventory/${item.id}`}
-                        className="text-accent-green hover:underline"
-                      >
-                        {item.name}
-                      </Link>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(item.id)}
+                          className={`text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-navy-lighter transition-colors ${
+                            hasAreas ? 'text-text-secondary hover:text-text-primary' : 'text-transparent cursor-default'
+                          }`}
+                          tabIndex={hasAreas ? 0 : -1}
+                          aria-label={expandedItems.has(item.id) ? 'Collapse' : 'Expand'}
+                        >
+                          {expandedItems.has(item.id) ? '\u25BE' : '\u25B8'}
+                        </button>
+                        <Link
+                          to={`/inventory/${item.id}`}
+                          className="text-accent-green hover:underline"
+                        >
+                          {item.name}
+                        </Link>
+                      </div>
                     </td>
 
                     {/* Category – read-only */}
@@ -590,6 +654,20 @@ export function Inventory() {
                       {formatCurrency(totalCost)}
                     </td>
                   </tr>
+                  {expandedItems.has(item.id) && hasAreas && (
+                    <tr className="bg-navy/30">
+                      <td colSpan={16} className="px-3 py-2 pl-10">
+                        <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
+                          {itemAreas.map((is) => (
+                            <span key={is.area_id}>
+                              {is.area_name}: <span className="text-text-primary font-medium">{is.quantity}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
                 );
               })}
             </tbody>
