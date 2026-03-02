@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useItem, useUpdateItem, useDeleteItem, useSetItemCount } from '../hooks/useItems';
+import { useItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
 import type { Category, Unit } from '@fifoflow/shared';
@@ -23,6 +24,7 @@ export function ItemDetail() {
   const updateItem = useUpdateItem();
   const deleteItem = useDeleteItem();
   const setItemCount = useSetItemCount();
+  const { data: itemStorage } = useItemStorage(Number(id));
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editCategory, setEditCategory] = useState<Category>(CATEGORIES[0]);
@@ -452,6 +454,23 @@ export function ItemDetail() {
               </div>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Stock by Area */}
+      <div className="bg-navy-light border border-border rounded-lg p-4">
+        <h2 className="text-sm font-medium text-text-secondary mb-3">Stock by Area</h2>
+        {itemStorage && itemStorage.length > 0 ? (
+          <div className="space-y-2">
+            {itemStorage.map((is) => (
+              <div key={is.area_id} className="flex items-center justify-between text-sm">
+                <span className="text-text-secondary">{is.area_name}</span>
+                <span className="text-text-primary font-medium">{is.quantity} {item.unit}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-text-secondary text-sm">No stock in any area.</div>
         )}
       </div>
 

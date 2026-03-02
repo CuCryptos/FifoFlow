@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useCreateTransaction } from '../hooks/useTransactions';
+import { useStorageAreas, useItemStorage } from '../hooks/useStorageAreas';
 import { TRANSACTION_TYPES, TRANSACTION_REASONS } from '@fifoflow/shared';
 import { getCompatibleUnits, tryConvertQuantity } from '@fifoflow/shared';
 import type { Item } from '@fifoflow/shared';
@@ -20,7 +21,11 @@ export function TransactionForm({ item }: { item: Item }) {
   const [reason, setReason] = useState<TransactionReason>('Received');
   const [notes, setNotes] = useState('');
   const [unit, setUnit] = useState<Unit>(item.unit);
+  const [fromAreaId, setFromAreaId] = useState<number | null>(null);
+  const [toAreaId, setToAreaId] = useState<number | null>(null);
   const createTx = useCreateTransaction();
+  const { data: areas } = useStorageAreas();
+  const { data: itemStorage } = useItemStorage(item.id);
   const packaging = {
     baseUnit: item.unit,
     orderUnit: item.order_unit,
@@ -34,6 +39,18 @@ export function TransactionForm({ item }: { item: Item }) {
   useEffect(() => {
     setUnit(item.unit);
   }, [item.id, item.unit]);
+
+  useEffect(() => {
+    setFromAreaId(null);
+    setToAreaId(null);
+  }, [type, reason]);
+
+  useEffect(() => {
+    if (itemStorage && itemStorage.length === 1) {
+      if (type === 'out') setFromAreaId(itemStorage[0].area_id);
+      if (type === 'in') setToAreaId(itemStorage[0].area_id);
+    }
+  }, [type, itemStorage]);
 
   const parsedQty = Number(quantity);
   const hasQty = quantity.trim() !== '' && Number.isFinite(parsedQty) && parsedQty > 0;
@@ -72,12 +89,16 @@ export function TransactionForm({ item }: { item: Item }) {
           unit,
           reason,
           notes: notes || null,
+          from_area_id: fromAreaId,
+          to_area_id: toAreaId,
         },
       },
       {
         onSuccess: () => {
           setQuantity('');
           setNotes('');
+          setFromAreaId(null);
+          setToAreaId(null);
         },
       }
     );
@@ -129,6 +150,37 @@ export function TransactionForm({ item }: { item: Item }) {
         >
           {TRANSACTION_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
+        {/* Area Selection */}
+        {areas && areas.length > 0 && (
+          <>
+            {(type === 'out' || reason === 'Transferred') && (
+              <select
+                value={fromAreaId ?? ''}
+                onChange={(e) => setFromAreaId(e.target.value ? Number(e.target.value) : null)}
+                className="bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green flex-1"
+              >
+                <option value="">From Area...</option>
+                {(itemStorage ?? []).filter(is => is.quantity > 0).map((is) => (
+                  <option key={is.area_id} value={is.area_id}>
+                    {is.area_name} ({is.quantity} {item.unit})
+                  </option>
+                ))}
+              </select>
+            )}
+            {(type === 'in' || reason === 'Transferred') && (
+              <select
+                value={toAreaId ?? ''}
+                onChange={(e) => setToAreaId(e.target.value ? Number(e.target.value) : null)}
+                className="bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green flex-1"
+              >
+                <option value="">To Area...</option>
+                {areas.map((area) => (
+                  <option key={area.id} value={area.id}>{area.name}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
         <input
           type="text"
           placeholder={notesRequired ? 'Notes (required for this reason)' : 'Notes (optional)'}
