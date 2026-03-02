@@ -37,6 +37,8 @@ export const createTransactionSchema = z.object({
   unit: z.enum(UNITS).optional(),
   reason: z.enum(TRANSACTION_REASONS),
   notes: z.string().max(500).nullable().optional(),
+  from_area_id: z.number().int().positive().nullable().optional(),
+  to_area_id: z.number().int().positive().nullable().optional(),
 }).superRefine((data, ctx) => {
   const noteRequiredReasons = new Set(['Wasted', 'Adjustment', 'Transferred']);
   if (noteRequiredReasons.has(data.reason)) {
@@ -73,6 +75,14 @@ export const recordCountEntrySchema = z.object({
   notes: z.string().max(500).nullable().optional(),
 });
 
+export const createStorageAreaSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+});
+
+export const updateStorageAreaSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+});
+
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
@@ -80,3 +90,5 @@ export type SetItemCountInput = z.infer<typeof setItemCountSchema>;
 export type CreateCountSessionInput = z.infer<typeof createCountSessionSchema>;
 export type CloseCountSessionInput = z.infer<typeof closeCountSessionSchema>;
 export type RecordCountEntryInput = z.infer<typeof recordCountEntrySchema>;
+export type CreateStorageAreaInput = z.infer<typeof createStorageAreaSchema>;
+export type UpdateStorageAreaInput = z.infer<typeof updateStorageAreaSchema>;

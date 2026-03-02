@@ -60,10 +60,32 @@ export function initializeDb(db: Database.Database): void {
       UNIQUE(session_id, item_id)
     );
 
+    CREATE TABLE IF NOT EXISTS storage_areas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS item_storage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      area_id INTEGER NOT NULL REFERENCES storage_areas(id),
+      quantity REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(item_id, area_id)
+    );
+
     CREATE TRIGGER IF NOT EXISTS update_item_timestamp
     AFTER UPDATE ON items
     BEGIN
       UPDATE items SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_storage_area_timestamp
+    AFTER UPDATE ON storage_areas
+    BEGIN
+      UPDATE storage_areas SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
     CREATE INDEX IF NOT EXISTS idx_transactions_item_id ON transactions(item_id);
@@ -73,6 +95,8 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_count_entries_item_id ON count_entries(item_id);
     CREATE INDEX IF NOT EXISTS idx_count_session_items_session_id ON count_session_items(session_id);
     CREATE INDEX IF NOT EXISTS idx_count_session_items_item_id ON count_session_items(item_id);
+    CREATE INDEX IF NOT EXISTS idx_item_storage_item_id ON item_storage(item_id);
+    CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
   `);
 
   // Migrations — add inventory fields incrementally
@@ -126,6 +150,34 @@ export function initializeDb(db: Database.Database): void {
       WHERE si.session_id = s.id
     );
   `);
+
+  // Migration: add from_area_id and to_area_id to transactions
+  const txColumns = db.pragma('table_info(transactions)') as Array<{ name: string }>;
+  const txColumnNames = txColumns.map((c) => c.name);
+  if (!txColumnNames.includes('from_area_id')) {
+    db.exec(`
+      ALTER TABLE transactions ADD COLUMN from_area_id INTEGER REFERENCES storage_areas(id);
+      ALTER TABLE transactions ADD COLUMN to_area_id INTEGER REFERENCES storage_areas(id);
+    `);
+  }
+
+  // Seed default "General" storage area and populate item_storage
+  const generalArea = db.prepare(
+    "SELECT id FROM storage_areas WHERE name = 'General'"
+  ).get() as { id: number } | undefined;
+
+  if (!generalArea) {
+    const result = db.prepare(
+      "INSERT INTO storage_areas (name) VALUES ('General')"
+    ).run();
+    const generalId = result.lastInsertRowid;
+
+    // Move all existing item quantities into item_storage
+    db.prepare(`
+      INSERT INTO item_storage (item_id, area_id, quantity)
+      SELECT id, ?, current_qty FROM items WHERE current_qty > 0
+    `).run(generalId);
+  }
 }
 
 export function getDb(): Database.Database {

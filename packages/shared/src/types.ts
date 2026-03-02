@@ -118,3 +118,17 @@ export interface ReconciliationResult {
   computed_qty: number;
   difference: number;
 }
+
+export interface StorageArea {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItemStorage {
+  item_id: number;
+  area_id: number;
+  area_name: string;
+  quantity: number;
+}
