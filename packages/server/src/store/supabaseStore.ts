@@ -6,13 +6,17 @@ import type {
   CountSessionSummary,
   CreateCountSessionInput,
   CreateItemInput,
+  CreateStorageAreaInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
+  ItemStorage,
   ReconciliationResult,
+  StorageArea,
   Transaction,
   TransactionWithItem,
   UpdateItemInput,
+  UpdateStorageAreaInput,
 } from '@fifoflow/shared';
 import {
   type InsertTransactionAndAdjustQtyInput,
@@ -421,6 +425,44 @@ export class SupabaseInventoryStore implements InventoryStore {
       throw new SupabaseStoreError(500, 'RPC inventory_reconcile returned no rows.');
     }
     return row;
+  }
+
+  // Storage Areas — not yet implemented for Supabase
+
+  async listStorageAreas(): Promise<StorageArea[]> {
+    return this.notImplemented('listStorageAreas');
+  }
+
+  async getStorageAreaById(_id: number): Promise<StorageArea | undefined> {
+    return this.notImplemented('getStorageAreaById');
+  }
+
+  async createStorageArea(_input: CreateStorageAreaInput): Promise<StorageArea> {
+    return this.notImplemented('createStorageArea');
+  }
+
+  async updateStorageArea(_id: number, _input: UpdateStorageAreaInput): Promise<StorageArea> {
+    return this.notImplemented('updateStorageArea');
+  }
+
+  async deleteStorageArea(_id: number): Promise<void> {
+    return this.notImplemented('deleteStorageArea');
+  }
+
+  async countItemsInArea(_areaId: number): Promise<number> {
+    return this.notImplemented('countItemsInArea');
+  }
+
+  async listItemStorage(_itemId: number): Promise<ItemStorage[]> {
+    return this.notImplemented('listItemStorage');
+  }
+
+  async listAllItemStorage(): Promise<ItemStorage[]> {
+    return this.notImplemented('listAllItemStorage');
+  }
+
+  async getItemStorageByArea(_itemId: number, _areaId: number): Promise<ItemStorage | undefined> {
+    return this.notImplemented('getItemStorageByArea');
   }
 }
 

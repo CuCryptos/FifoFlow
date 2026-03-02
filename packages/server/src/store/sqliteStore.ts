@@ -7,12 +7,16 @@ import type {
   CountSessionSummary,
   CreateCountSessionInput,
   CreateItemInput,
+  CreateStorageAreaInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
+  ItemStorage,
+  StorageArea,
   Transaction,
   TransactionWithItem,
   UpdateItemInput,
+  UpdateStorageAreaInput,
 } from '@fifoflow/shared';
 import type {
   InsertTransactionAndAdjustQtyInput,
@@ -527,6 +531,66 @@ export class SqliteInventoryStore implements InventoryStore {
       mismatches,
       fixed: mismatches.length > 0,
     };
+  }
+  // ── Storage Areas ──────────────────────────────────────────────────
+
+  async listStorageAreas(): Promise<StorageArea[]> {
+    return this.db.prepare('SELECT * FROM storage_areas ORDER BY name ASC').all() as StorageArea[];
+  }
+
+  async getStorageAreaById(id: number): Promise<StorageArea | undefined> {
+    return this.db.prepare('SELECT * FROM storage_areas WHERE id = ?').get(id) as StorageArea | undefined;
+  }
+
+  async createStorageArea(input: CreateStorageAreaInput): Promise<StorageArea> {
+    const result = this.db.prepare('INSERT INTO storage_areas (name) VALUES (?)').run(input.name);
+    return this.db.prepare('SELECT * FROM storage_areas WHERE id = ?').get(result.lastInsertRowid) as StorageArea;
+  }
+
+  async updateStorageArea(id: number, input: UpdateStorageAreaInput): Promise<StorageArea> {
+    this.db.prepare('UPDATE storage_areas SET name = ? WHERE id = ?').run(input.name, id);
+    return this.db.prepare('SELECT * FROM storage_areas WHERE id = ?').get(id) as StorageArea;
+  }
+
+  async deleteStorageArea(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM storage_areas WHERE id = ?').run(id);
+  }
+
+  async countItemsInArea(areaId: number): Promise<number> {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as count FROM item_storage WHERE area_id = ? AND quantity > 0'
+    ).get(areaId) as { count: number };
+    return row.count;
+  }
+
+  // ── Item Storage ──────────────────────────────────────────────────
+
+  async listItemStorage(itemId: number): Promise<ItemStorage[]> {
+    return this.db.prepare(`
+      SELECT ist.item_id, ist.area_id, sa.name as area_name, ist.quantity
+      FROM item_storage ist
+      JOIN storage_areas sa ON sa.id = ist.area_id
+      WHERE ist.item_id = ?
+      ORDER BY sa.name ASC
+    `).all(itemId) as ItemStorage[];
+  }
+
+  async listAllItemStorage(): Promise<ItemStorage[]> {
+    return this.db.prepare(`
+      SELECT ist.item_id, ist.area_id, sa.name as area_name, ist.quantity
+      FROM item_storage ist
+      JOIN storage_areas sa ON sa.id = ist.area_id
+      ORDER BY ist.item_id, sa.name
+    `).all() as ItemStorage[];
+  }
+
+  async getItemStorageByArea(itemId: number, areaId: number): Promise<ItemStorage | undefined> {
+    return this.db.prepare(`
+      SELECT ist.item_id, ist.area_id, sa.name as area_name, ist.quantity
+      FROM item_storage ist
+      JOIN storage_areas sa ON sa.id = ist.area_id
+      WHERE ist.item_id = ? AND ist.area_id = ?
+    `).get(itemId, areaId) as ItemStorage | undefined;
   }
 }
 

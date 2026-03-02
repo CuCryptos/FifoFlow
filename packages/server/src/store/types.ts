@@ -6,15 +6,19 @@ import type {
   CountSessionSummary,
   CreateCountSessionInput,
   CreateItemInput,
+  CreateStorageAreaInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
+  ItemStorage,
   ReconciliationResult,
+  StorageArea,
   Transaction,
   TransactionType,
   TransactionReason,
   TransactionWithItem,
   UpdateItemInput,
+  UpdateStorageAreaInput,
 } from '@fifoflow/shared';
 
 export interface ItemListFilters {
@@ -84,4 +88,17 @@ export interface InventoryStore {
   recordCountEntry(sessionId: number, input: { itemId: number; countedQty: number; notes: string | null }): Promise<CountSessionEntry>;
   getDashboardStats(lowStockThreshold: number): Promise<DashboardStats>;
   reconcile(): Promise<ReconcileOutcome>;
+
+  // Storage Areas
+  listStorageAreas(): Promise<StorageArea[]>;
+  getStorageAreaById(id: number): Promise<StorageArea | undefined>;
+  createStorageArea(input: CreateStorageAreaInput): Promise<StorageArea>;
+  updateStorageArea(id: number, input: UpdateStorageAreaInput): Promise<StorageArea>;
+  deleteStorageArea(id: number): Promise<void>;
+  countItemsInArea(areaId: number): Promise<number>;
+
+  // Item Storage
+  listItemStorage(itemId: number): Promise<ItemStorage[]>;
+  listAllItemStorage(): Promise<ItemStorage[]>;
+  getItemStorageByArea(itemId: number, areaId: number): Promise<ItemStorage | undefined>;
 }
