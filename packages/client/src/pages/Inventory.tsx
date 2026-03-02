@@ -5,6 +5,7 @@ import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
 import type { Unit } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
+import { ManageAreasModal } from '../components/ManageAreasModal';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '—';
@@ -233,6 +234,7 @@ export function Inventory() {
   const [category, setCategory] = useState('');
   const [showReorderOnly, setShowReorderOnly] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAreasModal, setShowAreasModal] = useState(false);
   const [displayUnits, setDisplayUnits] = useState<Record<number, Unit>>({});
   const [orderQtys, setOrderQtys] = useState<Record<number, string>>({});
   const updateItem = useUpdateItem();
@@ -263,12 +265,20 @@ export function Inventory() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Inventory</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-accent-green text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          + Add Item
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAreasModal(true)}
+            className="border border-border text-text-secondary px-4 py-2 rounded text-sm font-medium hover:text-text-primary transition-colors"
+          >
+            Manage Areas
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-accent-green text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            + Add Item
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -591,6 +601,9 @@ export function Inventory() {
 
       {showAddModal && (
         <AddItemModal onClose={() => setShowAddModal(false)} />
+      )}
+      {showAreasModal && (
+        <ManageAreasModal onClose={() => setShowAreasModal(false)} />
       )}
     </div>
   );
