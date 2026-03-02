@@ -1,5 +1,6 @@
 import type {
   Item,
+  ItemStorage,
   Transaction,
   TransactionWithItem,
   DashboardStats,
@@ -9,12 +10,15 @@ import type {
   CountSessionEntry,
   CountSessionSummary,
   ReorderSuggestion,
+  StorageArea,
   CloseCountSessionInput,
   CreateItemInput,
   CreateCountSessionInput,
+  CreateStorageAreaInput,
   RecordCountEntryInput,
   SetItemCountInput,
   UpdateItemInput,
+  UpdateStorageAreaInput,
   CreateTransactionInput,
 } from '@fifoflow/shared';
 
@@ -52,6 +56,20 @@ export const api = {
       fetchJson<ItemCountAdjustmentResult>(`/items/${id}/count`, { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/items/${id}`, { method: 'DELETE' }),
+    listStorage: (itemId: number) =>
+      fetchJson<ItemStorage[]>(`/items/${itemId}/storage`),
+    listAllStorage: () =>
+      fetchJson<ItemStorage[]>(`/items/storage`),
+  },
+  storageAreas: {
+    list: () => fetchJson<StorageArea[]>('/storage-areas'),
+    get: (id: number) => fetchJson<StorageArea>(`/storage-areas/${id}`),
+    create: (data: CreateStorageAreaInput) =>
+      fetchJson<StorageArea>('/storage-areas', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: UpdateStorageAreaInput) =>
+      fetchJson<StorageArea>(`/storage-areas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/storage-areas/${id}`, { method: 'DELETE' }),
   },
   countSessions: {
     list: () => fetchJson<CountSessionSummary[]>('/count-sessions'),

@@ -67,6 +67,12 @@ export function createItemRoutes(store: InventoryStore): Router {
     res.json(suggestions);
   });
 
+  // GET /api/items/storage — all item-storage rows
+  router.get('/storage', async (_req, res) => {
+    const rows = await store.listAllItemStorage();
+    res.json(rows);
+  });
+
   // GET /api/items
   router.get('/', async (req, res) => {
     const { search, category } = req.query;
@@ -144,6 +150,17 @@ export function createItemRoutes(store: InventoryStore): Router {
 
     await store.deleteItem(Number(req.params.id));
     res.status(204).send();
+  });
+
+  // GET /api/items/:id/storage
+  router.get('/:id/storage', async (req, res) => {
+    const item = await store.getItemById(Number(req.params.id)) as Item | undefined;
+    if (!item) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+    const rows = await store.listItemStorage(Number(req.params.id));
+    res.json(rows);
   });
 
   // POST /api/items/:id/count

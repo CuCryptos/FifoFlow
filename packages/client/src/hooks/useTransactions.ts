@@ -18,6 +18,7 @@ export function useCreateTransaction() {
       qc.invalidateQueries({ queryKey: ['items'] });
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['itemStorage'] });
     },
   });
 }
