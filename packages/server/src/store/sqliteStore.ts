@@ -167,11 +167,38 @@ export class SqliteInventoryStore implements InventoryStore {
     item: Item;
   }> {
     const execute = this.db.transaction(() => {
+      // Insert transaction with area references
       const result = this.db.prepare(
-        'INSERT INTO transactions (item_id, type, quantity, reason, notes) VALUES (?, ?, ?, ?, ?)'
-      ).run(input.itemId, input.type, input.quantity, input.reason, input.notes);
+        'INSERT INTO transactions (item_id, type, quantity, reason, notes, from_area_id, to_area_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(input.itemId, input.type, input.quantity, input.reason, input.notes, input.fromAreaId ?? null, input.toAreaId ?? null);
 
-      this.db.prepare('UPDATE items SET current_qty = current_qty + ? WHERE id = ?').run(input.delta, input.itemId);
+      if (!input.fromAreaId && !input.toAreaId) {
+        // Legacy path — no area references, just update current_qty directly
+        this.db.prepare('UPDATE items SET current_qty = current_qty + ? WHERE id = ?').run(input.delta, input.itemId);
+      } else {
+        // Area-aware path: update item_storage quantities
+        if (input.fromAreaId) {
+          this.db.prepare(
+            'UPDATE item_storage SET quantity = quantity - ? WHERE item_id = ? AND area_id = ?'
+          ).run(input.quantity, input.itemId, input.fromAreaId);
+        }
+
+        if (input.toAreaId) {
+          // Upsert: insert if not exists, update if exists
+          this.db.prepare(`
+            INSERT INTO item_storage (item_id, area_id, quantity)
+            VALUES (?, ?, ?)
+            ON CONFLICT(item_id, area_id) DO UPDATE SET quantity = quantity + excluded.quantity
+          `).run(input.itemId, input.toAreaId, input.quantity);
+        }
+
+        // Recalculate current_qty from item_storage
+        const sumRow = this.db.prepare(
+          'SELECT COALESCE(SUM(quantity), 0) as total FROM item_storage WHERE item_id = ?'
+        ).get(input.itemId) as { total: number };
+        this.db.prepare('UPDATE items SET current_qty = ? WHERE id = ?')
+          .run(sumRow.total, input.itemId);
+      }
 
       const transaction = this.db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid) as Transaction;
       const item = this.db.prepare('SELECT * FROM items WHERE id = ?').get(input.itemId) as Item;

@@ -85,4 +85,157 @@ describe('Transactions API', () => {
       expect(res.body.every((t: any) => t.item_id === itemId)).toBe(true);
     });
   });
+
+  describe('Area-aware transactions', () => {
+    let generalAreaId: number;
+    let coolerAreaId: number;
+
+    beforeEach(() => {
+      // Get the seeded General area
+      const generalArea = db.prepare("SELECT id FROM storage_areas WHERE name = 'General'").get() as { id: number };
+      generalAreaId = generalArea.id;
+
+      // Create a second area
+      const coolerResult = db.prepare("INSERT INTO storage_areas (name) VALUES ('Walk-in Cooler')").run();
+      coolerAreaId = coolerResult.lastInsertRowid as number;
+
+      // Seed item_storage: put all 10 units into General area
+      db.prepare(
+        "INSERT INTO item_storage (item_id, area_id, quantity) VALUES (?, ?, ?)"
+      ).run(itemId, generalAreaId, 10);
+    });
+
+    it('IN transaction with to_area_id adds stock to specified area', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({ type: 'in', quantity: 5, reason: 'Received', to_area_id: coolerAreaId });
+      expect(res.status).toBe(201);
+      expect(res.body.item.current_qty).toBe(15);
+      expect(res.body.transaction.to_area_id).toBe(coolerAreaId);
+
+      // Verify item_storage for the cooler area
+      const coolerStorage = db.prepare(
+        "SELECT quantity FROM item_storage WHERE item_id = ? AND area_id = ?"
+      ).get(itemId, coolerAreaId) as { quantity: number };
+      expect(coolerStorage.quantity).toBe(5);
+
+      // Verify General area unchanged
+      const generalStorage = db.prepare(
+        "SELECT quantity FROM item_storage WHERE item_id = ? AND area_id = ?"
+      ).get(itemId, generalAreaId) as { quantity: number };
+      expect(generalStorage.quantity).toBe(10);
+    });
+
+    it('OUT transaction with from_area_id removes stock from specified area', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({ type: 'out', quantity: 3, reason: 'Used', from_area_id: generalAreaId });
+      expect(res.status).toBe(201);
+      expect(res.body.item.current_qty).toBe(7);
+      expect(res.body.transaction.from_area_id).toBe(generalAreaId);
+
+      // Verify item_storage for General area
+      const generalStorage = db.prepare(
+        "SELECT quantity FROM item_storage WHERE item_id = ? AND area_id = ?"
+      ).get(itemId, generalAreaId) as { quantity: number };
+      expect(generalStorage.quantity).toBe(7);
+    });
+
+    it('transfer decrements source, increments destination, current_qty unchanged', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({
+          type: 'out',
+          quantity: 4,
+          reason: 'Transferred',
+          notes: 'Moving to cooler',
+          from_area_id: generalAreaId,
+          to_area_id: coolerAreaId,
+        });
+      expect(res.status).toBe(201);
+      // Total should stay at 10 since stock just moved between areas
+      expect(res.body.item.current_qty).toBe(10);
+
+      // Verify source area decreased
+      const generalStorage = db.prepare(
+        "SELECT quantity FROM item_storage WHERE item_id = ? AND area_id = ?"
+      ).get(itemId, generalAreaId) as { quantity: number };
+      expect(generalStorage.quantity).toBe(6);
+
+      // Verify destination area increased
+      const coolerStorage = db.prepare(
+        "SELECT quantity FROM item_storage WHERE item_id = ? AND area_id = ?"
+      ).get(itemId, coolerAreaId) as { quantity: number };
+      expect(coolerStorage.quantity).toBe(4);
+    });
+
+    it('rejects OUT exceeding area quantity', async () => {
+      // Put extra stock in the cooler so total item qty is high enough (10 + 8 = 18),
+      // but General only has 10. Requesting 12 from General should fail area check.
+      db.prepare(
+        "INSERT INTO item_storage (item_id, area_id, quantity) VALUES (?, ?, ?)"
+      ).run(itemId, coolerAreaId, 8);
+      db.prepare("UPDATE items SET current_qty = 18 WHERE id = ?").run(itemId);
+
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({ type: 'out', quantity: 12, reason: 'Used', from_area_id: generalAreaId });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Insufficient quantity in source area/);
+    });
+
+    it('rejects transfer with same source and destination area', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({
+          type: 'out',
+          quantity: 2,
+          reason: 'Transferred',
+          notes: 'Bad transfer',
+          from_area_id: generalAreaId,
+          to_area_id: generalAreaId,
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Cannot transfer to the same area/);
+    });
+
+    it('rejects transfer missing from_area_id', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({
+          type: 'out',
+          quantity: 2,
+          reason: 'Transferred',
+          notes: 'Missing from area',
+          to_area_id: coolerAreaId,
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Transfers require both from_area_id and to_area_id/);
+    });
+
+    it('rejects transfer missing to_area_id', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({
+          type: 'out',
+          quantity: 2,
+          reason: 'Transferred',
+          notes: 'Missing to area',
+          from_area_id: generalAreaId,
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Transfers require both from_area_id and to_area_id/);
+    });
+
+    it('legacy transaction without area IDs still works', async () => {
+      const res = await request(app)
+        .post(`/api/items/${itemId}/transactions`)
+        .send({ type: 'in', quantity: 3, reason: 'Received' });
+      expect(res.status).toBe(201);
+      // Legacy path uses delta, not area recalculation
+      expect(res.body.item.current_qty).toBe(13);
+      expect(res.body.transaction.from_area_id).toBeNull();
+      expect(res.body.transaction.to_area_id).toBeNull();
+    });
+  });
 });

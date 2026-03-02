@@ -37,7 +37,7 @@ export function createTransactionHandler(store: InventoryStore) {
       return;
     }
 
-    const { type, quantity, unit, reason, notes } = parsed.data;
+    const { type, quantity, unit, reason, notes, from_area_id, to_area_id } = parsed.data;
     const transactionUnit = (unit ?? item.unit) as Unit;
     const normalizedQty = tryConvertQuantity(
       quantity,
@@ -67,6 +67,28 @@ export function createTransactionHandler(store: InventoryStore) {
       return;
     }
 
+    // Validate transfers need both areas
+    if (reason === 'Transferred') {
+      if (!from_area_id || !to_area_id) {
+        res.status(400).json({ error: 'Transfers require both from_area_id and to_area_id' });
+        return;
+      }
+      if (from_area_id === to_area_id) {
+        res.status(400).json({ error: 'Cannot transfer to the same area' });
+        return;
+      }
+    }
+
+    // Check source area has sufficient quantity
+    if (from_area_id) {
+      const areaStock = await store.getItemStorageByArea(item.id, from_area_id);
+      const areaQty = areaStock?.quantity ?? 0;
+      if (areaQty < normalizedQty) {
+        res.status(400).json({ error: 'Insufficient quantity in source area' });
+        return;
+      }
+    }
+
     const result = await store.insertTransactionAndAdjustQty({
       itemId,
       type,
@@ -74,6 +96,8 @@ export function createTransactionHandler(store: InventoryStore) {
       reason,
       notes: notes ?? null,
       delta,
+      fromAreaId: from_area_id ?? null,
+      toAreaId: to_area_id ?? null,
     });
     res.status(201).json(result);
   };

@@ -40,6 +40,8 @@ export interface InsertTransactionAndAdjustQtyInput {
   reason: TransactionReason;
   notes: string | null;
   delta: number;
+  fromAreaId?: number | null;
+  toAreaId?: number | null;
 }
 
 export interface SetItemCountWithAdjustmentInput {

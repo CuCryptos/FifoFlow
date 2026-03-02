@@ -32,6 +32,8 @@ export interface Transaction {
   quantity: number;
   reason: TransactionReason;
   notes: string | null;
+  from_area_id: number | null;
+  to_area_id: number | null;
   created_at: string;
 }
 
