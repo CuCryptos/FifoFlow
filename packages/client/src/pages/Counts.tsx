@@ -142,30 +142,30 @@ export function Counts() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Count Sessions</h1>
+        <h1 className="text-2xl font-semibold text-text-primary">Count Sessions</h1>
       </div>
 
       {!openSession ? (
-        <div className="bg-navy-light border border-border rounded-lg p-4">
-          <h2 className="text-sm font-medium text-text-secondary mb-3">Open New Session</h2>
+        <div className="bg-bg-card rounded-xl shadow-sm p-5">
+          <h2 className="text-base font-semibold text-text-primary mb-4">Open New Session</h2>
           <form onSubmit={submitCreateSession} className="grid md:grid-cols-[2fr_2fr_3fr_auto] gap-3 items-end">
             <div>
-              <label className="block text-xs text-text-secondary mb-1">Session Name</label>
+              <label className="block text-xs font-medium text-text-muted mb-1">Session Name</label>
               <input
                 type="text"
                 value={sessionName}
                 onChange={(e) => setSessionName(e.target.value)}
                 placeholder="Weekly count - Bar"
-                className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-text-secondary mb-1">Count Template</label>
+              <label className="block text-xs font-medium text-text-muted mb-1">Count Template</label>
               <select
                 value={sessionTemplateCategory}
                 onChange={(e) => setSessionTemplateCategory(e.target.value as Category | '')}
-                className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
               >
                 <option value="">All Inventory Items</option>
                 {CATEGORIES.map((category) => (
@@ -176,18 +176,18 @@ export function Counts() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-text-secondary mb-1">Notes (optional)</label>
+              <label className="block text-xs font-medium text-text-muted mb-1">Notes (optional)</label>
               <input
                 type="text"
                 value={sessionNotes}
                 onChange={(e) => setSessionNotes(e.target.value)}
-                className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
               />
             </div>
             <button
               type="submit"
               disabled={createSession.isPending}
-              className="bg-accent-green text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 disabled:opacity-50"
+              className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-50 transition-colors"
             >
               {createSession.isPending ? 'Opening...' : 'Open Session'}
             </button>
@@ -198,46 +198,46 @@ export function Counts() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-navy-light border border-border rounded-lg p-4 flex flex-wrap gap-4 justify-between items-start">
+          <div className="bg-bg-card rounded-xl shadow-sm p-5 border-l-4 border-accent-green flex flex-wrap gap-4 justify-between items-start">
             <div>
-              <h2 className="text-sm font-medium text-text-secondary">Open Session</h2>
-              <p className="text-text-primary mt-1">{openSession.name}</p>
-              <p className="text-xs text-text-secondary mt-1">
+              <h2 className="text-base font-semibold text-text-primary mb-4">Open Session</h2>
+              <p className="text-text-primary font-medium">{openSession.name}</p>
+              <p className="text-xs text-text-muted mt-1">
                 Template: {openSession.template_category ?? 'All Inventory Items'}
               </p>
-              <p className="text-xs text-text-secondary mt-1">
+              <p className="text-xs text-text-muted mt-1">
                 Opened {new Date(openSession.opened_at).toLocaleString()}
               </p>
               {openSession.notes && (
-                <p className="text-xs text-text-secondary mt-1">{openSession.notes}</p>
+                <p className="text-xs text-text-muted mt-1">{openSession.notes}</p>
               )}
             </div>
             <div className="min-w-56">
               <div className="text-sm text-text-secondary">
                 Progress: <span className="text-text-primary">{countedItems}/{totalChecklistItems}</span>
-                {totalChecklistItems > 0 && <span className="text-text-secondary"> ({progressPercent}%)</span>}
+                {totalChecklistItems > 0 && <span className="text-text-muted"> ({progressPercent}%)</span>}
               </div>
-              <div className="h-2 rounded bg-navy mt-2 overflow-hidden">
+              <div className="h-2.5 rounded-full bg-border mt-2 overflow-hidden">
                 <div
-                  className="h-full bg-accent-green transition-all"
+                  className="h-full bg-accent-green rounded-full transition-all"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <div className="text-xs text-text-secondary mt-2">
+              <div className="text-xs text-text-muted mt-2">
                 Remaining: <span className="text-text-primary">{remainingItems}</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-navy-light border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">Record Item Count</h3>
+          <div className="bg-bg-card rounded-xl shadow-sm p-5">
+            <h3 className="text-base font-semibold text-text-primary mb-4">Record Item Count</h3>
             <form onSubmit={submitRecordEntry} className="grid md:grid-cols-[2fr_1fr_3fr_auto] gap-3 items-end">
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Item</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Item</label>
                 <select
                   value={entryItemId}
                   onChange={(e) => setEntryItemId(e.target.value)}
-                  className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                   required
                 >
                   <option value="">Select item...</option>
@@ -249,36 +249,36 @@ export function Counts() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Counted Qty</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Counted Qty</label>
                 <input
                   type="number"
                   step="any"
                   min="0"
                   value={entryCountedQty}
                   onChange={(e) => setEntryCountedQty(e.target.value)}
-                  className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Notes (optional)</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Notes (optional)</label>
                 <input
                   type="text"
                   value={entryNotes}
                   onChange={(e) => setEntryNotes(e.target.value)}
-                  className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                 />
               </div>
               <button
                 type="submit"
                 disabled={recordEntry.isPending || pendingChecklist.length === 0}
-                className="bg-accent-amber text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                className="bg-accent-amber text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-colors"
               >
                 {recordEntry.isPending ? 'Saving...' : 'Add Count'}
               </button>
             </form>
             {selectedChecklistItem && (
-              <div className="text-xs text-text-secondary mt-2">
+              <div className="text-xs text-text-muted mt-2">
                 Current stock: {formatQty(selectedChecklistItem.current_qty)} {selectedChecklistItem.item_unit}
               </div>
             )}
@@ -290,26 +290,29 @@ export function Counts() {
             )}
           </div>
 
-          <div className="bg-navy-light border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">Session Checklist</h3>
+          <div className="bg-bg-card rounded-xl shadow-sm p-5">
+            <h3 className="text-base font-semibold text-text-primary mb-4">Session Checklist</h3>
             {checklist && checklist.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-text-secondary border-b border-border">
-                      <th className="py-2 pr-4 font-medium">Status</th>
-                      <th className="py-2 pr-4 font-medium">Item</th>
-                      <th className="py-2 pr-4 font-medium text-right">Current Qty</th>
-                      <th className="py-2 pr-4 font-medium text-right">Counted Qty</th>
-                      <th className="py-2 pr-4 font-medium text-right">Delta</th>
-                      <th className="py-2 pr-4 font-medium">Counted At</th>
+                    <tr className="bg-bg-table-header">
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Status</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Item</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Current Qty</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Counted Qty</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Delta</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Counted At</th>
                     </tr>
                   </thead>
                   <tbody>
                     {checklist.map((item) => (
-                      <tr key={item.item_id} className="border-b border-border/50">
+                      <tr key={item.item_id} className="border-b border-border hover:bg-bg-hover transition-colors">
                         <td className="py-2 pr-4">
-                          <span className={item.counted ? 'text-accent-green' : 'text-accent-amber'}>
+                          <span className={item.counted
+                            ? 'text-xs px-2 py-0.5 rounded-md bg-badge-green-bg text-badge-green-text font-medium'
+                            : 'text-xs px-2 py-0.5 rounded-md bg-badge-amber-bg text-badge-amber-text font-medium'
+                          }>
                             {item.counted ? 'COUNTED' : 'PENDING'}
                           </span>
                         </td>
@@ -338,24 +341,24 @@ export function Counts() {
             )}
           </div>
 
-          <div className="bg-navy-light border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">Session Entries</h3>
+          <div className="bg-bg-card rounded-xl shadow-sm p-5">
+            <h3 className="text-base font-semibold text-text-primary mb-4">Session Entries</h3>
             {entries && entries.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-text-secondary border-b border-border">
-                      <th className="py-2 pr-4 font-medium">Item</th>
-                      <th className="py-2 pr-4 font-medium text-right">Previous</th>
-                      <th className="py-2 pr-4 font-medium text-right">Counted</th>
-                      <th className="py-2 pr-4 font-medium text-right">Delta</th>
-                      <th className="py-2 pr-4 font-medium">Notes</th>
-                      <th className="py-2 pr-4 font-medium">Time</th>
+                    <tr className="bg-bg-table-header">
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Item</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Previous</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Counted</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Delta</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Notes</th>
+                      <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Time</th>
                     </tr>
                   </thead>
                   <tbody>
                     {entries.map((entry) => (
-                      <tr key={entry.id} className="border-b border-border/50">
+                      <tr key={entry.id} className="border-b border-border hover:bg-bg-hover transition-colors">
                         <td className="py-2 pr-4 text-text-primary">{entry.item_name}</td>
                         <td className="py-2 pr-4 text-right text-text-primary">
                           {formatQty(entry.previous_qty)} {entry.item_unit}
@@ -378,16 +381,16 @@ export function Counts() {
             )}
           </div>
 
-          <div className="bg-navy-light border border-border rounded-lg p-4">
-            <h3 className="text-sm font-medium text-text-secondary mb-3">Close Session</h3>
+          <div className="bg-bg-card rounded-xl shadow-sm p-5">
+            <h3 className="text-base font-semibold text-text-primary mb-4">Close Session</h3>
             <form onSubmit={submitCloseSession} className="space-y-3">
               <div className="flex-1 min-w-60">
-                <label className="block text-xs text-text-secondary mb-1">Close Notes (optional)</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Close Notes (optional)</label>
                 <input
                   type="text"
                   value={closeNotes}
                   onChange={(e) => setCloseNotes(e.target.value)}
-                  className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+                  className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                 />
               </div>
               <label className="inline-flex items-center gap-2 text-sm text-text-secondary">
@@ -400,7 +403,7 @@ export function Counts() {
                 Force close with remaining uncounted items
               </label>
               <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-text-secondary">
+                <div className="text-xs text-text-muted">
                   {remainingItems > 0
                     ? `This session still has ${remainingItems} uncounted items.`
                     : 'All items counted. Session can be closed normally.'}
@@ -408,7 +411,7 @@ export function Counts() {
                 <button
                   type="submit"
                   disabled={closeSession.isPending || (remainingItems > 0 && !forceClose)}
-                  className="bg-accent-red text-white px-4 py-2 rounded text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                  className="bg-accent-red text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-colors"
                 >
                   {closeSession.isPending ? 'Closing...' : 'Close Session'}
                 </button>
@@ -421,32 +424,32 @@ export function Counts() {
         </div>
       )}
 
-      <div className="bg-navy-light border border-border rounded-lg p-4">
-        <h2 className="text-sm font-medium text-text-secondary mb-3">Session History</h2>
+      <div className="bg-bg-card rounded-xl shadow-sm p-5">
+        <h2 className="text-base font-semibold text-text-primary mb-4">Session History</h2>
         {sessions && sessions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-text-secondary border-b border-border">
-                  <th className="py-2 pr-4 font-medium">Name</th>
-                  <th className="py-2 pr-4 font-medium">Template</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                  <th className="py-2 pr-4 font-medium">Opened</th>
-                  <th className="py-2 pr-4 font-medium">Closed</th>
-                  <th className="py-2 pr-4 font-medium text-right">Completion</th>
-                  <th className="py-2 pr-4 font-medium text-right">Remaining</th>
-                  <th className="py-2 pr-4 font-medium text-right">Total Variance</th>
+                <tr className="bg-bg-table-header">
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Name</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Template</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Status</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Opened</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-left">Closed</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Completion</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Remaining</th>
+                  <th className="py-2.5 pr-4 font-medium text-xs uppercase tracking-wide text-text-secondary text-right">Total Variance</th>
                 </tr>
               </thead>
               <tbody>
                 {sessions.map((session) => (
-                  <tr key={session.id} className="border-b border-border/50">
+                  <tr key={session.id} className="border-b border-border hover:bg-bg-hover transition-colors">
                     <td className="py-2 pr-4 text-text-primary">{session.name}</td>
                     <td className="py-2 pr-4 text-text-secondary">
                       {session.template_category ?? 'All Inventory'}
                     </td>
                     <td className="py-2 pr-4">
-                      <span className={session.status === 'open' ? 'text-accent-green' : 'text-text-secondary'}>
+                      <span className={session.status === 'open' ? 'text-accent-green' : 'text-text-muted'}>
                         {session.status.toUpperCase()}
                       </span>
                     </td>
