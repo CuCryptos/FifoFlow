@@ -6,6 +6,7 @@ import {
   useDeleteStorageArea,
   useAllItemStorage,
 } from '../hooks/useStorageAreas';
+import { X } from 'lucide-react';
 
 export function ManageAreasModal({ onClose }: { onClose: () => void }) {
   const { data: areas } = useStorageAreas();
@@ -67,16 +68,22 @@ export function ManageAreasModal({ onClose }: { onClose: () => void }) {
   };
 
   const handleDelete = (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this area?')) return;
     deleteArea.mutate(id);
   };
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-navy-light border border-border rounded-lg p-6 w-full max-w-md">
-        <h2 className="text-lg font-semibold mb-4">Manage Storage Areas</h2>
+      <div className="bg-bg-card rounded-2xl shadow-xl p-6 w-full max-w-md">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-text-primary">Manage Storage Areas</h2>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
+            <X size={20} />
+          </button>
+        </div>
 
         {/* Area list */}
         <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
@@ -87,7 +94,7 @@ export function ManageAreasModal({ onClose }: { onClose: () => void }) {
             return (
               <div
                 key={area.id}
-                className="flex items-center gap-2 bg-navy border border-border rounded px-3 py-2"
+                className="flex items-center gap-2 bg-white border border-border rounded-lg px-4 py-3"
               >
                 {isEditing ? (
                   <input
@@ -98,9 +105,12 @@ export function ManageAreasModal({ onClose }: { onClose: () => void }) {
                     onBlur={handleRenameSave}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') editInputRef.current?.blur();
-                      if (e.key === 'Escape') setEditingId(null);
+                      if (e.key === 'Escape') {
+                        e.stopPropagation();
+                        setEditingId(null);
+                      }
                     }}
-                    className="flex-1 bg-navy border border-accent-green rounded px-2 py-1 text-sm text-text-primary focus:outline-none"
+                    className="flex-1 bg-white border border-accent-indigo rounded-lg px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
                   />
                 ) : (
                   <span
@@ -124,7 +134,7 @@ export function ManageAreasModal({ onClose }: { onClose: () => void }) {
                   <button
                     onClick={() => handleDelete(area.id)}
                     disabled={hasStock || deleteArea.isPending}
-                    className="text-accent-red hover:opacity-80 text-xs px-2 py-1 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="text-accent-red hover:bg-badge-red-bg text-xs px-2 py-1 disabled:opacity-30 disabled:cursor-not-allowed transition-colors rounded"
                     title={hasStock ? 'Cannot delete area with stock. Move all items first.' : 'Delete area'}
                   >
                     Delete
@@ -159,12 +169,12 @@ export function ManageAreasModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
             placeholder="New area name..."
-            className="flex-1 bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-green"
+            className="flex-1 bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
           />
           <button
             onClick={handleCreate}
             disabled={!newName.trim() || createArea.isPending}
-            className="bg-accent-green text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+            className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-50 transition-colors"
           >
             {createArea.isPending ? 'Adding...' : 'Add'}
           </button>
