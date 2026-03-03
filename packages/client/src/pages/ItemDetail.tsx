@@ -179,16 +179,16 @@ export function ItemDetail() {
   };
 
   const inputClass =
-    'bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green';
+    'bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo';
 
   return (
     <div className="space-y-6">
-      <button onClick={() => navigate('/inventory')} className="text-text-secondary text-sm hover:text-text-primary">
+      <button onClick={() => navigate('/inventory')} className="text-sm text-text-secondary hover:text-accent-indigo transition-colors">
         &larr; Back to Inventory
       </button>
 
       {/* Item header */}
-      <div className="bg-navy-light border border-border rounded-lg p-6">
+      <div className="bg-bg-card rounded-xl shadow-sm p-6">
         {editing ? (
           <div className="space-y-4">
             <input
@@ -221,7 +221,7 @@ export function ItemDetail() {
             {/* New fields */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Order Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Order Unit</label>
                 <select
                   value={editOrderUnit}
                   onChange={(e) => setEditOrderUnit((e.target.value as Unit | '') ?? '')}
@@ -236,7 +236,7 @@ export function ItemDetail() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Qty per Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Qty per Unit</label>
                 <input
                   type="number"
                   step="any"
@@ -248,7 +248,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Order Unit Price</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Order Unit Price</label>
                 <input
                   type="number"
                   step="0.01"
@@ -260,7 +260,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Inside Unit Price</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Inside Unit Price</label>
                 <input
                   type="number"
                   step="0.01"
@@ -270,12 +270,12 @@ export function ItemDetail() {
                   placeholder="e.g. 8"
                   className={`${inputClass} w-full`}
                 />
-                <p className="text-[11px] text-text-secondary mt-1">
+                <p className="text-[11px] text-text-muted mt-1">
                   Per {insideUnitLabel}
                 </p>
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Inner Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Inner Unit</label>
                 <select
                   value={editInnerUnit}
                   onChange={(e) => setEditInnerUnit((e.target.value as Unit | '') ?? '')}
@@ -290,7 +290,7 @@ export function ItemDetail() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Item Size Value</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Item Size Value</label>
                 <input
                   type="number"
                   step="any"
@@ -302,7 +302,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Item Size Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Item Size Unit</label>
                 <select
                   value={editItemSizeUnit}
                   onChange={(e) => setEditItemSizeUnit((e.target.value as Unit | '') ?? '')}
@@ -317,7 +317,7 @@ export function ItemDetail() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Reorder Level</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Reorder Level</label>
                 <input
                   type="number"
                   step="any"
@@ -329,7 +329,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1">Reorder Qty</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Reorder Qty</label>
                 <input
                   type="number"
                   step="any"
@@ -343,190 +343,198 @@ export function ItemDetail() {
             </div>
 
             <div className="flex gap-2">
-              <button onClick={saveEdit} className="bg-accent-green text-navy px-3 py-1.5 rounded text-sm font-medium">
+              <button onClick={saveEdit} className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover">
                 Save
               </button>
-              <button onClick={() => setEditing(false)} className="text-text-secondary text-sm px-3 py-1.5">
+              <button onClick={() => setEditing(false)} className="text-text-secondary text-sm px-3 py-1.5 hover:text-text-primary">
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <div>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-semibold">{item.name}</h1>
-                  {reorderStatus === 'OK' && (
-                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-accent-green/20 text-accent-green">
-                      OK
-                    </span>
-                  )}
-                  {reorderStatus === 'REORDER' && (
-                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-accent-red/20 text-accent-red">
-                      REORDER
-                    </span>
-                  )}
+          <div className="flex flex-col md:flex-row md:gap-8">
+            {/* Left side: item info */}
+            <div className="flex-1">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl font-semibold text-text-primary">{item.name}</h1>
+                    {reorderStatus === 'OK' && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-badge-green-bg text-badge-green-text">
+                        OK
+                      </span>
+                    )}
+                    {reorderStatus === 'REORDER' && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-badge-red-bg text-badge-red-text">
+                        REORDER
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-sm text-text-secondary">
+                    <span>{item.category}</span>
+                    <span className="text-text-primary font-mono font-medium">{displayQty}</span>
+                    {compatible.length > 1 ? (
+                      <select
+                        value={activeDisplayUnit}
+                        onChange={(e) => setDisplayUnit(e.target.value as Unit)}
+                        className="bg-white border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
+                      >
+                        {compatible.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span>{item.unit}</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-sm text-text-secondary">
-                  <span>{item.category}</span>
-                  <span className="text-text-primary font-medium">{displayQty}</span>
-                  {compatible.length > 1 ? (
-                    <select
-                      value={activeDisplayUnit}
-                      onChange={(e) => setDisplayUnit(e.target.value as Unit)}
-                      className="bg-navy border border-border rounded px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-green"
-                    >
-                      {compatible.map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span>{item.unit}</span>
-                  )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={startEdit}
+                    className="text-text-secondary text-sm hover:text-text-primary px-3 py-1.5 border border-border rounded-lg hover:bg-bg-hover transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="text-accent-red text-sm hover:bg-badge-red-bg px-3 py-1.5 border border-border rounded-lg transition-colors"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={startEdit}
-                  className="text-text-secondary text-sm hover:text-text-primary px-3 py-1.5 border border-border rounded"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="text-accent-red text-sm hover:opacity-80 px-3 py-1.5 border border-border rounded"
-                >
-                  Delete
-                </button>
+
+              {/* Details grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 mt-4 pt-4 border-t border-border text-sm">
+                {packagingDescription && (
+                  <div className="sm:col-span-3">
+                    <span className="text-xs text-text-muted">Packaging</span>
+                    <p className="text-text-primary">{packagingDescription}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-xs text-text-muted">Order Unit</span>
+                  <p className="text-text-primary">{item.order_unit ?? '\u2014'}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Qty per Unit</span>
+                  <p className="text-text-primary">{item.qty_per_unit != null ? item.qty_per_unit : '\u2014'}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Order Unit Price</span>
+                  <p className="text-text-primary">{formatCurrency(item.order_unit_price)}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Inside Unit Price</span>
+                  <p className="text-text-primary">
+                    {insideUnitPrice == null
+                      ? '\u2014'
+                      : `${formatCurrency(insideUnitPrice)} / ${insideUnitLabel}`}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Item Size</span>
+                  <p className="text-text-primary">
+                    {item.item_size_value != null && item.item_size_unit
+                      ? `${item.item_size_value} ${item.item_size_unit}`
+                      : '\u2014'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Inner Unit</span>
+                  <p className="text-text-primary">{item.inner_unit ?? '\u2014'}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Reorder Level</span>
+                  <p className="text-text-primary">{item.reorder_level != null ? item.reorder_level : '\u2014'}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-text-muted">Reorder Qty</span>
+                  <p className="text-text-primary">{item.reorder_qty != null ? item.reorder_qty : '\u2014'}</p>
+                </div>
               </div>
             </div>
 
-            {/* Details grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 mt-4 pt-4 border-t border-border text-sm">
-              {packagingDescription && (
-                <div className="sm:col-span-3">
-                  <span className="text-text-secondary text-xs">Packaging</span>
-                  <p className="text-text-primary">{packagingDescription}</p>
-                </div>
-              )}
-              <div>
-                <span className="text-text-secondary text-xs">Order Unit</span>
-                <p className="text-text-primary">{item.order_unit ?? '\u2014'}</p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Qty per Unit</span>
-                <p className="text-text-primary">{item.qty_per_unit != null ? item.qty_per_unit : '\u2014'}</p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Order Unit Price</span>
-                <p className="text-text-primary">{formatCurrency(item.order_unit_price)}</p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Inside Unit Price</span>
-                <p className="text-text-primary">
-                  {insideUnitPrice == null
-                    ? '\u2014'
-                    : `${formatCurrency(insideUnitPrice)} / ${insideUnitLabel}`}
-                </p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Item Size</span>
-                <p className="text-text-primary">
-                  {item.item_size_value != null && item.item_size_unit
-                    ? `${item.item_size_value} ${item.item_size_unit}`
-                    : '\u2014'}
-                </p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Inner Unit</span>
-                <p className="text-text-primary">{item.inner_unit ?? '\u2014'}</p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Reorder Level</span>
-                <p className="text-text-primary">{item.reorder_level != null ? item.reorder_level : '\u2014'}</p>
-              </div>
-              <div>
-                <span className="text-text-secondary text-xs">Reorder Qty</span>
-                <p className="text-text-primary">{item.reorder_qty != null ? item.reorder_qty : '\u2014'}</p>
+            {/* Right side: stock by area */}
+            <div className="md:w-72 shrink-0 mt-6 md:mt-0">
+              <div className="bg-bg-page rounded-lg p-4">
+                <h2 className="text-sm font-semibold text-text-primary mb-3">Stock by Area</h2>
+                {itemStorage && itemStorage.length > 0 ? (
+                  <div>
+                    {itemStorage.map((is) => (
+                      <div key={is.area_id} className="flex items-center justify-between text-sm py-1.5">
+                        <span className="text-text-secondary">{is.area_name}</span>
+                        <span className="text-text-primary font-mono font-medium">{is.quantity} {item.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-text-secondary text-sm">No stock in any area.</div>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Stock by Area */}
-      <div className="bg-navy-light border border-border rounded-lg p-4">
-        <h2 className="text-sm font-medium text-text-secondary mb-3">Stock by Area</h2>
-        {itemStorage && itemStorage.length > 0 ? (
-          <div className="space-y-2">
-            {itemStorage.map((is) => (
-              <div key={is.area_id} className="flex items-center justify-between text-sm">
-                <span className="text-text-secondary">{is.area_name}</span>
-                <span className="text-text-primary font-medium">{is.quantity} {item.unit}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-text-secondary text-sm">No stock in any area.</div>
-        )}
-      </div>
+      {/* Transaction form + Cycle count — side by side */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Log transaction */}
+        <TransactionForm item={item} />
 
-      {/* Log transaction */}
-      <TransactionForm item={item} />
-
-      {/* Cycle count */}
-      <div className="bg-navy-light border border-border rounded-lg p-4">
-        <h2 className="text-sm font-medium text-text-secondary mb-3">Cycle Count</h2>
-        <form onSubmit={submitCycleCount} className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="block text-xs text-text-secondary mb-1">Counted Qty ({item.unit})</label>
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={countedQty}
-              onChange={(e) => setCountedQty(e.target.value)}
-              className="w-28 bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
-            />
-          </div>
-          <div className="flex-1 min-w-52">
-            <label className="block text-xs text-text-secondary mb-1">Count Notes (optional)</label>
-            <input
-              type="text"
-              value={countNotes}
-              onChange={(e) => setCountNotes(e.target.value)}
-              placeholder="Count context, reason, location"
-              className="w-full bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-green"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={!countQtyValid || setItemCount.isPending}
-            className="bg-accent-amber text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 disabled:opacity-50"
-          >
-            {setItemCount.isPending ? 'Applying...' : 'Apply Count'}
-          </button>
-        </form>
-        {countDelta !== null && (
-          <div className="text-xs mt-2 text-text-secondary">
-            Variance vs current: <span className={countDelta >= 0 ? 'text-accent-green' : 'text-accent-red'}>
-              {countDelta >= 0 ? '+' : ''}{countDelta} {item.unit}
-            </span>
-          </div>
-        )}
-        {setItemCount.error && (
-          <div className="text-accent-red text-xs mt-2">{setItemCount.error.message}</div>
-        )}
+        {/* Cycle count */}
+        <div className="bg-bg-card rounded-xl shadow-sm p-5">
+          <h2 className="text-base font-semibold text-text-primary mb-4">Cycle Count</h2>
+          <form onSubmit={submitCycleCount} className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Counted Qty ({item.unit})</label>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={countedQty}
+                onChange={(e) => setCountedQty(e.target.value)}
+                className={`w-full ${inputClass}`}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Count Notes (optional)</label>
+              <input
+                type="text"
+                value={countNotes}
+                onChange={(e) => setCountNotes(e.target.value)}
+                placeholder="Count context, reason, location"
+                className={`w-full ${inputClass} placeholder:text-text-muted`}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!countQtyValid || setItemCount.isPending}
+              className="bg-accent-amber text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {setItemCount.isPending ? 'Applying...' : 'Apply Count'}
+            </button>
+          </form>
+          {countDelta !== null && (
+            <div className="text-xs mt-2 text-text-secondary">
+              Variance vs current: <span className={countDelta >= 0 ? 'text-accent-green' : 'text-accent-red'}>
+                {countDelta >= 0 ? '+' : ''}{countDelta} {item.unit}
+              </span>
+            </div>
+          )}
+          {setItemCount.error && (
+            <div className="text-accent-red text-xs mt-2">{setItemCount.error.message}</div>
+          )}
+        </div>
       </div>
 
       {/* Transaction history */}
-      <div>
-        <h2 className="text-sm font-medium text-text-secondary mb-3">Transaction History</h2>
+      <div className="bg-bg-card rounded-xl shadow-sm p-5">
+        <h2 className="text-base font-semibold text-text-primary mb-4">Transaction History</h2>
         {transactions.length > 0 ? (
-          <div className="space-y-2">
+          <div>
             {transactions.map((tx) => {
               const txDisplayQty = convertQuantity(
                 tx.quantity,
@@ -544,17 +552,17 @@ export function ItemDetail() {
               return (
                 <div
                   key={tx.id}
-                  className="bg-navy-light border border-border rounded px-4 py-3 flex items-center justify-between text-sm"
+                  className="flex items-center justify-between py-3 border-b border-border last:border-0 text-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <span className={tx.type === 'in' ? 'text-accent-green' : 'text-accent-red'}>
+                    <span className={`font-mono font-medium ${tx.type === 'in' ? 'text-accent-green' : 'text-accent-red'}`}>
                       {tx.type === 'in' ? '+' : '-'}
                       {txDisplayQty} {activeDisplayUnit}
                     </span>
                     <span className="text-text-secondary">{tx.reason}</span>
-                    {tx.notes && <span className="text-text-secondary italic">&mdash; {tx.notes}</span>}
+                    {tx.notes && <span className="text-text-muted italic">&mdash; {tx.notes}</span>}
                   </div>
-                  <span className="text-text-secondary text-xs">{new Date(tx.created_at).toLocaleString()}</span>
+                  <span className="text-text-muted text-xs">{new Date(tx.created_at).toLocaleString()}</span>
                 </div>
               );
             })}
