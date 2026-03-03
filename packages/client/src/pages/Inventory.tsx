@@ -240,6 +240,8 @@ export function Inventory() {
   const [orderQtys, setOrderQtys] = useState<Record<number, string>>({});
   const [areaFilter, setAreaFilter] = useState('');
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+  const [showOrdering, setShowOrdering] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
   const updateItem = useUpdateItem();
   const { data: areas } = useStorageAreas();
   const { data: allItemStorage } = useAllItemStorage();
@@ -375,6 +377,31 @@ export function Inventory() {
         <div className="bg-bg-card rounded-xl shadow-sm overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
+              {/* Row 1 — Group headers */}
+              <tr className="bg-bg-page">
+                <th colSpan={7} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                  Stock
+                </th>
+                <th colSpan={showOrdering ? 5 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                  <button
+                    type="button"
+                    onClick={() => setShowOrdering((v) => !v)}
+                    className="cursor-pointer hover:text-text-secondary transition-colors inline-flex items-center gap-1"
+                  >
+                    {showOrdering ? '\u25BE' : '\u25B8'} Ordering
+                  </button>
+                </th>
+                <th colSpan={showPricing ? 4 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                  <button
+                    type="button"
+                    onClick={() => setShowPricing((v) => !v)}
+                    className="cursor-pointer hover:text-text-secondary transition-colors inline-flex items-center gap-1"
+                  >
+                    {showPricing ? '\u25BE' : '\u25B8'} Pricing
+                  </button>
+                </th>
+              </tr>
+              {/* Row 2 — Column headers */}
               <tr className="bg-bg-table-header text-text-secondary text-left">
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Name</th>
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Category</th>
@@ -383,15 +410,27 @@ export function Inventory() {
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Reorder Level</th>
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Reorder Qty</th>
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Reorder</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Order Unit</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Pack Qty</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Inner Unit</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Size Value</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Size Unit</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Price</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Inside Price</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Qty</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Cost</th>
+                {showOrdering ? (
+                  <>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Order Unit</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Pack Qty</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Inner Unit</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Size Value</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Size Unit</th>
+                  </>
+                ) : (
+                  <th />
+                )}
+                {showPricing ? (
+                  <>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Price</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Inside Price</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Qty</th>
+                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Cost</th>
+                  </>
+                ) : (
+                  <th />
+                )}
               </tr>
             </thead>
             <tbody>
@@ -524,138 +563,152 @@ export function Inventory() {
                       />
                     </td>
 
-                    {/* Order Unit – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.order_unit ?? ''}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const val: Unit | null = raw ? (raw as Unit) : null;
-                          updateItem.mutate({
-                            id: item.id,
-                            data: { order_unit: val },
-                          });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {UNITS.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+                    {/* ORDERING columns */}
+                    {showOrdering ? (
+                      <>
+                        {/* Order Unit – inline select */}
+                        <td className="px-3 py-2">
+                          <select
+                            value={item.order_unit ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const val: Unit | null = raw ? (raw as Unit) : null;
+                              updateItem.mutate({
+                                id: item.id,
+                                data: { order_unit: val },
+                              });
+                            }}
+                            className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                          >
+                            <option value="">—</option>
+                            {UNITS.map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
 
-                    {/* Pack Qty – inline edit number */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.qty_per_unit}
-                        field="qty_per_unit"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
+                        {/* Pack Qty – inline edit number */}
+                        <td className="px-3 py-2 text-right">
+                          <InlineEdit
+                            value={item.qty_per_unit}
+                            field="qty_per_unit"
+                            itemId={item.id}
+                            type="number"
+                          />
+                        </td>
 
-                    {/* Inner Unit – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.inner_unit ?? ''}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const val: Unit | null = raw ? (raw as Unit) : null;
-                          updateItem.mutate({
-                            id: item.id,
-                            data: { inner_unit: val },
-                          });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {UNITS.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+                        {/* Inner Unit – inline select */}
+                        <td className="px-3 py-2">
+                          <select
+                            value={item.inner_unit ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const val: Unit | null = raw ? (raw as Unit) : null;
+                              updateItem.mutate({
+                                id: item.id,
+                                data: { inner_unit: val },
+                              });
+                            }}
+                            className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                          >
+                            <option value="">—</option>
+                            {UNITS.map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
 
-                    {/* Size Value – inline edit number */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.item_size_value}
-                        field="item_size_value"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
+                        {/* Size Value – inline edit number */}
+                        <td className="px-3 py-2 text-right">
+                          <InlineEdit
+                            value={item.item_size_value}
+                            field="item_size_value"
+                            itemId={item.id}
+                            type="number"
+                          />
+                        </td>
 
-                    {/* Size Unit – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.item_size_unit ?? ''}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const val: Unit | null = raw ? (raw as Unit) : null;
-                          updateItem.mutate({
-                            id: item.id,
-                            data: { item_size_unit: val },
-                          });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {UNITS.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+                        {/* Size Unit – inline select */}
+                        <td className="px-3 py-2">
+                          <select
+                            value={item.item_size_unit ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const val: Unit | null = raw ? (raw as Unit) : null;
+                              updateItem.mutate({
+                                id: item.id,
+                                data: { item_size_unit: val },
+                              });
+                            }}
+                            className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                          >
+                            <option value="">—</option>
+                            {UNITS.map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      </>
+                    ) : (
+                      <td />
+                    )}
 
-                    {/* Order Unit Price – inline edit number */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.order_unit_price}
-                        field="order_unit_price"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
+                    {/* PRICING columns */}
+                    {showPricing ? (
+                      <>
+                        {/* Order Unit Price – inline edit number */}
+                        <td className="px-3 py-2 text-right">
+                          <InlineEdit
+                            value={item.order_unit_price}
+                            field="order_unit_price"
+                            itemId={item.id}
+                            type="number"
+                          />
+                        </td>
 
-                    {/* Inside Unit Price – computed/editable */}
-                    <td className="px-3 py-2 text-right text-text-primary">
-                      <InlineInsidePrice
-                        orderUnitPrice={item.order_unit_price}
-                        qtyPerUnit={item.qty_per_unit}
-                        itemId={item.id}
-                        innerUnitLabel={insideUnitLabel}
-                      />
-                    </td>
+                        {/* Inside Unit Price – computed/editable */}
+                        <td className="px-3 py-2 text-right text-text-primary">
+                          <InlineInsidePrice
+                            orderUnitPrice={item.order_unit_price}
+                            qtyPerUnit={item.qty_per_unit}
+                            itemId={item.id}
+                            innerUnitLabel={insideUnitLabel}
+                          />
+                        </td>
 
-                    {/* Order Qty – transient for costing */}
-                    <td className="px-3 py-2 text-right">
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={orderQtys[item.id] ?? ''}
-                        onChange={(e) =>
-                          setOrderQtys((prev) => ({ ...prev, [item.id]: e.target.value }))
-                        }
-                        className="w-24 bg-white border border-border rounded-lg px-2 py-1 text-xs text-right text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
-                        placeholder="Qty"
-                      />
-                    </td>
+                        {/* Order Qty – transient for costing */}
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={orderQtys[item.id] ?? ''}
+                            onChange={(e) =>
+                              setOrderQtys((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            className="w-24 bg-white border border-border rounded-lg px-2 py-1 text-xs text-right text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
+                            placeholder="Qty"
+                          />
+                        </td>
 
-                    {/* Total Cost – computed */}
-                    <td className="px-3 py-2 text-right text-text-primary font-mono tabular-nums">
-                      {formatCurrency(totalCost)}
-                    </td>
+                        {/* Total Cost – computed */}
+                        <td className="px-3 py-2 text-right text-text-primary font-mono tabular-nums">
+                          {formatCurrency(totalCost)}
+                        </td>
+                      </>
+                    ) : (
+                      <td />
+                    )}
                   </tr>
                   {expandedItems.has(item.id) && hasAreas && (
                     <tr className="bg-bg-area-row">
-                      <td colSpan={16} className="px-3 py-2 pl-10">
+                      <td colSpan={7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1)} className="px-3 py-2 pl-10">
                         <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
                           {itemAreas.map((is) => (
                             <span key={is.area_id}>
@@ -670,6 +723,18 @@ export function Inventory() {
                 );
               })}
             </tbody>
+            <tfoot>
+              <tr className="bg-bg-page">
+                <td colSpan={7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1)} className="px-4 py-3 text-sm text-text-secondary">
+                  <div className="flex items-center justify-between">
+                    <span>Showing {itemsToRender.length} items</span>
+                    {reorderSuggestions && reorderSuggestions.length > 0 && (
+                      <span>Reorder spend: <span className="text-accent-amber font-mono font-medium">{formatCurrency(reorderSpend)}</span></span>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : (
