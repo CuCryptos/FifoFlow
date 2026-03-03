@@ -80,11 +80,11 @@ function InlineEdit({
         tabIndex={0}
         onFocus={() => setEditing(true)}
         onClick={() => setEditing(true)}
-        className="block w-full cursor-text px-2 py-1 rounded border border-transparent hover:border-border text-text-primary min-h-[1.75rem] leading-[1.75rem] truncate"
+        className="block w-full cursor-text px-2 py-1 rounded-lg border border-transparent hover:bg-bg-hover text-text-primary min-h-[1.75rem] leading-[1.75rem] truncate"
         title={String(value ?? '')}
       >
         {value !== null && value !== '' ? String(value) : (
-          <span className="text-text-secondary">{placeholder}</span>
+          <span className="text-text-muted">{placeholder}</span>
         )}
       </span>
     );
@@ -106,7 +106,7 @@ function InlineEdit({
           setEditing(false);
         }
       }}
-      className="w-full bg-navy border border-accent-green rounded px-2 py-1 text-xs text-text-primary focus:outline-none"
+      className="w-full bg-white border border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
     />
   );
 }
@@ -163,10 +163,10 @@ function InlineInsidePrice({
         tabIndex={0}
         onFocus={() => setEditing(true)}
         onClick={() => setEditing(true)}
-        className="block w-full cursor-text px-2 py-1 rounded border border-transparent hover:border-border text-text-primary min-h-[1.75rem] leading-[1.75rem] truncate"
+        className="block w-full cursor-text px-2 py-1 rounded-lg border border-transparent hover:bg-bg-hover text-text-primary min-h-[1.75rem] leading-[1.75rem] truncate"
       >
         {derivedInside == null ? (
-          <span className="text-text-secondary">—</span>
+          <span className="text-text-muted">—</span>
         ) : (
           `${formatCurrency(derivedInside)} / ${innerUnitLabel}`
         )}
@@ -192,7 +192,7 @@ function InlineInsidePrice({
           setEditing(false);
         }
       }}
-      className="w-full bg-navy border border-accent-green rounded px-2 py-1 text-xs text-text-primary focus:outline-none"
+      className="w-full bg-white border border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
       placeholder={`0.00 / ${innerUnitLabel}`}
     />
   );
@@ -210,17 +210,17 @@ function ReorderBadge({
   reorderLevel: number | null;
 }) {
   if (reorderLevel === null) {
-    return <span className="text-text-secondary">—</span>;
+    return <span className="text-text-muted">—</span>;
   }
   if (stockQty > reorderLevel) {
     return (
-      <span className="text-xs px-2 py-0.5 rounded bg-accent-green/20 text-accent-green">
+      <span className="text-xs px-2 py-0.5 rounded-md bg-badge-green-bg text-badge-green-text font-medium">
         OK
       </span>
     );
   }
   return (
-    <span className="text-xs px-2 py-0.5 rounded bg-accent-red/20 text-accent-red">
+    <span className="text-xs px-2 py-0.5 rounded-md bg-badge-red-bg text-badge-red-text font-medium">
       REORDER
     </span>
   );
@@ -297,17 +297,17 @@ export function Inventory() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Inventory</h1>
+        <h1 className="text-2xl font-semibold text-text-primary">Inventory</h1>
         <div className="flex gap-2">
           <button
             onClick={() => setShowAreasModal(true)}
-            className="border border-border text-text-secondary px-4 py-2 rounded text-sm font-medium hover:text-text-primary transition-colors"
+            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
           >
             Manage Areas
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-accent-green text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 transition-opacity"
+            className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover transition-colors"
           >
             + Add Item
           </button>
@@ -315,18 +315,18 @@ export function Inventory() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
+      <div className="bg-bg-card rounded-xl shadow-sm p-4 flex flex-wrap gap-3 items-center">
         <input
           type="text"
           placeholder="Search items..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="bg-navy-light border border-border rounded px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary flex-1 max-w-sm focus:outline-none focus:border-accent-green"
+          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted flex-1 max-w-sm focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         />
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="bg-navy-light border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         >
           <option value="">All Categories</option>
           {CATEGORIES.map((cat) => (
@@ -338,7 +338,7 @@ export function Inventory() {
         <select
           value={areaFilter}
           onChange={(e) => setAreaFilter(e.target.value)}
-          className="bg-navy-light border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         >
           <option value="">All Areas</option>
           {areas?.map((area) => (
@@ -348,23 +348,22 @@ export function Inventory() {
         <button
           type="button"
           onClick={() => setShowReorderOnly((v) => !v)}
-          className={`px-3 py-2 rounded text-sm border transition-colors ${
-            showReorderOnly
-              ? 'border-accent-red text-accent-red bg-accent-red/10'
-              : 'border-border text-text-secondary hover:text-text-primary'
-          }`}
+          className={showReorderOnly
+            ? 'rounded-full bg-badge-red-bg text-badge-red-text border border-accent-red/30 px-3 py-2 text-sm'
+            : 'rounded-full border border-border text-text-secondary hover:text-text-primary px-3 py-2 text-sm transition-colors'
+          }
         >
           Needs Reorder
         </button>
       </div>
 
       {!!reorderSuggestions?.length && (
-        <div className="bg-navy-light border border-border rounded-lg px-4 py-3 flex items-center justify-between text-sm">
+        <div className="bg-bg-page border border-border rounded-lg px-4 py-3 flex items-center justify-between text-sm">
           <div className="text-text-secondary">
             {reorderSuggestions.length} items need reorder
           </div>
           <div className="text-text-primary">
-            Estimated spend: <span className="text-accent-amber">{formatCurrency(reorderSpend)}</span>
+            Estimated spend: <span className="text-accent-amber font-mono">{formatCurrency(reorderSpend)}</span>
           </div>
         </div>
       )}
@@ -373,26 +372,26 @@ export function Inventory() {
       {isLoading ? (
         <div className="text-text-secondary text-sm">Loading...</div>
       ) : itemsToRender.length > 0 ? (
-        <div className="border border-border rounded-lg overflow-x-auto">
+        <div className="bg-bg-card rounded-xl shadow-sm overflow-x-auto">
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
-              <tr className="bg-navy-lighter text-text-secondary text-left">
-                <th className="px-3 py-2 font-medium">Name</th>
-                <th className="px-3 py-2 font-medium">Category</th>
-                <th className="px-3 py-2 font-medium text-right">In Stock</th>
-                <th className="px-3 py-2 font-medium">Stock Unit</th>
-                <th className="px-3 py-2 font-medium text-right">Reorder Level</th>
-                <th className="px-3 py-2 font-medium text-right">Reorder Qty</th>
-                <th className="px-3 py-2 font-medium">Reorder</th>
-                <th className="px-3 py-2 font-medium">Order Unit</th>
-                <th className="px-3 py-2 font-medium text-right">Pack Qty</th>
-                <th className="px-3 py-2 font-medium">Inner Unit</th>
-                <th className="px-3 py-2 font-medium text-right">Size Value</th>
-                <th className="px-3 py-2 font-medium">Size Unit</th>
-                <th className="px-3 py-2 font-medium text-right">Order Price</th>
-                <th className="px-3 py-2 font-medium text-right">Inside Price</th>
-                <th className="px-3 py-2 font-medium text-right">Order Qty</th>
-                <th className="px-3 py-2 font-medium text-right">Total Cost</th>
+              <tr className="bg-bg-table-header text-text-secondary text-left">
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Name</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Category</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">In Stock</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Stock Unit</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Reorder Level</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Reorder Qty</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Reorder</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Order Unit</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Pack Qty</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Inner Unit</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Size Value</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Size Unit</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Price</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Inside Price</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Qty</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -443,7 +442,7 @@ export function Inventory() {
                 return (
                 <React.Fragment key={item.id}>
                   <tr
-                    className="border-t border-border hover:bg-navy-lighter/50 transition-colors"
+                    className="border-b border-border hover:bg-bg-hover transition-colors"
                   >
                     {/* Name – link to detail with expand toggle */}
                     <td className="px-3 py-2">
@@ -451,8 +450,8 @@ export function Inventory() {
                         <button
                           type="button"
                           onClick={() => toggleExpand(item.id)}
-                          className={`text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-navy-lighter transition-colors ${
-                            hasAreas ? 'text-text-secondary hover:text-text-primary' : 'text-transparent cursor-default'
+                          className={`text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-bg-hover transition-colors ${
+                            hasAreas ? 'text-text-muted hover:text-text-primary' : 'text-transparent cursor-default'
                           }`}
                           tabIndex={hasAreas ? 0 : -1}
                           aria-label={expandedItems.has(item.id) ? 'Collapse' : 'Expand'}
@@ -461,7 +460,7 @@ export function Inventory() {
                         </button>
                         <Link
                           to={`/inventory/${item.id}`}
-                          className="text-accent-green hover:underline"
+                          className="text-accent-indigo hover:underline"
                         >
                           {item.name}
                         </Link>
@@ -474,7 +473,7 @@ export function Inventory() {
                     </td>
 
                     {/* Stock Qty – display with conversion */}
-                    <td className="px-3 py-2 font-medium text-right tabular-nums">{displayQty}</td>
+                    <td className="px-3 py-2 font-mono font-medium text-text-primary text-right tabular-nums">{displayQty}</td>
 
                     {/* Stock Unit – conversion toggle */}
                     <td className="px-3 py-2">
@@ -484,7 +483,7 @@ export function Inventory() {
                           onChange={(e) =>
                             setDisplayUnit(item.id, e.target.value as Unit)
                           }
-                          className="bg-navy border border-transparent hover:border-border focus:border-accent-green rounded px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                          className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
                         >
                           {compatible.map((u) => (
                             <option key={u} value={u}>
@@ -537,7 +536,7 @@ export function Inventory() {
                             data: { order_unit: val },
                           });
                         }}
-                        className="bg-navy border border-transparent hover:border-border focus:border-accent-green rounded px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
                       >
                         <option value="">—</option>
                         {UNITS.map((u) => (
@@ -570,7 +569,7 @@ export function Inventory() {
                             data: { inner_unit: val },
                           });
                         }}
-                        className="bg-navy border border-transparent hover:border-border focus:border-accent-green rounded px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
                       >
                         <option value="">—</option>
                         {UNITS.map((u) => (
@@ -603,7 +602,7 @@ export function Inventory() {
                             data: { item_size_unit: val },
                           });
                         }}
-                        className="bg-navy border border-transparent hover:border-border focus:border-accent-green rounded px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
                       >
                         <option value="">—</option>
                         {UNITS.map((u) => (
@@ -644,23 +643,23 @@ export function Inventory() {
                         onChange={(e) =>
                           setOrderQtys((prev) => ({ ...prev, [item.id]: e.target.value }))
                         }
-                        className="w-24 bg-navy border border-border rounded px-2 py-1 text-xs text-right text-text-primary focus:outline-none focus:border-accent-green"
+                        className="w-24 bg-white border border-border rounded-lg px-2 py-1 text-xs text-right text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                         placeholder="Qty"
                       />
                     </td>
 
                     {/* Total Cost – computed */}
-                    <td className="px-3 py-2 text-right text-text-primary tabular-nums">
+                    <td className="px-3 py-2 text-right text-text-primary font-mono tabular-nums">
                       {formatCurrency(totalCost)}
                     </td>
                   </tr>
                   {expandedItems.has(item.id) && hasAreas && (
-                    <tr className="bg-navy/30">
+                    <tr className="bg-bg-area-row">
                       <td colSpan={16} className="px-3 py-2 pl-10">
                         <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
                           {itemAreas.map((is) => (
                             <span key={is.area_id}>
-                              {is.area_name}: <span className="text-text-primary font-medium">{is.quantity}</span>
+                              {is.area_name}: <span className="text-text-primary font-mono font-medium">{is.quantity}</span>
                             </span>
                           ))}
                         </div>
