@@ -23,6 +23,7 @@ export const updateItemSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).optional(),
   category: z.enum(CATEGORIES).optional(),
   unit: z.enum(UNITS).optional(),
+  current_qty: z.number().min(0).optional(),
   order_unit: z.enum(UNITS).nullable().optional(),
   order_unit_price: z.number().min(0).nullable().optional(),
   qty_per_unit: z.number().min(0).nullable().optional(),

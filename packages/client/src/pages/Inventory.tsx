@@ -591,12 +591,6 @@ export function Inventory() {
             </thead>
             <tbody>
               {paginatedItems.map((item) => {
-                // When area filter is active, show area-specific qty; otherwise total
-                const displayQty = areaFilter
-                  ? (storageByItem.get(item.id)?.find(
-                      (s) => s.area_id === Number(areaFilter),
-                    )?.quantity ?? 0)
-                  : item.current_qty;
                 const itemAreas = storageByItem.get(item.id) ?? [];
                 const hasAreas = itemAreas.length > 0;
                 const insideUnitPrice =
@@ -647,9 +641,19 @@ export function Inventory() {
                       </div>
                     </td>
 
-                    {/* Category – read-only */}
-                    <td className="px-3 py-2 text-text-secondary">
-                      {item.category}
+                    {/* Category – editable */}
+                    <td className="px-3 py-2">
+                      <select
+                        value={item.category}
+                        onChange={(e) => {
+                          updateItem.mutate({ id: item.id, data: { category: e.target.value as typeof item.category } });
+                        }}
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                      >
+                        {CATEGORIES.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
                     </td>
 
                     {/* Vendor – inline select */}
@@ -703,8 +707,15 @@ export function Inventory() {
                       </select>
                     </td>
 
-                    {/* Stock Qty – display with conversion */}
-                    <td className="px-3 py-2 font-mono font-medium text-text-primary text-right tabular-nums">{displayQty}</td>
+                    {/* Stock Qty – inline edit */}
+                    <td className="px-3 py-2 text-right">
+                      <InlineEdit
+                        value={item.current_qty}
+                        field="current_qty"
+                        itemId={item.id}
+                        type="number"
+                      />
+                    </td>
 
                     {/* Unit – editable */}
                     <td className="px-3 py-2">
