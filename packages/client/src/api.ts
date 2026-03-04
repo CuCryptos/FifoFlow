@@ -12,11 +12,16 @@ import type {
   ReorderSuggestion,
   StorageArea,
   Vendor,
+  Order,
+  OrderWithVendor,
+  OrderDetail,
   CloseCountSessionInput,
   CreateItemInput,
   CreateCountSessionInput,
   CreateStorageAreaInput,
   CreateVendorInput,
+  CreateOrderInput,
+  UpdateOrderInput,
   RecordCountEntryInput,
   SetItemCountInput,
   UpdateItemInput,
@@ -87,6 +92,18 @@ export const api = {
       fetchJson<Vendor>(`/vendors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/vendors/${id}`, { method: 'DELETE' }),
+  },
+  orders: {
+    list: () => fetchJson<OrderWithVendor[]>('/orders'),
+    get: (id: number) => fetchJson<OrderDetail>(`/orders/${id}`),
+    create: (data: CreateOrderInput) =>
+      fetchJson<OrderDetail>('/orders', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: UpdateOrderInput) =>
+      fetchJson<OrderDetail>(`/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    updateStatus: (id: number, status: 'sent') =>
+      fetchJson<Order>(`/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/orders/${id}`, { method: 'DELETE' }),
   },
   countSessions: {
     list: () => fetchJson<CountSessionSummary[]>('/count-sessions'),
