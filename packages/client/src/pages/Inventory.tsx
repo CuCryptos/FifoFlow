@@ -296,11 +296,9 @@ export function Inventory() {
   const [showAreasModal, setShowAreasModal] = useState(false);
   const [showVendorsModal, setShowVendorsModal] = useState(false);
   const [displayUnits, setDisplayUnits] = useState<Record<number, Unit>>({});
-  const [orderQtys, setOrderQtys] = useState<Record<number, string>>({});
   const [areaFilter, setAreaFilter] = useState('');
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [showOrdering, setShowOrdering] = useState(false);
-  const [showPricing, setShowPricing] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -423,7 +421,7 @@ export function Inventory() {
     });
   };
 
-  const colSpanTotal = 1 + 8 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1);
+  const colSpanTotal = 1 + 9 + (showOrdering ? 5 : 1) + 3;
 
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
@@ -527,7 +525,7 @@ export function Inventory() {
               {/* Row 1 — Group headers */}
               <tr className="bg-bg-page sticky top-0 z-20">
                 <th className="w-10" />
-                <th colSpan={7} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                <th colSpan={8} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
                   Stock
                 </th>
                 <th colSpan={showOrdering ? 5 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
@@ -539,14 +537,8 @@ export function Inventory() {
                     {showOrdering ? '\u25BE' : '\u25B8'} Ordering
                   </button>
                 </th>
-                <th colSpan={showPricing ? 4 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
-                  <button
-                    type="button"
-                    onClick={() => setShowPricing((v) => !v)}
-                    className="cursor-pointer hover:text-text-secondary transition-colors inline-flex items-center gap-1"
-                  >
-                    {showPricing ? '\u25BE' : '\u25B8'} Pricing
-                  </button>
+                <th colSpan={3} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                  Pricing
                 </th>
               </tr>
               {/* Row 2 — Column headers */}
@@ -568,6 +560,7 @@ export function Inventory() {
                 <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <SortHeader label="Reorder Qty" field="reorder_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Reorder</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Storage Area</th>
                 {showOrdering ? (
                   <>
                     <SortHeader label="Order Unit" field="order_unit" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
@@ -579,16 +572,9 @@ export function Inventory() {
                 ) : (
                   <th />
                 )}
-                {showPricing ? (
-                  <>
-                    <SortHeader label="Order Price" field="order_unit_price" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Inside Price</th>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Qty</th>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Cost</th>
-                  </>
-                ) : (
-                  <th />
-                )}
+                <SortHeader label="Unit Price" field="order_unit_price" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Case Price</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Value</th>
               </tr>
             </thead>
             <tbody>
@@ -630,10 +616,9 @@ export function Inventory() {
                     ? item.order_unit_price / item.qty_per_unit
                     : item.order_unit_price;
                 const insideUnitLabel = item.inner_unit ?? item.order_unit ?? item.unit;
-                const orderQty = Number(orderQtys[item.id] ?? '');
-                const totalCost =
-                  Number.isFinite(orderQty) && orderQty > 0 && insideUnitPrice != null
-                    ? insideUnitPrice * orderQty
+                const totalValue =
+                  insideUnitPrice != null && item.current_qty > 0
+                    ? insideUnitPrice * item.current_qty
                     : null;
 
                 return (
@@ -763,6 +748,23 @@ export function Inventory() {
                       />
                     </td>
 
+                    {/* Storage Area – inline select */}
+                    <td className="px-3 py-2">
+                      <select
+                        value={item.storage_area_id ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          updateItem.mutate({ id: item.id, data: { storage_area_id: val } });
+                        }}
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="">—</option>
+                        {(areas ?? []).map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </td>
+
                     {/* ORDERING columns */}
                     {showOrdering ? (
                       <>
@@ -859,52 +861,31 @@ export function Inventory() {
                       <td />
                     )}
 
-                    {/* PRICING columns */}
-                    {showPricing ? (
-                      <>
-                        {/* Order Unit Price – inline edit number */}
-                        <td className="px-3 py-2 text-right">
-                          <InlineEdit
-                            value={item.order_unit_price}
-                            field="order_unit_price"
-                            itemId={item.id}
-                            type="number"
-                          />
-                        </td>
+                    {/* PRICING columns – always visible */}
+                    {/* Unit Price – computed from order price / qty per unit */}
+                    <td className="px-3 py-2 text-right text-text-primary">
+                      <InlineInsidePrice
+                        orderUnitPrice={item.order_unit_price}
+                        qtyPerUnit={item.qty_per_unit}
+                        itemId={item.id}
+                        innerUnitLabel={insideUnitLabel}
+                      />
+                    </td>
 
-                        {/* Inside Unit Price – computed/editable */}
-                        <td className="px-3 py-2 text-right text-text-primary">
-                          <InlineInsidePrice
-                            orderUnitPrice={item.order_unit_price}
-                            qtyPerUnit={item.qty_per_unit}
-                            itemId={item.id}
-                            innerUnitLabel={insideUnitLabel}
-                          />
-                        </td>
+                    {/* Case Price – inline edit number */}
+                    <td className="px-3 py-2 text-right">
+                      <InlineEdit
+                        value={item.order_unit_price}
+                        field="order_unit_price"
+                        itemId={item.id}
+                        type="number"
+                      />
+                    </td>
 
-                        {/* Order Qty – transient for costing */}
-                        <td className="px-3 py-2 text-right">
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            value={orderQtys[item.id] ?? ''}
-                            onChange={(e) =>
-                              setOrderQtys((prev) => ({ ...prev, [item.id]: e.target.value }))
-                            }
-                            className="w-24 bg-white border border-border rounded-lg px-2 py-1 text-xs text-right text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
-                            placeholder="Qty"
-                          />
-                        </td>
-
-                        {/* Total Cost – computed */}
-                        <td className="px-3 py-2 text-right text-text-primary font-mono tabular-nums">
-                          {formatCurrency(totalCost)}
-                        </td>
-                      </>
-                    ) : (
-                      <td />
-                    )}
+                    {/* Total Value – current_qty × unit price */}
+                    <td className="px-3 py-2 text-right text-text-primary font-mono tabular-nums">
+                      {formatCurrency(totalValue)}
+                    </td>
                   </tr>
                   {expandedItems.has(item.id) && hasAreas && (
                     <tr className="bg-bg-area-row">

@@ -181,6 +181,9 @@ export function initializeDb(db: Database.Database): void {
   addColumnIfMissing('venue_id', 'INTEGER REFERENCES venues(id) ON DELETE SET NULL');
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_venue_id ON items(venue_id)');
 
+  addColumnIfMissing('storage_area_id', 'INTEGER REFERENCES storage_areas(id) ON DELETE SET NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id)');
+
   const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;
   const sessionColumnNames = sessionColumns.map((c) => c.name);
   if (!sessionColumnNames.includes('template_category')) {

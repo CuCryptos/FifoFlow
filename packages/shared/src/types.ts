@@ -23,6 +23,7 @@ export interface Item {
   reorder_qty: number | null;
   vendor_id: number | null;
   venue_id: number | null;
+  storage_area_id: number | null;
   created_at: string;
   updated_at: string;
 }

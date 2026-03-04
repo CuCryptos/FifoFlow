@@ -16,6 +16,7 @@ export const createItemSchema = z.object({
   reorder_qty: z.number().positive().nullable().optional(),
   vendor_id: z.number().int().positive().nullable().optional(),
   venue_id: z.number().int().positive().nullable().optional(),
+  storage_area_id: z.number().int().positive().nullable().optional(),
 });
 
 export const updateItemSchema = z.object({
@@ -33,6 +34,7 @@ export const updateItemSchema = z.object({
   reorder_qty: z.number().positive().nullable().optional(),
   vendor_id: z.number().int().positive().nullable().optional(),
   venue_id: z.number().int().positive().nullable().optional(),
+  storage_area_id: z.number().int().positive().nullable().optional(),
 });
 
 export const createTransactionSchema = z.object({
