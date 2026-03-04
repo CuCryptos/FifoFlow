@@ -37,6 +37,9 @@ COPY --from=builder /app/packages/shared/dist packages/shared/dist
 COPY --from=builder /app/packages/server/dist packages/server/dist
 COPY --from=builder /app/packages/client/dist packages/client/dist
 
+# Ensure SQLite data directory exists
+RUN mkdir -p packages/server/data
+
 ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001

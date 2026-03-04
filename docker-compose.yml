@@ -5,4 +5,9 @@ services:
       - "3001:3001"
     env_file:
       - .env
+    volumes:
+      - fifoflow-data:/app/packages/server/data
     restart: unless-stopped
+
+volumes:
+  fifoflow-data:
