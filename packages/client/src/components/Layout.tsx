@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
+  ShoppingCart,
   ClipboardCheck,
   Activity,
   PanelLeftClose,
@@ -14,6 +15,7 @@ import {
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/inventory', label: 'Inventory', icon: Package },
+  { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/counts', label: 'Counts', icon: ClipboardCheck },
   { to: '/activity', label: 'Activity', icon: Activity },
 ];
