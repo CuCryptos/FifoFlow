@@ -235,7 +235,7 @@ function ReorderBadge({
 /*  Sortable column helpers                                           */
 /* ------------------------------------------------------------------ */
 
-type SortField = 'name' | 'category' | 'current_qty' | 'unit' | 'reorder_level' | 'reorder_qty' | 'order_unit' | 'order_unit_price' | 'qty_per_unit';
+type SortField = 'name' | 'category' | 'current_qty' | 'unit' | 'reorder_level' | 'reorder_qty' | 'order_unit' | 'order_unit_price' | 'qty_per_unit' | 'storage_area_id';
 type SortDir = 'asc' | 'desc';
 
 function SortHeader({
@@ -362,11 +362,24 @@ export function Inventory() {
     }
     return true;
   });
+  const areaNameLookup = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const a of areas ?? []) m.set(a.id, a.name);
+    return m;
+  }, [areas]);
+
   const sortedItems = useMemo(() => {
     const arr = [...itemsToRender];
     arr.sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
+      let aVal: string | number | null | undefined;
+      let bVal: string | number | null | undefined;
+      if (sortField === 'storage_area_id') {
+        aVal = a.storage_area_id ? areaNameLookup.get(a.storage_area_id) ?? '' : '';
+        bVal = b.storage_area_id ? areaNameLookup.get(b.storage_area_id) ?? '' : '';
+      } else {
+        aVal = a[sortField];
+        bVal = b[sortField];
+      }
       if (aVal == null && bVal == null) return 0;
       if (aVal == null) return 1;
       if (bVal == null) return -1;
@@ -378,7 +391,7 @@ export function Inventory() {
       return sortDir === 'asc' ? diff : -diff;
     });
     return arr;
-  }, [itemsToRender, sortField, sortDir]);
+  }, [itemsToRender, sortField, sortDir, areaNameLookup]);
 
   const ITEMS_PER_PAGE = 50;
   const [currentPage, setCurrentPage] = useState(1);
@@ -567,7 +580,7 @@ export function Inventory() {
                 <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Vendor</th>
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Venue</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Storage Area</th>
+                <SortHeader label="Storage Area" field="storage_area_id" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Unit</th>
                 <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
