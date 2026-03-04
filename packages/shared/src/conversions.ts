@@ -4,12 +4,16 @@ import type { Unit } from './types.js';
 // Factor is relative to the group's base unit (first in the array).
 const UNIT_GROUPS: { units: Unit[]; factors: Record<string, number> }[] = [
   {
-    units: ['lb', 'oz'],
-    factors: { lb: 1, oz: 16 },
+    units: ['lb', 'oz', 'kg', 'g'],
+    factors: { lb: 1, oz: 16, kg: 0.453592, g: 453.592 },
   },
   {
-    units: ['gal', 'qt', 'fl oz', 'ml'],
-    factors: { gal: 1, qt: 4, 'fl oz': 128, ml: 3785.41 },
+    units: ['gal', 'qt', 'pint', 'cup', 'fl oz', 'tbsp', 'tsp', 'ml', 'L'],
+    factors: { gal: 1, qt: 4, pint: 8, cup: 16, 'fl oz': 128, tbsp: 256, tsp: 768, ml: 3785.41, L: 3.78541 },
+  },
+  {
+    units: ['dozen', 'each'],
+    factors: { dozen: 1, each: 12 },
   },
 ];
 
