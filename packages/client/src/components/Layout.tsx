@@ -11,7 +11,11 @@ import {
   PanelLeftOpen,
   Menu,
   X,
+  Settings,
 } from 'lucide-react';
+import { useVenueContext } from '../contexts/VenueContext';
+import { useVenues } from '../hooks/useVenues';
+import { ManageVenuesModal } from './ManageVenuesModal';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -25,6 +29,9 @@ const navItems = [
 export function Layout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { selectedVenueId, setSelectedVenueId } = useVenueContext();
+  const { data: venues } = useVenues();
+  const [manageVenuesOpen, setManageVenuesOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-bg-page">
@@ -42,6 +49,31 @@ export function Layout() {
             <span className="text-accent-indigo font-bold text-lg tracking-wider">FIFOFLOW</span>
           )}
         </div>
+
+        {/* Venue selector */}
+        {!sidebarCollapsed && (
+          <div className="px-4 mb-2">
+            <div className="flex items-center gap-1">
+              <select
+                value={selectedVenueId ?? ''}
+                onChange={(e) => setSelectedVenueId(e.target.value ? Number(e.target.value) : null)}
+                className="flex-1 bg-sidebar-active text-white text-xs rounded-lg px-2 py-1.5 border border-card-border appearance-none cursor-pointer"
+              >
+                <option value="">All Venues</option>
+                {(venues ?? []).map((v) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setManageVenuesOpen(true)}
+                className="text-text-muted hover:text-white p-1 transition-colors"
+                title="Manage Venues"
+              >
+                <Settings size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Nav section */}
         <nav className="mt-6 flex flex-col gap-1 px-2">
@@ -101,6 +133,29 @@ export function Layout() {
               <span className="text-accent-indigo font-bold text-lg tracking-wider">FIFOFLOW</span>
             </div>
 
+            {/* Venue selector */}
+            <div className="px-4 mb-2">
+              <div className="flex items-center gap-1">
+                <select
+                  value={selectedVenueId ?? ''}
+                  onChange={(e) => setSelectedVenueId(e.target.value ? Number(e.target.value) : null)}
+                  className="flex-1 bg-sidebar-active text-white text-xs rounded-lg px-2 py-1.5 border border-card-border appearance-none cursor-pointer"
+                >
+                  <option value="">All Venues</option>
+                  {(venues ?? []).map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setManageVenuesOpen(true)}
+                  className="text-text-muted hover:text-white p-1 transition-colors"
+                  title="Manage Venues"
+                >
+                  <Settings size={14} />
+                </button>
+              </div>
+            </div>
+
             {/* Nav section */}
             <nav className="mt-6 flex flex-col gap-1 px-2">
               {navItems.map(({ to, label, icon: Icon }) => (
@@ -146,6 +201,8 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {manageVenuesOpen && <ManageVenuesModal onClose={() => setManageVenuesOpen(false)} />}
     </div>
   );
 }
