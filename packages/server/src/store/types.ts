@@ -51,6 +51,7 @@ export interface InsertTransactionAndAdjustQtyInput {
   delta: number;
   fromAreaId?: number | null;
   toAreaId?: number | null;
+  estimatedCost?: number | null;
 }
 
 export interface SetItemCountWithAdjustmentInput {

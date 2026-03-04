@@ -178,8 +178,8 @@ export class SqliteInventoryStore implements InventoryStore {
     const execute = this.db.transaction(() => {
       // Insert transaction with area references
       const result = this.db.prepare(
-        'INSERT INTO transactions (item_id, type, quantity, reason, notes, from_area_id, to_area_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(input.itemId, input.type, input.quantity, input.reason, input.notes, input.fromAreaId ?? null, input.toAreaId ?? null);
+        'INSERT INTO transactions (item_id, type, quantity, reason, notes, from_area_id, to_area_id, estimated_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(input.itemId, input.type, input.quantity, input.reason, input.notes, input.fromAreaId ?? null, input.toAreaId ?? null, input.estimatedCost ?? null);
 
       if (!input.fromAreaId && !input.toAreaId) {
         // Legacy path — no area references, just update current_qty directly
@@ -522,19 +522,20 @@ export class SqliteInventoryStore implements InventoryStore {
       "SELECT COUNT(*) as count FROM transactions WHERE date(created_at) = date('now')"
     ).get() as { count: number };
 
-    const inventoryValue = this.db.prepare(
-      "SELECT COALESCE(SUM(t.estimated_cost), 0) as value FROM transactions t WHERE t.type = 'in' AND t.estimated_cost IS NOT NULL"
-    ).get() as { value: number };
-    const usedValue = this.db.prepare(
-      "SELECT COALESCE(SUM(t.estimated_cost), 0) as value FROM transactions t WHERE t.type = 'out' AND t.estimated_cost IS NOT NULL"
-    ).get() as { value: number };
+    const inventoryValue = this.db.prepare(`
+      SELECT COALESCE(SUM(
+        current_qty * order_unit_price / COALESCE(qty_per_unit, 1)
+      ), 0) as value
+      FROM items
+      WHERE order_unit_price IS NOT NULL AND current_qty > 0
+    `).get() as { value: number };
 
     return {
       total_items: totalItems.count,
       low_stock_count: lowStock.count,
       out_of_stock_count: outOfStock.count,
       today_transaction_count: todayTx.count,
-      total_inventory_value: Math.round((inventoryValue.value - usedValue.value) * 100) / 100,
+      total_inventory_value: Math.round(inventoryValue.value * 100) / 100,
     };
   }
 
