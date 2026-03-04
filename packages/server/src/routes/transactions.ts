@@ -60,6 +60,13 @@ export function createTransactionHandler(store: InventoryStore) {
       return;
     }
 
+    // Calculate estimated cost from item's unit price
+    let estimatedCost: number | null = null;
+    if (item.order_unit_price != null) {
+      const perBaseUnitCost = item.order_unit_price / ((item.qty_per_unit != null && item.qty_per_unit > 0) ? item.qty_per_unit : 1);
+      estimatedCost = Math.round(normalizedQty * perBaseUnitCost * 100) / 100;
+    }
+
     const delta = type === 'in' ? normalizedQty : -normalizedQty;
 
     if (item.current_qty + delta < 0) {
@@ -111,6 +118,7 @@ export function createTransactionHandler(store: InventoryStore) {
       delta,
       fromAreaId: from_area_id ?? null,
       toAreaId: to_area_id ?? null,
+      estimatedCost,
     });
     res.status(201).json(result);
   };
