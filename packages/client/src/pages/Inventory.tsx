@@ -4,6 +4,7 @@ import { useItems, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, use
 import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
+import { exportToExcel, exportToPdf } from '../utils/exportInventory';
 import type { Unit, ItemStorage } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
@@ -433,6 +434,24 @@ export function Inventory() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">Inventory</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const areaLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
+              exportToPdf({ items: sortedItems, areas: areas ?? [], areaLookup, format: 'pdf' });
+            }}
+            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+          >
+            Export PDF
+          </button>
+          <button
+            onClick={() => {
+              const areaLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
+              exportToExcel({ items: sortedItems, areas: areas ?? [], areaLookup, format: 'xlsx' });
+            }}
+            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+          >
+            Export Excel
+          </button>
           <button
             onClick={() => setShowVendorsModal(true)}
             className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
