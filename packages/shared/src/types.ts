@@ -22,6 +22,7 @@ export interface Item {
   reorder_level: number | null;
   reorder_qty: number | null;
   vendor_id: number | null;
+  venue_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -136,6 +137,13 @@ export interface ItemStorage {
   area_id: number;
   area_name: string;
   quantity: number;
+}
+
+export interface Venue {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Vendor {

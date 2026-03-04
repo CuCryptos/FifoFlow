@@ -15,6 +15,7 @@ export const createItemSchema = z.object({
   reorder_level: z.number().min(0).nullable().optional(),
   reorder_qty: z.number().positive().nullable().optional(),
   vendor_id: z.number().int().positive().nullable().optional(),
+  venue_id: z.number().int().positive().nullable().optional(),
 });
 
 export const updateItemSchema = z.object({
@@ -31,6 +32,7 @@ export const updateItemSchema = z.object({
   reorder_level: z.number().min(0).nullable().optional(),
   reorder_qty: z.number().positive().nullable().optional(),
   vendor_id: z.number().int().positive().nullable().optional(),
+  venue_id: z.number().int().positive().nullable().optional(),
 });
 
 export const createTransactionSchema = z.object({
@@ -102,6 +104,17 @@ export const bulkUpdateItemsSchema = z.object({
 export const bulkDeleteItemsSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1),
 });
+
+export const createVenueSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+});
+
+export const updateVenueSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+});
+
+export type CreateVenueInput = z.infer<typeof createVenueSchema>;
+export type UpdateVenueInput = z.infer<typeof updateVenueSchema>;
 
 export type CreateStorageAreaInput = z.infer<typeof createStorageAreaSchema>;
 export type UpdateStorageAreaInput = z.infer<typeof updateStorageAreaSchema>;

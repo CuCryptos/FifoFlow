@@ -76,6 +76,13 @@ export function initializeDb(db: Database.Database): void {
       UNIQUE(item_id, area_id)
     );
 
+    CREATE TABLE IF NOT EXISTS venues (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS vendors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
@@ -122,6 +129,12 @@ export function initializeDb(db: Database.Database): void {
       UPDATE vendors SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
+    CREATE TRIGGER IF NOT EXISTS update_venue_timestamp
+    AFTER UPDATE ON venues
+    BEGIN
+      UPDATE venues SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
     CREATE TRIGGER IF NOT EXISTS update_order_timestamp
     AFTER UPDATE ON orders
     BEGIN
@@ -164,6 +177,9 @@ export function initializeDb(db: Database.Database): void {
   addColumnIfMissing('vendor_id', 'INTEGER REFERENCES vendors(id) ON DELETE SET NULL');
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_vendor_id ON items(vendor_id)');
+
+  addColumnIfMissing('venue_id', 'INTEGER REFERENCES venues(id) ON DELETE SET NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_venue_id ON items(venue_id)');
 
   const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;
   const sessionColumnNames = sessionColumns.map((c) => c.name);
