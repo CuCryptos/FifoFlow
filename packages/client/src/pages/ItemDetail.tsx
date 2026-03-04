@@ -44,10 +44,19 @@ export function ItemDetail() {
   const [countedQty, setCountedQty] = useState('');
   const [countNotes, setCountNotes] = useState('');
 
-  if (isLoading) return <div className="text-text-secondary">Loading...</div>;
-  if (!data) return <div className="text-accent-red">Item not found.</div>;
+  const item = data?.item;
+  const transactions = data?.transactions ?? [];
 
-  const { item, transactions } = data;
+  useEffect(() => {
+    if (item) {
+      setCountedQty(String(item.current_qty));
+      setCountNotes('');
+    }
+  }, [item?.id, item?.current_qty]);
+
+  if (isLoading) return <div className="text-text-secondary">Loading...</div>;
+  if (!item) return <div className="text-accent-red">Item not found.</div>;
+
   const activeDisplayUnit = displayUnit ?? item.unit;
   const displayQty = convertQuantity(item.current_qty, item.unit, activeDisplayUnit, {
     baseUnit: item.unit,
@@ -87,11 +96,6 @@ export function ItemDetail() {
       ? item.order_unit_price / item.qty_per_unit
       : null;
   const insideUnitLabel = item.inner_unit ?? item.order_unit ?? item.unit;
-
-  useEffect(() => {
-    setCountedQty(String(item.current_qty));
-    setCountNotes('');
-  }, [item.id, item.current_qty]);
 
   const startEdit = () => {
     setEditName(item.name);
