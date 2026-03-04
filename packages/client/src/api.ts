@@ -15,6 +15,9 @@ import type {
   Order,
   OrderWithVendor,
   OrderDetail,
+  UsageReport,
+  WasteReport,
+  CostReport,
   CloseCountSessionInput,
   CreateItemInput,
   CreateCountSessionInput,
@@ -138,6 +141,22 @@ export const api = {
   },
   dashboard: {
     stats: () => fetchJson<DashboardStats>('/dashboard/stats'),
+  },
+  reports: {
+    usage: (params: { start: string; end: string; group_by?: string }) => {
+      const qs = new URLSearchParams({ start: params.start, end: params.end });
+      if (params.group_by) qs.set('group_by', params.group_by);
+      return fetchJson<UsageReport>(`/reports/usage?${qs}`);
+    },
+    waste: (params: { start: string; end: string }) => {
+      const qs = new URLSearchParams({ start: params.start, end: params.end });
+      return fetchJson<WasteReport>(`/reports/waste?${qs}`);
+    },
+    cost: (params: { start: string; end: string; group_by?: string }) => {
+      const qs = new URLSearchParams({ start: params.start, end: params.end });
+      if (params.group_by) qs.set('group_by', params.group_by);
+      return fetchJson<CostReport>(`/reports/cost?${qs}`);
+    },
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
 };
