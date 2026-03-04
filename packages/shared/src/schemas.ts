@@ -14,6 +14,7 @@ export const createItemSchema = z.object({
   item_size: z.string().max(100).nullable().optional(), // legacy field
   reorder_level: z.number().min(0).nullable().optional(),
   reorder_qty: z.number().positive().nullable().optional(),
+  vendor_id: z.number().int().positive().nullable().optional(),
 });
 
 export const updateItemSchema = z.object({
@@ -29,6 +30,7 @@ export const updateItemSchema = z.object({
   item_size: z.string().max(100).nullable().optional(), // legacy field
   reorder_level: z.number().min(0).nullable().optional(),
   reorder_qty: z.number().positive().nullable().optional(),
+  vendor_id: z.number().int().positive().nullable().optional(),
 });
 
 export const createTransactionSchema = z.object({
