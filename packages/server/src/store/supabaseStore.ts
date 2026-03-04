@@ -302,6 +302,7 @@ export class SupabaseInventoryStore implements InventoryStore {
       created_at: row.created_at,
       from_area_id: null,
       to_area_id: null,
+      estimated_cost: null,
       item_name: row.items?.name ?? '',
       item_unit: row.items?.unit ?? '',
     }));
@@ -416,6 +417,7 @@ export class SupabaseInventoryStore implements InventoryStore {
       low_stock_count: lowStock,
       out_of_stock_count: outOfStock,
       today_transaction_count: todayTx,
+      total_inventory_value: 0,
     };
   }
 

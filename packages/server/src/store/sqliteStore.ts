@@ -522,11 +522,19 @@ export class SqliteInventoryStore implements InventoryStore {
       "SELECT COUNT(*) as count FROM transactions WHERE date(created_at) = date('now')"
     ).get() as { count: number };
 
+    const inventoryValue = this.db.prepare(
+      "SELECT COALESCE(SUM(t.estimated_cost), 0) as value FROM transactions t WHERE t.type = 'in' AND t.estimated_cost IS NOT NULL"
+    ).get() as { value: number };
+    const usedValue = this.db.prepare(
+      "SELECT COALESCE(SUM(t.estimated_cost), 0) as value FROM transactions t WHERE t.type = 'out' AND t.estimated_cost IS NOT NULL"
+    ).get() as { value: number };
+
     return {
       total_items: totalItems.count,
       low_stock_count: lowStock.count,
       out_of_stock_count: outOfStock.count,
       today_transaction_count: todayTx.count,
+      total_inventory_value: Math.round((inventoryValue.value - usedValue.value) * 100) / 100,
     };
   }
 

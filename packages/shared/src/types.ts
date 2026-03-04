@@ -35,6 +35,7 @@ export interface Transaction {
   notes: string | null;
   from_area_id: number | null;
   to_area_id: number | null;
+  estimated_cost: number | null;
   created_at: string;
 }
 
@@ -48,6 +49,7 @@ export interface DashboardStats {
   low_stock_count: number;
   out_of_stock_count: number;
   today_transaction_count: number;
+  total_inventory_value: number;
 }
 
 export interface ReorderSuggestion {

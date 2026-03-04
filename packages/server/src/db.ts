@@ -205,6 +205,9 @@ export function initializeDb(db: Database.Database): void {
       ALTER TABLE transactions ADD COLUMN to_area_id INTEGER REFERENCES storage_areas(id);
     `);
   }
+  if (!txColumnNames.includes('estimated_cost')) {
+    db.exec('ALTER TABLE transactions ADD COLUMN estimated_cost REAL;');
+  }
 
   // Seed default "General" storage area and populate item_storage
   const generalArea = db.prepare(
