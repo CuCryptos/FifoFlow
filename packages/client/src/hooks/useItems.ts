@@ -58,3 +58,22 @@ export function useSetItemCount() {
     },
   });
 }
+
+export function useBulkUpdateItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: number[]; updates: { category: string } }) => api.items.bulkUpdate(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
+  });
+}
+
+export function useBulkDeleteItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { ids: number[] }) => api.items.bulkDelete(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['items'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}

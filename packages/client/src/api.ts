@@ -60,6 +60,10 @@ export const api = {
       fetchJson<ItemStorage[]>(`/items/${itemId}/storage`),
     listAllStorage: () =>
       fetchJson<ItemStorage[]>(`/items/storage`),
+    bulkUpdate: (data: { ids: number[]; updates: { category: string } }) =>
+      fetchJson<{ updated: number }>('/items/bulk', { method: 'PATCH', body: JSON.stringify(data) }),
+    bulkDelete: (data: { ids: number[] }) =>
+      fetchJson<{ deleted: number; skipped: number; skippedIds: number[] }>('/items/bulk', { method: 'DELETE', body: JSON.stringify(data) }),
   },
   storageAreas: {
     list: () => fetchJson<StorageArea[]>('/storage-areas'),
