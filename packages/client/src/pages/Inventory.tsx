@@ -4,7 +4,6 @@ import { useItems, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, use
 import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
-import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
 import type { Unit, ItemStorage } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
@@ -295,7 +294,6 @@ export function Inventory() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAreasModal, setShowAreasModal] = useState(false);
   const [showVendorsModal, setShowVendorsModal] = useState(false);
-  const [displayUnits, setDisplayUnits] = useState<Record<number, Unit>>({});
   const [areaFilter, setAreaFilter] = useState('');
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [showOrdering, setShowOrdering] = useState(false);
@@ -428,11 +426,6 @@ export function Inventory() {
     0,
   );
 
-  const getDisplayUnit = (itemId: number, storedUnit: Unit): Unit =>
-    displayUnits[itemId] ?? storedUnit;
-
-  const setDisplayUnit = (itemId: number, unit: Unit) =>
-    setDisplayUnits((prev) => ({ ...prev, [itemId]: unit }));
 
   return (
     <div className="space-y-4">
@@ -579,36 +572,14 @@ export function Inventory() {
             </thead>
             <tbody>
               {paginatedItems.map((item) => {
-                const displayUnit = getDisplayUnit(item.id, item.unit);
                 // When area filter is active, show area-specific qty; otherwise total
-                const baseQty = areaFilter
+                const displayQty = areaFilter
                   ? (storageByItem.get(item.id)?.find(
                       (s) => s.area_id === Number(areaFilter),
                     )?.quantity ?? 0)
                   : item.current_qty;
-                const displayQty = convertQuantity(
-                  baseQty,
-                  item.unit,
-                  displayUnit,
-                  {
-                    baseUnit: item.unit,
-                    orderUnit: item.order_unit,
-                    innerUnit: item.inner_unit,
-                    qtyPerUnit: item.qty_per_unit,
-                    itemSizeValue: item.item_size_value,
-                    itemSizeUnit: item.item_size_unit,
-                  },
-                );
                 const itemAreas = storageByItem.get(item.id) ?? [];
                 const hasAreas = itemAreas.length > 0;
-                const compatible = getCompatibleUnits(item.unit, {
-                  baseUnit: item.unit,
-                  orderUnit: item.order_unit,
-                  innerUnit: item.inner_unit,
-                  qtyPerUnit: item.qty_per_unit,
-                  itemSizeValue: item.item_size_value,
-                  itemSizeUnit: item.item_size_unit,
-                });
                 const insideUnitPrice =
                   item.order_unit_price != null &&
                   item.qty_per_unit != null &&
