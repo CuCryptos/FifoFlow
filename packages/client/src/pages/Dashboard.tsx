@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { useDashboardStats } from '../hooks/useDashboard';
 import { useTransactions } from '../hooks/useTransactions';
 import { useReorderSuggestions } from '../hooks/useItems';
-import { LOW_STOCK_THRESHOLD } from '@fifoflow/shared';
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -38,7 +37,7 @@ export function Dashboard() {
           label="Low Stock"
           value={stats?.low_stock_count ?? 0}
           color="amber"
-          subtitle={`\u2264 ${LOW_STOCK_THRESHOLD} units`}
+          subtitle="below par"
         />
         <StatCard label="Out of Stock" value={stats?.out_of_stock_count ?? 0} color="red" />
         <StatCard
