@@ -32,7 +32,7 @@ export function Dashboard() {
       <h1 className="text-2xl font-semibold text-text-primary">Dashboard</h1>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard label="Total Items" value={stats?.total_items ?? 0} />
         <StatCard
           label="Low Stock"
@@ -50,6 +50,12 @@ export function Dashboard() {
           label="Est. Reorder Spend"
           value={reorderSpend}
           color="amber"
+          format="currency"
+        />
+        <StatCard
+          label="Inventory Value"
+          value={stats?.total_inventory_value ?? 0}
+          color="green"
           format="currency"
         />
       </div>
@@ -75,6 +81,11 @@ export function Dashboard() {
                   <span className="font-mono font-medium">
                     {tx.type === 'in' ? '+' : '-'}{tx.quantity}
                   </span>
+                  {tx.estimated_cost != null && (
+                    <span className="text-text-muted text-xs font-mono">
+                      ${tx.estimated_cost.toFixed(2)}
+                    </span>
+                  )}
                   <span className="text-text-primary">{tx.item_name}</span>
                   <span className="text-text-secondary">{tx.reason}</span>
                 </div>
