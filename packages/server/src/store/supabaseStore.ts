@@ -354,11 +354,11 @@ export class SupabaseInventoryStore implements InventoryStore {
   }
 
   async listCountSessions(): Promise<CountSessionSummary[]> {
-    return this.notImplemented('listCountSessions');
+    return [];
   }
 
   async getOpenCountSession(): Promise<CountSession | undefined> {
-    return this.notImplemented('getOpenCountSession');
+    return undefined;
   }
 
   async createCountSession(_input: CreateCountSessionInput): Promise<CountSession> {
@@ -370,11 +370,11 @@ export class SupabaseInventoryStore implements InventoryStore {
   }
 
   async listCountEntries(_sessionId: number): Promise<CountSessionEntry[]> {
-    return this.notImplemented('listCountEntries');
+    return [];
   }
 
   async listCountChecklist(_sessionId: number): Promise<CountSessionChecklistItem[]> {
-    return this.notImplemented('listCountChecklist');
+    return [];
   }
 
   async recordCountEntry(
@@ -429,14 +429,14 @@ export class SupabaseInventoryStore implements InventoryStore {
     return row;
   }
 
-  // Storage Areas — not yet implemented for Supabase
+  // Storage Areas — return empty results for now (not yet implemented for Supabase)
 
   async listStorageAreas(): Promise<StorageArea[]> {
-    return this.notImplemented('listStorageAreas');
+    return [];
   }
 
   async getStorageAreaById(_id: number): Promise<StorageArea | undefined> {
-    return this.notImplemented('getStorageAreaById');
+    return undefined;
   }
 
   async createStorageArea(_input: CreateStorageAreaInput): Promise<StorageArea> {
@@ -452,19 +452,19 @@ export class SupabaseInventoryStore implements InventoryStore {
   }
 
   async countItemsInArea(_areaId: number): Promise<number> {
-    return this.notImplemented('countItemsInArea');
+    return 0;
   }
 
   async listItemStorage(_itemId: number): Promise<ItemStorage[]> {
-    return this.notImplemented('listItemStorage');
+    return [];
   }
 
   async listAllItemStorage(): Promise<ItemStorage[]> {
-    return this.notImplemented('listAllItemStorage');
+    return [];
   }
 
   async getItemStorageByArea(_itemId: number, _areaId: number): Promise<ItemStorage | undefined> {
-    return this.notImplemented('getItemStorageByArea');
+    return undefined;
   }
 }
 
