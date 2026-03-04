@@ -559,6 +559,41 @@ export class SqliteInventoryStore implements InventoryStore {
       fixed: mismatches.length > 0,
     };
   }
+  // ── Bulk Operations ──────────────────────────────────────────────────
+
+  async bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }> {
+    const placeholders = ids.map(() => '?').join(',');
+    const result = this.db.prepare(
+      `UPDATE items SET category = ? WHERE id IN (${placeholders})`
+    ).run(updates.category, ...ids);
+    return { updated: result.changes };
+  }
+
+  async bulkDeleteItems(ids: number[]): Promise<{ deleted: number; skipped: number; skippedIds: number[] }> {
+    const skippedIds: number[] = [];
+    const deletableIds: number[] = [];
+
+    for (const id of ids) {
+      const txCount = await this.countTransactionsForItem(id);
+      if (txCount > 0) {
+        skippedIds.push(id);
+      } else {
+        deletableIds.push(id);
+      }
+    }
+
+    if (deletableIds.length > 0) {
+      const placeholders = deletableIds.map(() => '?').join(',');
+      this.db.prepare(`DELETE FROM items WHERE id IN (${placeholders})`).run(...deletableIds);
+    }
+
+    return {
+      deleted: deletableIds.length,
+      skipped: skippedIds.length,
+      skippedIds,
+    };
+  }
+
   // ── Storage Areas ──────────────────────────────────────────────────
 
   async listStorageAreas(): Promise<StorageArea[]> {

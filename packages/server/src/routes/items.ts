@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createItemSchema, setItemCountSchema, updateItemSchema, tryConvertQuantity } from '@fifoflow/shared';
+import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, tryConvertQuantity } from '@fifoflow/shared';
 import type { Item, ItemCountAdjustmentResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
 import { createTransactionHandler } from './transactions.js';
 import type { InventoryStore } from '../store/types.js';
@@ -71,6 +71,28 @@ export function createItemRoutes(store: InventoryStore): Router {
   router.get('/storage', async (_req, res) => {
     const rows = await store.listAllItemStorage();
     res.json(rows);
+  });
+
+  // PATCH /api/items/bulk — bulk category reassign
+  router.patch('/bulk', async (req, res) => {
+    const parsed = bulkUpdateItemsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const result = await store.bulkUpdateItems(parsed.data.ids, parsed.data.updates);
+    res.json(result);
+  });
+
+  // DELETE /api/items/bulk — bulk delete with protection
+  router.delete('/bulk', async (req, res) => {
+    const parsed = bulkDeleteItemsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const result = await store.bulkDeleteItems(parsed.data.ids);
+    res.json(result);
   });
 
   // GET /api/items

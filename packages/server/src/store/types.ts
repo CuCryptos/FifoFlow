@@ -99,6 +99,10 @@ export interface InventoryStore {
   deleteStorageArea(id: number): Promise<void>;
   countItemsInArea(areaId: number): Promise<number>;
 
+  // Bulk operations
+  bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }>;
+  bulkDeleteItems(ids: number[]): Promise<{ deleted: number; skipped: number; skippedIds: number[] }>;
+
   // Item Storage
   listItemStorage(itemId: number): Promise<ItemStorage[]>;
   listAllItemStorage(): Promise<ItemStorage[]>;

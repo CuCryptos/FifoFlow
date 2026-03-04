@@ -429,6 +429,54 @@ export class SupabaseInventoryStore implements InventoryStore {
     return row;
   }
 
+  // ── Bulk Operations ──────────────────────────────────────────────────
+
+  async bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }> {
+    const params = new URLSearchParams();
+    params.set('id', `in.(${ids.join(',')})`);
+    params.set('select', 'id');
+
+    const rows = await this.request<{ id: number }[]>({
+      method: 'PATCH',
+      path: 'items',
+      params,
+      body: { category: updates.category },
+      prefer: 'return=representation',
+    });
+    return { updated: rows.length };
+  }
+
+  async bulkDeleteItems(ids: number[]): Promise<{ deleted: number; skipped: number; skippedIds: number[] }> {
+    const skippedIds: number[] = [];
+    const deletableIds: number[] = [];
+
+    for (const id of ids) {
+      const txCount = await this.countTransactionsForItem(id);
+      if (txCount > 0) {
+        skippedIds.push(id);
+      } else {
+        deletableIds.push(id);
+      }
+    }
+
+    if (deletableIds.length > 0) {
+      const params = new URLSearchParams();
+      params.set('id', `in.(${deletableIds.join(',')})`);
+      await this.request<void>({
+        method: 'DELETE',
+        path: 'items',
+        params,
+        prefer: 'return=minimal',
+      });
+    }
+
+    return {
+      deleted: deletableIds.length,
+      skipped: skippedIds.length,
+      skippedIds,
+    };
+  }
+
   // Storage Areas — return empty results for now (not yet implemented for Supabase)
 
   async listStorageAreas(): Promise<StorageArea[]> {

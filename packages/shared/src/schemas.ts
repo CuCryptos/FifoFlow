@@ -90,5 +90,18 @@ export type SetItemCountInput = z.infer<typeof setItemCountSchema>;
 export type CreateCountSessionInput = z.infer<typeof createCountSessionSchema>;
 export type CloseCountSessionInput = z.infer<typeof closeCountSessionSchema>;
 export type RecordCountEntryInput = z.infer<typeof recordCountEntrySchema>;
+export const bulkUpdateItemsSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1),
+  updates: z.object({
+    category: z.enum(CATEGORIES),
+  }),
+});
+
+export const bulkDeleteItemsSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1),
+});
+
 export type CreateStorageAreaInput = z.infer<typeof createStorageAreaSchema>;
 export type UpdateStorageAreaInput = z.infer<typeof updateStorageAreaSchema>;
+export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
+export type BulkDeleteItemsInput = z.infer<typeof bulkDeleteItemsSchema>;
