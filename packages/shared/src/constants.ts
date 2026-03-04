@@ -47,5 +47,3 @@ export const TRANSACTION_REASONS = [
   'Returned',
   'Adjustment',
 ] as const;
-
-export const LOW_STOCK_THRESHOLD = 5;

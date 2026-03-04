@@ -510,11 +510,11 @@ export class SqliteInventoryStore implements InventoryStore {
     return execute();
   }
 
-  async getDashboardStats(lowStockThreshold: number): Promise<DashboardStats> {
+  async getDashboardStats(): Promise<DashboardStats> {
     const totalItems = this.db.prepare('SELECT COUNT(*) as count FROM items').get() as { count: number };
     const lowStock = this.db.prepare(
-      'SELECT COUNT(*) as count FROM items WHERE current_qty > 0 AND current_qty <= ?'
-    ).get(lowStockThreshold) as { count: number };
+      'SELECT COUNT(*) as count FROM items WHERE reorder_level IS NOT NULL AND current_qty > 0 AND current_qty <= reorder_level'
+    ).get() as { count: number };
     const outOfStock = this.db.prepare(
       'SELECT COUNT(*) as count FROM items WHERE current_qty = 0'
     ).get() as { count: number };

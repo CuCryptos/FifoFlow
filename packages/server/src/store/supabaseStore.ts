@@ -393,18 +393,21 @@ export class SupabaseInventoryStore implements InventoryStore {
     return this.notImplemented('recordCountEntry');
   }
 
-  async getDashboardStats(lowStockThreshold: number): Promise<DashboardStats> {
+  async getDashboardStats(): Promise<DashboardStats> {
     const now = new Date();
     const startUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const endUtc = new Date(startUtc);
     endUtc.setUTCDate(endUtc.getUTCDate() + 1);
 
-    const [totalItems, lowStock, outOfStock, todayTx] = await Promise.all([
+    // PostgREST cannot do column-to-column comparisons (current_qty <= reorder_level),
+    // so we fetch items with a reorder_level and count in JS.
+    const itemsWithReorder = await this.listItemsWithReorderLevel();
+    const lowStock = itemsWithReorder.filter(
+      (i) => i.current_qty > 0 && i.current_qty <= (i.reorder_level ?? 0)
+    ).length;
+
+    const [totalItems, outOfStock, todayTx] = await Promise.all([
       this.count('items', []),
-      this.count('items', [
-        { column: 'current_qty', operator: 'gt', value: 0 },
-        { column: 'current_qty', operator: 'lte', value: lowStockThreshold },
-      ]),
       this.count('items', [{ column: 'current_qty', operator: 'eq', value: 0 }]),
       this.count('transactions', [
         { column: 'created_at', operator: 'gte', value: startUtc.toISOString() },

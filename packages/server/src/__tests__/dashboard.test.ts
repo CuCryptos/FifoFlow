@@ -23,7 +23,7 @@ describe('Dashboard API', () => {
   beforeEach(() => {
     ({ app, db } = createTestApp());
     db.prepare("INSERT INTO items (name, category, unit, current_qty) VALUES (?, ?, ?, ?)").run('Ahi Tuna', 'Seafood', 'lb', 20);
-    db.prepare("INSERT INTO items (name, category, unit, current_qty) VALUES (?, ?, ?, ?)").run('Rice', 'Dry Goods', 'bag', 3);
+    db.prepare("INSERT INTO items (name, category, unit, current_qty, reorder_level) VALUES (?, ?, ?, ?, ?)").run('Rice', 'Dry Goods', 'bag', 3, 5);
     db.prepare("INSERT INTO items (name, category, unit, current_qty) VALUES (?, ?, ?, ?)").run('Gloves', 'Supplies', 'box', 0);
   });
 

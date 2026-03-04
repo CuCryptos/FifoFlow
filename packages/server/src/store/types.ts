@@ -98,7 +98,7 @@ export interface InventoryStore {
   listCountEntries(sessionId: number): Promise<CountSessionEntry[]>;
   listCountChecklist(sessionId: number): Promise<CountSessionChecklistItem[]>;
   recordCountEntry(sessionId: number, input: { itemId: number; countedQty: number; notes: string | null }): Promise<CountSessionEntry>;
-  getDashboardStats(lowStockThreshold: number): Promise<DashboardStats>;
+  getDashboardStats(): Promise<DashboardStats>;
   reconcile(): Promise<ReconcileOutcome>;
 
   // Storage Areas
