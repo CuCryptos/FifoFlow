@@ -297,6 +297,12 @@ export function Inventory() {
   const [showPricing, setShowPricing] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Clear selection when page, filters, or sort changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [currentPage, search, category, areaFilter, showReorderOnly, sortField, sortDir]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -383,7 +389,26 @@ export function Inventory() {
   const showingStart = sortedItems.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const showingEnd = Math.min(currentPage * ITEMS_PER_PAGE, sortedItems.length);
 
-  const colSpanTotal = 7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1);
+  const allOnPageSelected = paginatedItems.length > 0 && paginatedItems.every((item) => selectedIds.has(item.id));
+
+  const toggleSelectAll = () => {
+    if (allOnPageSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginatedItems.map((item) => item.id)));
+    }
+  };
+
+  const toggleSelectOne = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const colSpanTotal = 1 + 7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1);
 
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
@@ -480,7 +505,8 @@ export function Inventory() {
             <thead>
               {/* Row 1 — Group headers */}
               <tr className="bg-bg-page sticky top-0 z-20">
-                <th colSpan={7} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                <th className="w-10" />
+                <th colSpan={6} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
                   Stock
                 </th>
                 <th colSpan={showOrdering ? 5 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
@@ -504,6 +530,14 @@ export function Inventory() {
               </tr>
               {/* Row 2 — Column headers */}
               <tr className="bg-bg-table-header text-text-secondary text-left sticky top-[29px] z-20 shadow-[0_1px_0_0_var(--color-border)]">
+                <th className="px-3 py-2.5 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAll}
+                    className="rounded border-border text-accent-indigo focus:ring-accent-indigo/20 cursor-pointer"
+                  />
+                </th>
                 <SortHeader label="Name" field="name" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
@@ -584,6 +618,14 @@ export function Inventory() {
                   <tr
                     className="border-b border-border hover:bg-bg-hover transition-colors"
                   >
+                    <td className="px-3 py-2 w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelectOne(item.id)}
+                        className="rounded border-border text-accent-indigo focus:ring-accent-indigo/20 cursor-pointer"
+                      />
+                    </td>
                     {/* Name – link to detail with expand toggle */}
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
