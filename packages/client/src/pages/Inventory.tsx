@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useItems, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems } from '../hooks/useItems';
+import { useItems, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
 import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
@@ -11,6 +11,7 @@ import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
 import { ManageVendorsModal } from '../components/ManageVendorsModal';
 import { ManageVenuesModal } from '../components/ManageVenuesModal';
+import { InvoiceUpload } from '../components/InvoiceUpload';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
@@ -307,9 +308,13 @@ export function Inventory() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const bulkUpdate = useBulkUpdateItems();
   const bulkDelete = useBulkDeleteItems();
+  const mergeItems = useMergeItems();
   const { toast } = useToast();
   const [bulkCategory, setBulkCategory] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
+  const [showInvoiceUpload, setShowInvoiceUpload] = useState(false);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -497,6 +502,12 @@ export function Inventory() {
             className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
           >
             Manage Areas
+          </button>
+          <button
+            onClick={() => setShowInvoiceUpload(true)}
+            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+          >
+            Upload Invoice
           </button>
           <button
             onClick={() => setShowAddModal(true)}
@@ -1016,13 +1027,26 @@ export function Inventory() {
                 </button>
               </div>
 
-              {/* Bulk delete */}
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="ml-auto bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-red/20 transition-colors"
-              >
-                Delete Selected
-              </button>
+              {/* Merge + Bulk delete */}
+              <div className="ml-auto flex gap-2">
+                {selectedIds.size >= 2 && (
+                  <button
+                    onClick={() => {
+                      setMergeTargetId(null);
+                      setShowMergeModal(true);
+                    }}
+                    className="bg-accent-indigo/10 text-accent-indigo border border-accent-indigo/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo/20 transition-colors"
+                  >
+                    Merge Selected
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-red/20 transition-colors"
+                >
+                  Delete Selected
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1087,6 +1111,87 @@ export function Inventory() {
       {showVenuesModal && (
         <ManageVenuesModal onClose={() => setShowVenuesModal(false)} />
       )}
+      {showInvoiceUpload && (
+        <InvoiceUpload onClose={() => setShowInvoiceUpload(false)} />
+      )}
+
+      {/* Merge Modal */}
+      {showMergeModal && (() => {
+        const selectedItems = (items ?? []).filter((item) => selectedIds.has(item.id));
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+            <div className="bg-bg-card rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-text-primary mb-2">Merge Items</h3>
+              <p className="text-sm text-text-secondary mb-4">
+                Select the target (canonical) item. All other items will be merged into it.
+              </p>
+              <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
+                {selectedItems.map((item) => (
+                  <label
+                    key={item.id}
+                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                      mergeTargetId === item.id ? 'bg-accent-indigo/10 border border-accent-indigo/30' : 'hover:bg-bg-hover border border-transparent'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="merge-target"
+                      checked={mergeTargetId === item.id}
+                      onChange={() => setMergeTargetId(item.id)}
+                      className="text-accent-indigo focus:ring-accent-indigo/20"
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">{item.name}</div>
+                      <div className="text-xs text-text-muted">{item.category} · {item.current_qty} {item.unit}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {mergeTargetId && (
+                <p className="text-xs text-text-muted mb-4 bg-bg-page p-2 rounded">
+                  Merge {selectedItems.length - 1} item{selectedItems.length - 1 !== 1 ? 's' : ''} into{' '}
+                  <strong>{selectedItems.find((i) => i.id === mergeTargetId)?.name}</strong>.
+                  Transaction history, vendor prices, and storage quantities will be consolidated.
+                </p>
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowMergeModal(false)}
+                  className="px-4 py-2 rounded-lg text-sm border border-border text-text-secondary hover:bg-bg-hover transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (!mergeTargetId) return;
+                    const sourceIds = Array.from(selectedIds).filter((id) => id !== mergeTargetId);
+                    mergeItems.mutate(
+                      { target_id: mergeTargetId, source_ids: sourceIds },
+                      {
+                        onSuccess: (data) => {
+                          const parts = [`Merged ${data.merged_count} items`];
+                          if (data.transactions_moved > 0) parts.push(`${data.transactions_moved} transactions moved`);
+                          if (data.vendor_prices_created > 0) parts.push(`${data.vendor_prices_created} vendor prices created`);
+                          toast(parts.join(', '), 'success');
+                          setSelectedIds(new Set());
+                          setShowMergeModal(false);
+                        },
+                        onError: (err) => {
+                          toast(`Merge failed: ${err.message}`, 'error');
+                        },
+                      },
+                    );
+                  }}
+                  disabled={!mergeTargetId || mergeItems.isPending}
+                  className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {mergeItems.isPending ? 'Merging...' : 'Merge'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

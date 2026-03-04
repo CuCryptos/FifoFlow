@@ -241,3 +241,37 @@ export interface CostReport {
   rows: CostRow[];
   totals: { in_cost: number; out_cost: number; net_cost: number };
 }
+
+export interface MergeItemsResult {
+  target_item: Item;
+  merged_count: number;
+  transactions_moved: number;
+  vendor_prices_created: number;
+  storage_consolidated: number;
+}
+
+export interface InvoiceLine {
+  vendor_item_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  line_total: number;
+  matched_item_id: number | null;
+  matched_item_name: string | null;
+  match_confidence: 'exact' | 'high' | 'low' | 'none';
+  existing_vendor_price_id: number | null;
+}
+
+export interface InvoiceParseResult {
+  vendor_id: number;
+  vendor_name: string;
+  invoice_date: string | null;
+  invoice_number: string | null;
+  lines: InvoiceLine[];
+  summary: {
+    total_lines: number;
+    matched: number;
+    unmatched: number;
+    total_amount: number;
+  };
+}

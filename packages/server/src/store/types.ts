@@ -14,6 +14,7 @@ import type {
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  MergeItemsResult,
   Order,
   OrderDetail,
   OrderItem,
@@ -131,6 +132,7 @@ export interface InventoryStore {
   // Bulk operations
   bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }>;
   bulkDeleteItems(ids: number[]): Promise<{ deleted: number; skipped: number; skippedIds: number[] }>;
+  mergeItems(targetId: number, sourceIds: number[]): Promise<MergeItemsResult>;
 
   // Item Storage
   listItemStorage(itemId: number): Promise<ItemStorage[]>;

@@ -177,6 +177,12 @@ export const updateVendorPriceSchema = z.object({
   is_default: z.boolean().optional(),
 });
 
+export const mergeItemsSchema = z.object({
+  source_ids: z.array(z.number().int().positive()).min(1),
+  target_id: z.number().int().positive(),
+});
+
+export type MergeItemsInput = z.infer<typeof mergeItemsSchema>;
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
 export type CreateVendorPriceInput = z.infer<typeof createVendorPriceSchema>;

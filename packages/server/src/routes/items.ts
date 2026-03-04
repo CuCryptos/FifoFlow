@@ -1,12 +1,27 @@
 import { Router } from 'express';
-import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, tryConvertQuantity } from '@fifoflow/shared';
-import type { Item, ItemCountAdjustmentResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
+import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, mergeItemsSchema, tryConvertQuantity } from '@fifoflow/shared';
+import type { Item, ItemCountAdjustmentResult, MergeItemsResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
 import { createTransactionHandler } from './transactions.js';
 import { createVendorPriceRoutes } from './vendorPrices.js';
 import type { InventoryStore } from '../store/types.js';
 
 export function createItemRoutes(store: InventoryStore): Router {
   const router = Router();
+
+  // POST /api/items/merge — merge multiple items into one
+  router.post('/merge', async (req, res) => {
+    const parsed = mergeItemsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const result = await store.mergeItems(parsed.data.target_id, parsed.data.source_ids);
+      res.json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
 
   router.get('/reorder-suggestions', async (req, res) => {
     const venueId = typeof req.query.venue_id === 'string' ? Number(req.query.venue_id) : undefined;

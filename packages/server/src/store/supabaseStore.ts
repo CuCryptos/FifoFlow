@@ -14,6 +14,7 @@ import type {
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  MergeItemsResult,
   Order,
   OrderDetail,
   OrderWithVendor,
@@ -43,6 +44,7 @@ import {
   type ReportFilters,
   type SetItemCountWithAdjustmentInput,
   type TransactionListFilters,
+  StoreMethodNotImplementedError,
 } from './types.js';
 
 type CountFilter = { column: string; operator: 'eq' | 'gt' | 'gte' | 'lt' | 'lte' | 'ilike' | 'not.is'; value: string | number };
@@ -502,6 +504,10 @@ export class SupabaseInventoryStore implements InventoryStore {
       skipped: skippedIds.length,
       skippedIds,
     };
+  }
+
+  async mergeItems(_targetId: number, _sourceIds: number[]): Promise<MergeItemsResult> {
+    throw new StoreMethodNotImplementedError('mergeItems');
   }
 
   // Storage Areas — return empty results for now (not yet implemented for Supabase)

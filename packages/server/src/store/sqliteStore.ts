@@ -16,6 +16,7 @@ import type {
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  MergeItemsResult,
   Order,
   OrderDetail,
   OrderItem,
@@ -645,6 +646,125 @@ export class SqliteInventoryStore implements InventoryStore {
       skipped: skippedIds.length,
       skippedIds,
     };
+  }
+
+  async mergeItems(targetId: number, sourceIds: number[]): Promise<MergeItemsResult> {
+    const execute = this.db.transaction(() => {
+      // Validate target
+      const target = this.db.prepare('SELECT * FROM items WHERE id = ?').get(targetId) as Item | undefined;
+      if (!target) throw new Error('Target item not found');
+
+      // Validate sources
+      for (const sid of sourceIds) {
+        if (sid === targetId) throw new Error('Source and target cannot be the same item');
+        const source = this.db.prepare('SELECT * FROM items WHERE id = ?').get(sid) as Item | undefined;
+        if (!source) throw new Error(`Source item ${sid} not found`);
+      }
+
+      let transactionsMoved = 0;
+      let vendorPricesCreated = 0;
+      let storageConsolidated = 0;
+
+      for (const sourceId of sourceIds) {
+        const source = this.db.prepare('SELECT * FROM items WHERE id = ?').get(sourceId) as Item;
+
+        // 1. Copy vendor_prices from source to target
+        const sourceVps = this.db.prepare('SELECT * FROM vendor_prices WHERE item_id = ?').all(sourceId) as any[];
+        for (const vp of sourceVps) {
+          // Check if target already has a price for this vendor with same name
+          const existing = this.db.prepare(
+            'SELECT id FROM vendor_prices WHERE item_id = ? AND vendor_id = ? AND COALESCE(vendor_item_name, \'\') = COALESCE(?, \'\')'
+          ).get(targetId, vp.vendor_id, vp.vendor_item_name) as { id: number } | undefined;
+          if (!existing) {
+            this.db.prepare(
+              `INSERT INTO vendor_prices (item_id, vendor_id, vendor_item_name, order_unit, order_unit_price, qty_per_unit, is_default)
+               VALUES (?, ?, ?, ?, ?, ?, 0)`
+            ).run(targetId, vp.vendor_id, vp.vendor_item_name ?? source.name, vp.order_unit, vp.order_unit_price, vp.qty_per_unit);
+            vendorPricesCreated++;
+          }
+        }
+
+        // Also create vendor_price from source item's direct fields if it has vendor_id + order_unit_price
+        if (source.vendor_id && source.order_unit_price != null) {
+          const alreadyExists = this.db.prepare(
+            'SELECT id FROM vendor_prices WHERE item_id = ? AND vendor_id = ? AND COALESCE(vendor_item_name, \'\') = COALESCE(?, \'\')'
+          ).get(targetId, source.vendor_id, source.name) as { id: number } | undefined;
+          if (!alreadyExists) {
+            this.db.prepare(
+              `INSERT INTO vendor_prices (item_id, vendor_id, vendor_item_name, order_unit, order_unit_price, qty_per_unit, is_default)
+               VALUES (?, ?, ?, ?, ?, ?, 0)`
+            ).run(targetId, source.vendor_id, source.name, source.order_unit, source.order_unit_price, source.qty_per_unit);
+            vendorPricesCreated++;
+          }
+        }
+
+        // 2. Move transactions
+        const txResult = this.db.prepare('UPDATE transactions SET item_id = ? WHERE item_id = ?').run(targetId, sourceId);
+        transactionsMoved += txResult.changes;
+
+        // 3. Move count_entries (delete on conflict)
+        const sourceEntries = this.db.prepare('SELECT * FROM count_entries WHERE item_id = ?').all(sourceId) as any[];
+        for (const entry of sourceEntries) {
+          const conflict = this.db.prepare(
+            'SELECT id FROM count_entries WHERE session_id = ? AND item_id = ?'
+          ).get(entry.session_id, targetId) as { id: number } | undefined;
+          if (conflict) {
+            this.db.prepare('DELETE FROM count_entries WHERE id = ?').run(entry.id);
+          } else {
+            this.db.prepare('UPDATE count_entries SET item_id = ? WHERE id = ?').run(targetId, entry.id);
+          }
+        }
+
+        // 4. Move count_session_items (delete on conflict)
+        const sourceSessionItems = this.db.prepare('SELECT * FROM count_session_items WHERE item_id = ?').all(sourceId) as any[];
+        for (const si of sourceSessionItems) {
+          const conflict = this.db.prepare(
+            'SELECT id FROM count_session_items WHERE session_id = ? AND item_id = ?'
+          ).get(si.session_id, targetId) as { id: number } | undefined;
+          if (conflict) {
+            this.db.prepare('DELETE FROM count_session_items WHERE id = ?').run(si.id);
+          } else {
+            this.db.prepare('UPDATE count_session_items SET item_id = ? WHERE id = ?').run(targetId, si.id);
+          }
+        }
+
+        // 5. Move order_items
+        this.db.prepare('UPDATE order_items SET item_id = ? WHERE item_id = ?').run(targetId, sourceId);
+
+        // 6. Consolidate item_storage
+        const sourceStorage = this.db.prepare('SELECT * FROM item_storage WHERE item_id = ?').all(sourceId) as any[];
+        for (const row of sourceStorage) {
+          this.db.prepare(`
+            INSERT INTO item_storage (item_id, area_id, quantity)
+            VALUES (?, ?, ?)
+            ON CONFLICT(item_id, area_id) DO UPDATE SET quantity = quantity + excluded.quantity
+          `).run(targetId, row.area_id, row.quantity);
+          storageConsolidated++;
+        }
+        this.db.prepare('DELETE FROM item_storage WHERE item_id = ?').run(sourceId);
+
+        // 7. Delete source item (vendor_prices cascade-delete, but we already copied them)
+        this.db.prepare('DELETE FROM items WHERE id = ?').run(sourceId);
+      }
+
+      // Recalculate target's current_qty from item_storage
+      const sumRow = this.db.prepare(
+        'SELECT COALESCE(SUM(quantity), 0) as total FROM item_storage WHERE item_id = ?'
+      ).get(targetId) as { total: number };
+      this.db.prepare('UPDATE items SET current_qty = ? WHERE id = ?').run(sumRow.total, targetId);
+
+      const updatedTarget = this.db.prepare('SELECT * FROM items WHERE id = ?').get(targetId) as Item;
+
+      return {
+        target_item: updatedTarget,
+        merged_count: sourceIds.length,
+        transactions_moved: transactionsMoved,
+        vendor_prices_created: vendorPricesCreated,
+        storage_consolidated: storageConsolidated,
+      };
+    });
+
+    return execute();
   }
 
   // ── Storage Areas ──────────────────────────────────────────────────

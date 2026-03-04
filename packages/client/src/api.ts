@@ -37,6 +37,9 @@ import type {
   UpdateVendorInput,
   UpdateVenueInput,
   CreateTransactionInput,
+  MergeItemsResult,
+  MergeItemsInput,
+  InvoiceParseResult,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -86,6 +89,8 @@ export const api = {
       fetchJson<{ updated: number }>('/items/bulk', { method: 'PATCH', body: JSON.stringify(data) }),
     bulkDelete: (data: { ids: number[] }) =>
       fetchJson<{ deleted: number; skipped: number; skippedIds: number[] }>('/items/bulk', { method: 'DELETE', body: JSON.stringify(data) }),
+    merge: (data: MergeItemsInput) =>
+      fetchJson<MergeItemsResult>('/items/merge', { method: 'POST', body: JSON.stringify(data) }),
   },
   storageAreas: {
     list: () => fetchJson<StorageArea[]>('/storage-areas'),
@@ -196,4 +201,37 @@ export const api = {
     },
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
+  invoices: {
+    parse: async (file: File, vendorId: number): Promise<InvoiceParseResult> => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('vendor_id', String(vendorId));
+      const res = await fetch(`${BASE}/invoices/parse`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        const msg = typeof error.error === 'string' ? error.error : res.statusText;
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    confirm: (data: {
+      vendor_id: number;
+      lines: Array<{
+        vendor_item_name: string;
+        matched_item_id: number;
+        quantity: number;
+        unit: string;
+        unit_price: number;
+        create_vendor_price: boolean;
+      }>;
+      record_transactions: boolean;
+    }) =>
+      fetchJson<{ vendor_prices_created: number; transactions_created: number }>(
+        '/invoices/confirm',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+  },
 };
