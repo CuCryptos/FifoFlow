@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   ClipboardCheck,
   Activity,
+  BarChart3,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/counts', label: 'Counts', icon: ClipboardCheck },
   { to: '/activity', label: 'Activity', icon: Activity },
+  { to: '/reports', label: 'Reports', icon: BarChart3 },
 ];
 
 export function Layout() {

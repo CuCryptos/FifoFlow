@@ -8,6 +8,7 @@ import { ItemDetail } from './pages/ItemDetail';
 import { Activity } from './pages/Activity';
 import { Counts } from './pages/Counts';
 import { Orders } from './pages/Orders';
+import { Reports } from './pages/Reports';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,7 @@ export default function App() {
               <Route path="/orders" element={<Orders />} />
               <Route path="/activity" element={<Activity />} />
               <Route path="/counts" element={<Counts />} />
+              <Route path="/reports" element={<Reports />} />
             </Route>
           </Routes>
         </BrowserRouter>
