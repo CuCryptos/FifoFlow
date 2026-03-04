@@ -356,9 +356,7 @@ export function Inventory() {
   const itemsToRender = (items ?? []).filter((item) => {
     if (showReorderOnly && !reorderIds.has(item.id)) return false;
     if (areaFilter) {
-      const areaId = Number(areaFilter);
-      const storage = storageByItem.get(item.id);
-      if (!storage?.some((s) => s.area_id === areaId && s.quantity > 0)) return false;
+      if (item.storage_area_id !== Number(areaFilter)) return false;
     }
     return true;
   });
