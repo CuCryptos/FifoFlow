@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { useItems, useReorderSuggestions, useUpdateItem } from '../hooks/useItems';
+import { useItems, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems } from '../hooks/useItems';
+import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
@@ -298,11 +299,11 @@ export function Inventory() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-
-  // Clear selection when page, filters, or sort changes
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [currentPage, search, category, areaFilter, showReorderOnly, sortField, sortDir]);
+  const bulkUpdate = useBulkUpdateItems();
+  const bulkDelete = useBulkDeleteItems();
+  const { toast } = useToast();
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -388,6 +389,11 @@ export function Inventory() {
   );
   const showingStart = sortedItems.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
   const showingEnd = Math.min(currentPage * ITEMS_PER_PAGE, sortedItems.length);
+
+  // Clear selection when page, filters, or sort changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [currentPage, search, category, areaFilter, showReorderOnly, sortField, sortDir]);
 
   const allOnPageSelected = paginatedItems.length > 0 && paginatedItems.every((item) => selectedIds.has(item.id));
 
@@ -913,9 +919,105 @@ export function Inventory() {
               </tr>
             </tfoot>
           </table>
+          {selectedIds.size > 0 && (
+            <div className="border-t border-border bg-bg-page px-4 py-3 flex items-center gap-4 flex-wrap">
+              <span className="text-sm font-medium text-text-primary">
+                {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
+              </span>
+
+              {/* Category reassign */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value)}
+                  className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+                >
+                  <option value="">Reassign category…</option>
+                  {CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    if (!bulkCategory) return;
+                    bulkUpdate.mutate(
+                      { ids: Array.from(selectedIds), updates: { category: bulkCategory } },
+                      {
+                        onSuccess: (data) => {
+                          toast(`Updated ${data.updated} item${data.updated !== 1 ? 's' : ''} to ${bulkCategory}`, 'success');
+                          setSelectedIds(new Set());
+                          setBulkCategory('');
+                        },
+                        onError: (err) => {
+                          toast(`Failed to update: ${err.message}`, 'error');
+                        },
+                      },
+                    );
+                  }}
+                  disabled={!bulkCategory || bulkUpdate.isPending}
+                  className="bg-accent-indigo text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Apply
+                </button>
+              </div>
+
+              {/* Bulk delete */}
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="ml-auto bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-red/20 transition-colors"
+              >
+                Delete Selected
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-text-secondary text-sm">No items found.</div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-bg-card rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-text-primary mb-2">Confirm Delete</h3>
+            <p className="text-sm text-text-secondary mb-4">
+              Delete {selectedIds.size} selected item{selectedIds.size > 1 ? 's' : ''}? Items with transaction history will be skipped.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-lg text-sm border border-border text-text-secondary hover:bg-bg-hover transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  bulkDelete.mutate(
+                    { ids: Array.from(selectedIds) },
+                    {
+                      onSuccess: (data) => {
+                        let msg = `Deleted ${data.deleted} item${data.deleted !== 1 ? 's' : ''}`;
+                        if (data.skipped > 0) {
+                          msg += `, ${data.skipped} skipped (have transaction history)`;
+                        }
+                        toast(msg, data.skipped > 0 ? 'info' : 'success');
+                        setSelectedIds(new Set());
+                        setShowDeleteConfirm(false);
+                      },
+                      onError: (err) => {
+                        toast(`Failed to delete: ${err.message}`, 'error');
+                        setShowDeleteConfirm(false);
+                      },
+                    },
+                  );
+                }}
+                disabled={bulkDelete.isPending}
+                className="bg-accent-red text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-red/90 disabled:opacity-40 transition-colors"
+              >
+                {bulkDelete.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAddModal && (
