@@ -5,10 +5,12 @@ import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { exportToExcel, exportToPdf } from '../utils/exportInventory';
+import type { GroupBy } from '../utils/exportInventory';
 import type { Unit, ItemStorage } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
 import { ManageVendorsModal } from '../components/ManageVendorsModal';
+import { ManageVenuesModal } from '../components/ManageVenuesModal';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
@@ -295,6 +297,8 @@ export function Inventory() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAreasModal, setShowAreasModal] = useState(false);
   const [showVendorsModal, setShowVendorsModal] = useState(false);
+  const [showVenuesModal, setShowVenuesModal] = useState(false);
+  const [exportGroupBy, setExportGroupBy] = useState<GroupBy>('storage_area');
   const [areaFilter, setAreaFilter] = useState('');
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [showOrdering, setShowOrdering] = useState(false);
@@ -444,11 +448,22 @@ export function Inventory() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">Inventory</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          <select
+            value={exportGroupBy}
+            onChange={(e) => setExportGroupBy(e.target.value as GroupBy)}
+            className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
+          >
+            <option value="storage_area">Group by Area</option>
+            <option value="venue">Group by Venue</option>
+            <option value="vendor">Group by Vendor</option>
+          </select>
           <button
             onClick={() => {
-              const areaLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
-              exportToPdf({ items: sortedItems, areas: areas ?? [], areaLookup, format: 'pdf' });
+              const aLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
+              const venueLookup = new Map((venues ?? []).map((v) => [v.id, v.name]));
+              const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
+              exportToPdf({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy, format: 'pdf' });
             }}
             className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
           >
@@ -456,12 +471,20 @@ export function Inventory() {
           </button>
           <button
             onClick={() => {
-              const areaLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
-              exportToExcel({ items: sortedItems, areas: areas ?? [], areaLookup, format: 'xlsx' });
+              const aLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
+              const venueLookup = new Map((venues ?? []).map((v) => [v.id, v.name]));
+              const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
+              exportToExcel({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy, format: 'xlsx' });
             }}
             className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
           >
             Export Excel
+          </button>
+          <button
+            onClick={() => setShowVenuesModal(true)}
+            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+          >
+            Manage Venues
           </button>
           <button
             onClick={() => setShowVendorsModal(true)}
@@ -1060,6 +1083,9 @@ export function Inventory() {
       )}
       {showVendorsModal && (
         <ManageVendorsModal onClose={() => setShowVendorsModal(false)} />
+      )}
+      {showVenuesModal && (
+        <ManageVenuesModal onClose={() => setShowVenuesModal(false)} />
       )}
     </div>
   );
