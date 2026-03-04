@@ -21,6 +21,7 @@ export interface Item {
   item_size: string | null;
   reorder_level: number | null;
   reorder_qty: number | null;
+  vendor_id: number | null;
   created_at: string;
   updated_at: string;
 }

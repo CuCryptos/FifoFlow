@@ -8,6 +8,8 @@ import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
 import type { Unit, ItemStorage } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
+import { ManageVendorsModal } from '../components/ManageVendorsModal';
+import { useVendors } from '../hooks/useVendors';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '—';
@@ -290,6 +292,7 @@ export function Inventory() {
   const [showReorderOnly, setShowReorderOnly] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAreasModal, setShowAreasModal] = useState(false);
+  const [showVendorsModal, setShowVendorsModal] = useState(false);
   const [displayUnits, setDisplayUnits] = useState<Record<number, Unit>>({});
   const [orderQtys, setOrderQtys] = useState<Record<number, string>>({});
   const [areaFilter, setAreaFilter] = useState('');
@@ -317,6 +320,7 @@ export function Inventory() {
   const updateItem = useUpdateItem();
   const { data: areas } = useStorageAreas();
   const { data: allItemStorage } = useAllItemStorage();
+  const { data: vendors } = useVendors();
 
   // Build a lookup: Map<itemId, ItemStorage[]>
   const storageByItem = useMemo(() => {
@@ -414,7 +418,7 @@ export function Inventory() {
     });
   };
 
-  const colSpanTotal = 1 + 7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1);
+  const colSpanTotal = 1 + 8 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1);
 
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
@@ -433,6 +437,12 @@ export function Inventory() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">Inventory</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowVendorsModal(true)}
+            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+          >
+            Manage Vendors
+          </button>
           <button
             onClick={() => setShowAreasModal(true)}
             className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
@@ -512,7 +522,7 @@ export function Inventory() {
               {/* Row 1 — Group headers */}
               <tr className="bg-bg-page sticky top-0 z-20">
                 <th className="w-10" />
-                <th colSpan={6} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
+                <th colSpan={7} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
                   Stock
                 </th>
                 <th colSpan={showOrdering ? 5 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
@@ -546,6 +556,7 @@ export function Inventory() {
                 </th>
                 <SortHeader label="Name" field="name" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Vendor</th>
                 <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Stock Unit</th>
                 <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
@@ -658,6 +669,23 @@ export function Inventory() {
                     {/* Category – read-only */}
                     <td className="px-3 py-2 text-text-secondary">
                       {item.category}
+                    </td>
+
+                    {/* Vendor – inline select */}
+                    <td className="px-3 py-2">
+                      <select
+                        value={item.vendor_id ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          updateItem.mutate({ id: item.id, data: { vendor_id: val } });
+                        }}
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="">—</option>
+                        {(vendors ?? []).map((v) => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                      </select>
                     </td>
 
                     {/* Stock Qty – display with conversion */}
@@ -1025,6 +1053,9 @@ export function Inventory() {
       )}
       {showAreasModal && (
         <ManageAreasModal onClose={() => setShowAreasModal(false)} />
+      )}
+      {showVendorsModal && (
+        <ManageVendorsModal onClose={() => setShowVendorsModal(false)} />
       )}
     </div>
   );
