@@ -227,6 +227,46 @@ function ReorderBadge({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Sortable column helpers                                           */
+/* ------------------------------------------------------------------ */
+
+type SortField = 'name' | 'category' | 'current_qty' | 'unit' | 'reorder_level' | 'reorder_qty' | 'order_unit' | 'order_unit_price' | 'qty_per_unit';
+type SortDir = 'asc' | 'desc';
+
+function SortHeader({
+  label,
+  field,
+  activeField,
+  dir,
+  onToggle,
+  className = '',
+}: {
+  label: string;
+  field: SortField;
+  activeField: SortField;
+  dir: SortDir;
+  onToggle: (field: SortField) => void;
+  className?: string;
+}) {
+  const isActive = field === activeField;
+  return (
+    <th
+      className={`px-3 py-2.5 font-medium text-xs uppercase tracking-wide cursor-pointer select-none hover:text-text-primary transition-colors ${className}`}
+      onClick={() => onToggle(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive ? (
+          <span className="text-accent-indigo">{dir === 'asc' ? '▲' : '▼'}</span>
+        ) : (
+          <span className="text-text-muted/40">▲</span>
+        )}
+      </span>
+    </th>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Inventory Page                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -242,6 +282,18 @@ export function Inventory() {
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [showOrdering, setShowOrdering] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
   const updateItem = useUpdateItem();
   const { data: areas } = useStorageAreas();
   const { data: allItemStorage } = useAllItemStorage();
@@ -284,6 +336,24 @@ export function Inventory() {
     }
     return true;
   });
+  const sortedItems = useMemo(() => {
+    const arr = [...itemsToRender];
+    arr.sort((a, b) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        const cmp = aVal.localeCompare(bVal, undefined, { sensitivity: 'base' });
+        return sortDir === 'asc' ? cmp : -cmp;
+      }
+      const diff = Number(aVal) - Number(bVal);
+      return sortDir === 'asc' ? diff : -diff;
+    });
+    return arr;
+  }, [itemsToRender, sortField, sortDir]);
+
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
     0,
@@ -403,17 +473,17 @@ export function Inventory() {
               </tr>
               {/* Row 2 — Column headers */}
               <tr className="bg-bg-table-header text-text-secondary text-left">
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Name</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Category</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">In Stock</th>
+                <SortHeader label="Name" field="name" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
+                <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Stock Unit</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Reorder Level</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Reorder Qty</th>
+                <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
+                <SortHeader label="Reorder Qty" field="reorder_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Reorder</th>
                 {showOrdering ? (
                   <>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Order Unit</th>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Pack Qty</th>
+                    <SortHeader label="Order Unit" field="order_unit" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
+                    <SortHeader label="Pack Qty" field="qty_per_unit" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                     <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Inner Unit</th>
                     <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Size Value</th>
                     <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Size Unit</th>
@@ -423,7 +493,7 @@ export function Inventory() {
                 )}
                 {showPricing ? (
                   <>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Price</th>
+                    <SortHeader label="Order Price" field="order_unit_price" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                     <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Inside Price</th>
                     <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Order Qty</th>
                     <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Cost</th>
@@ -434,7 +504,7 @@ export function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {itemsToRender.map((item) => {
+              {sortedItems.map((item) => {
                 const displayUnit = getDisplayUnit(item.id, item.unit);
                 // When area filter is active, show area-specific qty; otherwise total
                 const baseQty = areaFilter
