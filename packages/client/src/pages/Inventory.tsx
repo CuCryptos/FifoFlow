@@ -555,12 +555,12 @@ export function Inventory() {
                 <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Vendor</th>
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Venue</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Storage Area</th>
                 <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Stock Unit</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Unit</th>
                 <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <SortHeader label="Reorder Qty" field="reorder_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Reorder</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Storage Area</th>
                 {showOrdering ? (
                   <>
                     <SortHeader label="Order Unit" field="order_unit" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
@@ -696,28 +696,39 @@ export function Inventory() {
                       </select>
                     </td>
 
+                    {/* Storage Area – inline select */}
+                    <td className="px-3 py-2">
+                      <select
+                        value={item.storage_area_id ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          updateItem.mutate({ id: item.id, data: { storage_area_id: val } });
+                        }}
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="">—</option>
+                        {(areas ?? []).map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </td>
+
                     {/* Stock Qty – display with conversion */}
                     <td className="px-3 py-2 font-mono font-medium text-text-primary text-right tabular-nums">{displayQty}</td>
 
-                    {/* Stock Unit – conversion toggle */}
+                    {/* Unit – editable */}
                     <td className="px-3 py-2">
-                      {compatible.length > 1 ? (
-                        <select
-                          value={displayUnit}
-                          onChange={(e) =>
-                            setDisplayUnit(item.id, e.target.value as Unit)
-                          }
-                          className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                        >
-                          {compatible.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-text-secondary">{item.unit}</span>
-                      )}
+                      <select
+                        value={item.unit}
+                        onChange={(e) => {
+                          updateItem.mutate({ id: item.id, data: { unit: e.target.value as Unit } });
+                        }}
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                      >
+                        {UNITS.map((u) => (
+                          <option key={u} value={u}>{u}</option>
+                        ))}
+                      </select>
                     </td>
 
                     {/* Reorder Level – inline edit number */}
@@ -746,23 +757,6 @@ export function Inventory() {
                         stockQty={item.current_qty}
                         reorderLevel={item.reorder_level}
                       />
-                    </td>
-
-                    {/* Storage Area – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.storage_area_id ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : null;
-                          updateItem.mutate({ id: item.id, data: { storage_area_id: val } });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {(areas ?? []).map((a) => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                      </select>
                     </td>
 
                     {/* ORDERING columns */}
