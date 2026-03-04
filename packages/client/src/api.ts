@@ -11,14 +11,17 @@ import type {
   CountSessionSummary,
   ReorderSuggestion,
   StorageArea,
+  Vendor,
   CloseCountSessionInput,
   CreateItemInput,
   CreateCountSessionInput,
   CreateStorageAreaInput,
+  CreateVendorInput,
   RecordCountEntryInput,
   SetItemCountInput,
   UpdateItemInput,
   UpdateStorageAreaInput,
+  UpdateVendorInput,
   CreateTransactionInput,
 } from '@fifoflow/shared';
 
@@ -74,6 +77,16 @@ export const api = {
       fetchJson<StorageArea>(`/storage-areas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/storage-areas/${id}`, { method: 'DELETE' }),
+  },
+  vendors: {
+    list: () => fetchJson<Vendor[]>('/vendors'),
+    get: (id: number) => fetchJson<Vendor>(`/vendors/${id}`),
+    create: (data: CreateVendorInput) =>
+      fetchJson<Vendor>('/vendors', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: UpdateVendorInput) =>
+      fetchJson<Vendor>(`/vendors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/vendors/${id}`, { method: 'DELETE' }),
   },
   countSessions: {
     list: () => fetchJson<CountSessionSummary[]>('/count-sessions'),
