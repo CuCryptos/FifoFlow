@@ -7,15 +7,21 @@ import type {
   CountSessionSummary,
   CreateCountSessionInput,
   CreateItemInput,
+  CreateOrderInput,
   CreateStorageAreaInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  Order,
+  OrderDetail,
+  OrderItem,
+  OrderWithVendor,
   StorageArea,
   Transaction,
   TransactionWithItem,
   UpdateItemInput,
+  UpdateOrderInput,
   UpdateStorageAreaInput,
   Vendor,
   CreateVendorInput,
@@ -693,6 +699,87 @@ export class SqliteInventoryStore implements InventoryStore {
       'SELECT COUNT(*) as count FROM items WHERE vendor_id = ?'
     ).get(vendorId) as { count: number };
     return row.count;
+  }
+
+  // ── Orders ──────────────────────────────────────────────────
+
+  async listOrders(): Promise<OrderWithVendor[]> {
+    return this.db.prepare(`
+      SELECT o.*, v.name as vendor_name,
+        (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
+      FROM orders o
+      JOIN vendors v ON o.vendor_id = v.id
+      ORDER BY o.created_at DESC
+    `).all() as OrderWithVendor[];
+  }
+
+  async getOrderById(id: number): Promise<OrderDetail | undefined> {
+    const order = this.db.prepare(`
+      SELECT o.*, v.name as vendor_name
+      FROM orders o
+      JOIN vendors v ON o.vendor_id = v.id
+      WHERE o.id = ?
+    `).get(id) as (Order & { vendor_name: string }) | undefined;
+    if (!order) return undefined;
+
+    const items = this.db.prepare(`
+      SELECT oi.*, i.name as item_name
+      FROM order_items oi
+      JOIN items i ON oi.item_id = i.id
+      WHERE oi.order_id = ?
+    `).all(id) as OrderItem[];
+
+    return { ...order, items };
+  }
+
+  async createOrder(input: CreateOrderInput): Promise<OrderDetail> {
+    const totalCost = input.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+    const result = this.db.prepare(
+      'INSERT INTO orders (vendor_id, notes, total_estimated_cost) VALUES (?, ?, ?)'
+    ).run(input.vendor_id, input.notes ?? null, Math.round(totalCost * 100) / 100);
+
+    const orderId = Number(result.lastInsertRowid);
+    const insertItem = this.db.prepare(
+      'INSERT INTO order_items (order_id, item_id, quantity, unit, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+
+    for (const item of input.items) {
+      const lineTotal = Math.round(item.quantity * item.unit_price * 100) / 100;
+      insertItem.run(orderId, item.item_id, item.quantity, item.unit, item.unit_price, lineTotal);
+    }
+
+    return (await this.getOrderById(orderId))!;
+  }
+
+  async updateOrder(id: number, input: UpdateOrderInput): Promise<OrderDetail> {
+    if (input.notes !== undefined) {
+      this.db.prepare('UPDATE orders SET notes = ? WHERE id = ?').run(input.notes, id);
+    }
+    if (input.items) {
+      this.db.prepare('DELETE FROM order_items WHERE order_id = ?').run(id);
+      const insertItem = this.db.prepare(
+        'INSERT INTO order_items (order_id, item_id, quantity, unit, unit_price, line_total) VALUES (?, ?, ?, ?, ?, ?)'
+      );
+      let totalCost = 0;
+      for (const item of input.items) {
+        const lineTotal = Math.round(item.quantity * item.unit_price * 100) / 100;
+        insertItem.run(id, item.item_id, item.quantity, item.unit, item.unit_price, lineTotal);
+        totalCost += lineTotal;
+      }
+      this.db.prepare('UPDATE orders SET total_estimated_cost = ? WHERE id = ?').run(
+        Math.round(totalCost * 100) / 100, id
+      );
+    }
+    return (await this.getOrderById(id))!;
+  }
+
+  async updateOrderStatus(id: number, status: 'sent'): Promise<Order> {
+    this.db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id);
+    return this.db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as Order;
+  }
+
+  async deleteOrder(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM orders WHERE id = ?').run(id);
   }
 }
 

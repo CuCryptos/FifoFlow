@@ -6,11 +6,16 @@ import type {
   CountSessionSummary,
   CreateCountSessionInput,
   CreateItemInput,
+  CreateOrderInput,
   CreateStorageAreaInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  Order,
+  OrderDetail,
+  OrderItem,
+  OrderWithVendor,
   ReconciliationResult,
   StorageArea,
   Transaction,
@@ -18,6 +23,7 @@ import type {
   TransactionReason,
   TransactionWithItem,
   UpdateItemInput,
+  UpdateOrderInput,
   UpdateStorageAreaInput,
   Vendor,
   CreateVendorInput,
@@ -118,4 +124,12 @@ export interface InventoryStore {
   updateVendor(id: number, input: UpdateVendorInput): Promise<Vendor>;
   deleteVendor(id: number): Promise<void>;
   countItemsForVendor(vendorId: number): Promise<number>;
+
+  // Orders
+  listOrders(): Promise<OrderWithVendor[]>;
+  getOrderById(id: number): Promise<OrderDetail | undefined>;
+  createOrder(input: CreateOrderInput): Promise<OrderDetail>;
+  updateOrder(id: number, input: UpdateOrderInput): Promise<OrderDetail>;
+  updateOrderStatus(id: number, status: 'sent'): Promise<Order>;
+  deleteOrder(id: number): Promise<void>;
 }

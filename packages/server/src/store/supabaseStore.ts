@@ -6,16 +6,21 @@ import type {
   CountSessionSummary,
   CreateCountSessionInput,
   CreateItemInput,
+  CreateOrderInput,
   CreateStorageAreaInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  Order,
+  OrderDetail,
+  OrderWithVendor,
   ReconciliationResult,
   StorageArea,
   Transaction,
   TransactionWithItem,
   UpdateItemInput,
+  UpdateOrderInput,
   UpdateStorageAreaInput,
   Vendor,
   CreateVendorInput,
@@ -526,6 +531,15 @@ export class SupabaseInventoryStore implements InventoryStore {
   async updateVendor(_id: number, _input: UpdateVendorInput): Promise<Vendor> { return this.notImplemented('updateVendor'); }
   async deleteVendor(_id: number): Promise<void> { return this.notImplemented('deleteVendor'); }
   async countItemsForVendor(_vendorId: number): Promise<number> { return 0; }
+
+  // Orders — stubs (not yet implemented for Supabase)
+
+  async listOrders(): Promise<OrderWithVendor[]> { return []; }
+  async getOrderById(_id: number): Promise<OrderDetail | undefined> { return undefined; }
+  async createOrder(_input: CreateOrderInput): Promise<OrderDetail> { return this.notImplemented('createOrder'); }
+  async updateOrder(_id: number, _input: UpdateOrderInput): Promise<OrderDetail> { return this.notImplemented('updateOrder'); }
+  async updateOrderStatus(_id: number, _status: 'sent'): Promise<Order> { return this.notImplemented('updateOrderStatus'); }
+  async deleteOrder(_id: number): Promise<void> { return this.notImplemented('deleteOrder'); }
 }
 
 export function createSupabaseInventoryStoreFromEnv(): SupabaseInventoryStore {
