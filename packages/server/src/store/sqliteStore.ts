@@ -27,6 +27,9 @@ import type {
   UpdateStorageAreaInput,
   UsageReport,
   UsageRow,
+  Venue,
+  CreateVenueInput,
+  UpdateVenueInput,
   Vendor,
   CreateVendorInput,
   UpdateVendorInput,
@@ -43,6 +46,7 @@ import type {
   TransactionListFilters,
 } from './types.js';
 
+
 export class SqliteInventoryStore implements InventoryStore {
   constructor(private readonly db: Database.Database) {}
 
@@ -58,13 +62,23 @@ export class SqliteInventoryStore implements InventoryStore {
       sql += ' AND name LIKE ?';
       params.push(`%${filters.search}%`);
     }
+    if (filters?.venueId !== undefined) {
+      sql += ' AND venue_id = ?';
+      params.push(filters.venueId);
+    }
 
     sql += ' ORDER BY name ASC';
     return this.db.prepare(sql).all(...params) as Item[];
   }
 
-  async listItemsWithReorderLevel(): Promise<Item[]> {
-    return this.db.prepare('SELECT * FROM items WHERE reorder_level IS NOT NULL').all() as Item[];
+  async listItemsWithReorderLevel(venueId?: number): Promise<Item[]> {
+    let sql = 'SELECT * FROM items WHERE reorder_level IS NOT NULL';
+    const params: unknown[] = [];
+    if (venueId !== undefined) {
+      sql += ' AND venue_id = ?';
+      params.push(venueId);
+    }
+    return this.db.prepare(sql).all(...params) as Item[];
   }
 
   async getItemById(id: number): Promise<Item | undefined> {
@@ -170,6 +184,10 @@ export class SqliteInventoryStore implements InventoryStore {
     if (filters?.type) {
       sql += ' AND t.type = ?';
       params.push(filters.type);
+    }
+    if (filters?.venueId !== undefined) {
+      sql += ' AND i.venue_id = ?';
+      params.push(filters.venueId);
     }
 
     sql += ' ORDER BY t.created_at DESC LIMIT ? OFFSET ?';
@@ -517,25 +535,32 @@ export class SqliteInventoryStore implements InventoryStore {
     return execute();
   }
 
-  async getDashboardStats(): Promise<DashboardStats> {
-    const totalItems = this.db.prepare('SELECT COUNT(*) as count FROM items').get() as { count: number };
+  async getDashboardStats(venueId?: number): Promise<DashboardStats> {
+    const venueFilter = venueId !== undefined ? ' AND venue_id = ?' : '';
+    const venueParams = venueId !== undefined ? [venueId] : [];
+
+    const totalItems = this.db.prepare(
+      `SELECT COUNT(*) as count FROM items WHERE 1=1${venueFilter}`
+    ).get(...venueParams) as { count: number };
     const lowStock = this.db.prepare(
-      'SELECT COUNT(*) as count FROM items WHERE reorder_level IS NOT NULL AND current_qty > 0 AND current_qty <= reorder_level'
-    ).get() as { count: number };
+      `SELECT COUNT(*) as count FROM items WHERE reorder_level IS NOT NULL AND current_qty > 0 AND current_qty <= reorder_level${venueFilter}`
+    ).get(...venueParams) as { count: number };
     const outOfStock = this.db.prepare(
-      'SELECT COUNT(*) as count FROM items WHERE current_qty = 0'
-    ).get() as { count: number };
-    const todayTx = this.db.prepare(
-      "SELECT COUNT(*) as count FROM transactions WHERE date(created_at) = date('now')"
-    ).get() as { count: number };
+      `SELECT COUNT(*) as count FROM items WHERE current_qty = 0${venueFilter}`
+    ).get(...venueParams) as { count: number };
+
+    const todayTxSql = venueId !== undefined
+      ? "SELECT COUNT(*) as count FROM transactions t JOIN items i ON t.item_id = i.id WHERE date(t.created_at) = date('now') AND i.venue_id = ?"
+      : "SELECT COUNT(*) as count FROM transactions WHERE date(created_at) = date('now')";
+    const todayTx = this.db.prepare(todayTxSql).get(...venueParams) as { count: number };
 
     const inventoryValue = this.db.prepare(`
       SELECT COALESCE(SUM(
         current_qty * order_unit_price / COALESCE(qty_per_unit, 1)
       ), 0) as value
       FROM items
-      WHERE order_unit_price IS NOT NULL AND current_qty > 0
-    `).get() as { value: number };
+      WHERE order_unit_price IS NOT NULL AND current_qty > 0${venueFilter}
+    `).get(...venueParams) as { value: number };
 
     return {
       total_items: totalItems.count,
@@ -717,6 +742,37 @@ export class SqliteInventoryStore implements InventoryStore {
     return row.count;
   }
 
+  // ── Venues ──────────────────────────────────────────────────
+
+  async listVenues(): Promise<Venue[]> {
+    return this.db.prepare('SELECT * FROM venues ORDER BY name ASC').all() as Venue[];
+  }
+
+  async getVenueById(id: number): Promise<Venue | undefined> {
+    return this.db.prepare('SELECT * FROM venues WHERE id = ?').get(id) as Venue | undefined;
+  }
+
+  async createVenue(input: CreateVenueInput): Promise<Venue> {
+    const result = this.db.prepare('INSERT INTO venues (name) VALUES (?)').run(input.name);
+    return this.db.prepare('SELECT * FROM venues WHERE id = ?').get(result.lastInsertRowid) as Venue;
+  }
+
+  async updateVenue(id: number, input: UpdateVenueInput): Promise<Venue> {
+    this.db.prepare('UPDATE venues SET name = ? WHERE id = ?').run(input.name, id);
+    return this.db.prepare('SELECT * FROM venues WHERE id = ?').get(id) as Venue;
+  }
+
+  async deleteVenue(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM venues WHERE id = ?').run(id);
+  }
+
+  async countItemsForVenue(venueId: number): Promise<number> {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as count FROM items WHERE venue_id = ?'
+    ).get(venueId) as { count: number };
+    return row.count;
+  }
+
   // ── Orders ──────────────────────────────────────────────────
 
   async listOrders(): Promise<OrderWithVendor[]> {
@@ -801,7 +857,9 @@ export class SqliteInventoryStore implements InventoryStore {
   // ── Reports ──────────────────────────────────────────────────
 
   async getUsageReport(filters: ReportFilters): Promise<UsageReport> {
-    const { start, end, groupBy } = filters;
+    const { start, end, groupBy, venueId } = filters;
+    const venueFilter = venueId !== undefined ? ' AND i.venue_id = ?' : '';
+    const venueParams = venueId !== undefined ? [venueId] : [];
     const periodExpr = groupBy === 'week'
       ? "strftime('%Y-W%W', t.created_at)"
       : "date(t.created_at)";
@@ -816,10 +874,10 @@ export class SqliteInventoryStore implements InventoryStore {
         COUNT(*) as tx_count
       FROM transactions t
       JOIN items i ON t.item_id = i.id
-      WHERE t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'
+      WHERE t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'${venueFilter}
       GROUP BY period, i.id
       ORDER BY period DESC, out_qty DESC
-    `).all(start, end) as UsageRow[];
+    `).all(start, end, ...venueParams) as UsageRow[];
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -834,7 +892,9 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async getWasteReport(filters: ReportFilters): Promise<WasteReport> {
-    const { start, end } = filters;
+    const { start, end, venueId } = filters;
+    const venueFilter = venueId !== undefined ? ' AND i.venue_id = ?' : '';
+    const venueParams = venueId !== undefined ? [venueId] : [];
 
     const rows = this.db.prepare(`
       SELECT
@@ -845,10 +905,10 @@ export class SqliteInventoryStore implements InventoryStore {
       FROM transactions t
       JOIN items i ON t.item_id = i.id
       WHERE t.reason = 'Wasted'
-        AND t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'
+        AND t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'${venueFilter}
       GROUP BY i.id
       ORDER BY estimated_cost DESC
-    `).all(start, end) as WasteRow[];
+    `).all(start, end, ...venueParams) as WasteRow[];
 
     const totals = rows.reduce(
       (acc, r) => ({
@@ -862,7 +922,9 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async getCostReport(filters: ReportFilters): Promise<CostReport> {
-    const { start, end, groupBy } = filters;
+    const { start, end, groupBy, venueId } = filters;
+    const venueFilter = venueId !== undefined ? ' AND i.venue_id = ?' : '';
+    const venueParams = venueId !== undefined ? [venueId] : [];
     const groupExpr = groupBy === 'vendor'
       ? "COALESCE(v.name, 'No Vendor')"
       : 'i.category';
@@ -882,10 +944,10 @@ export class SqliteInventoryStore implements InventoryStore {
       JOIN items i ON t.item_id = i.id
       ${joinClause}
       WHERE t.estimated_cost IS NOT NULL
-        AND t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'
+        AND t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'${venueFilter}
       GROUP BY group_name
       ORDER BY in_cost DESC
-    `).all(start, end) as CostRow[];
+    `).all(start, end, ...venueParams) as CostRow[];
 
     const totals = rows.reduce(
       (acc, r) => ({

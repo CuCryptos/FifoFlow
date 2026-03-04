@@ -24,6 +24,9 @@ import type {
   UpdateOrderInput,
   UpdateStorageAreaInput,
   UsageReport,
+  Venue,
+  CreateVenueInput,
+  UpdateVenueInput,
   Vendor,
   CreateVendorInput,
   UpdateVendorInput,
@@ -175,10 +178,13 @@ export class SupabaseInventoryStore implements InventoryStore {
     return this.fetchJson<Item[]>('items', params);
   }
 
-  async listItemsWithReorderLevel(): Promise<Item[]> {
+  async listItemsWithReorderLevel(_venueId?: number): Promise<Item[]> {
     const params = new URLSearchParams();
     params.set('select', '*');
     params.set('reorder_level', 'not.is.null');
+    if (_venueId !== undefined) {
+      params.set('venue_id', `eq.${_venueId}`);
+    }
     return this.fetchJson<Item[]>('items', params);
   }
 
@@ -397,7 +403,7 @@ export class SupabaseInventoryStore implements InventoryStore {
     return this.notImplemented('recordCountEntry');
   }
 
-  async getDashboardStats(): Promise<DashboardStats> {
+  async getDashboardStats(_venueId?: number): Promise<DashboardStats> {
     const now = new Date();
     const startUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const endUtc = new Date(startUtc);
@@ -540,6 +546,15 @@ export class SupabaseInventoryStore implements InventoryStore {
   async updateVendor(_id: number, _input: UpdateVendorInput): Promise<Vendor> { return this.notImplemented('updateVendor'); }
   async deleteVendor(_id: number): Promise<void> { return this.notImplemented('deleteVendor'); }
   async countItemsForVendor(_vendorId: number): Promise<number> { return 0; }
+
+  // Venues — stubs (not yet implemented for Supabase)
+
+  async listVenues(): Promise<Venue[]> { return []; }
+  async getVenueById(_id: number): Promise<Venue | undefined> { return undefined; }
+  async createVenue(_input: CreateVenueInput): Promise<Venue> { return this.notImplemented('createVenue'); }
+  async updateVenue(_id: number, _input: UpdateVenueInput): Promise<Venue> { return this.notImplemented('updateVenue'); }
+  async deleteVenue(_id: number): Promise<void> { return this.notImplemented('deleteVenue'); }
+  async countItemsForVenue(_venueId: number): Promise<number> { return 0; }
 
   // Orders — stubs (not yet implemented for Supabase)
 

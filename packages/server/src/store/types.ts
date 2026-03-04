@@ -27,6 +27,9 @@ import type {
   UpdateOrderInput,
   UpdateStorageAreaInput,
   UsageReport,
+  Venue,
+  CreateVenueInput,
+  UpdateVenueInput,
   Vendor,
   CreateVendorInput,
   UpdateVendorInput,
@@ -36,6 +39,7 @@ import type {
 export interface ItemListFilters {
   search?: string;
   category?: string;
+  venueId?: number;
 }
 
 export interface TransactionListFilters {
@@ -43,12 +47,14 @@ export interface TransactionListFilters {
   type?: string;
   limit?: number;
   offset?: number;
+  venueId?: number;
 }
 
 export interface ReportFilters {
   start: string;
   end: string;
   groupBy?: string;
+  venueId?: number;
 }
 
 export interface InsertTransactionAndAdjustQtyInput {
@@ -87,7 +93,7 @@ export class StoreMethodNotImplementedError extends Error {
 
 export interface InventoryStore {
   listItems(filters?: ItemListFilters): Promise<Item[]>;
-  listItemsWithReorderLevel(): Promise<Item[]>;
+  listItemsWithReorderLevel(venueId?: number): Promise<Item[]>;
   getItemById(id: number): Promise<Item | undefined>;
   listTransactionsForItem(itemId: number, limit: number): Promise<Transaction[]>;
   createItem(input: CreateItemInput): Promise<Item>;
@@ -107,7 +113,7 @@ export interface InventoryStore {
   listCountEntries(sessionId: number): Promise<CountSessionEntry[]>;
   listCountChecklist(sessionId: number): Promise<CountSessionChecklistItem[]>;
   recordCountEntry(sessionId: number, input: { itemId: number; countedQty: number; notes: string | null }): Promise<CountSessionEntry>;
-  getDashboardStats(): Promise<DashboardStats>;
+  getDashboardStats(venueId?: number): Promise<DashboardStats>;
   reconcile(): Promise<ReconcileOutcome>;
 
   // Storage Areas
@@ -142,6 +148,14 @@ export interface InventoryStore {
   updateOrder(id: number, input: UpdateOrderInput): Promise<OrderDetail>;
   updateOrderStatus(id: number, status: 'sent'): Promise<Order>;
   deleteOrder(id: number): Promise<void>;
+
+  // Venues
+  listVenues(): Promise<Venue[]>;
+  getVenueById(id: number): Promise<Venue | undefined>;
+  createVenue(input: CreateVenueInput): Promise<Venue>;
+  updateVenue(id: number, input: UpdateVenueInput): Promise<Venue>;
+  deleteVenue(id: number): Promise<void>;
+  countItemsForVenue(venueId: number): Promise<number>;
 
   // Reports
   getUsageReport(filters: ReportFilters): Promise<UsageReport>;
