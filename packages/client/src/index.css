@@ -64,3 +64,8 @@ body {
 .animate-slide-in {
   animation: slide-in 0.2s ease-out;
 }
+
+@media print {
+  aside, nav, .no-print { display: none !important; }
+  main { margin-left: 0 !important; padding-top: 0 !important; }
+}

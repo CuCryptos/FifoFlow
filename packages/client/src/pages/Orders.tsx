@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useItems, useReorderSuggestions } from '../hooks/useItems';
 import { useVendors } from '../hooks/useVendors';
-import { useCreateOrder } from '../hooks/useOrders';
+import { useOrders, useOrder, useCreateOrder, useUpdateOrderStatus, useDeleteOrder } from '../hooks/useOrders';
 import { useToast } from '../contexts/ToastContext';
 import { ManageVendorsModal } from '../components/ManageVendorsModal';
 import type { Vendor, ReorderSuggestion } from '@fifoflow/shared';
@@ -231,5 +231,194 @@ function OrderGenerator() {
 }
 
 function OrderHistory() {
-  return <div className="text-text-secondary text-sm">Order history coming soon...</div>;
+  const { data: orders, isLoading } = useOrders();
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+
+  if (isLoading) return <div className="text-text-secondary text-sm">Loading...</div>;
+  if (!orders?.length) return <div className="text-text-secondary text-sm">No orders yet.</div>;
+
+  if (selectedOrderId) {
+    return <OrderDetailView orderId={selectedOrderId} onBack={() => setSelectedOrderId(null)} />;
+  }
+
+  return (
+    <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-bg-table-header text-text-secondary text-left">
+            <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Date</th>
+            <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Vendor</th>
+            <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Items</th>
+            <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Est. Cost</th>
+            <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((order) => (
+            <tr
+              key={order.id}
+              onClick={() => setSelectedOrderId(order.id)}
+              className="border-b border-border hover:bg-bg-hover cursor-pointer transition-colors"
+            >
+              <td className="px-4 py-2 text-text-primary">
+                {new Date(order.created_at).toLocaleDateString()}
+              </td>
+              <td className="px-4 py-2 text-text-primary">{order.vendor_name}</td>
+              <td className="px-4 py-2 text-right font-mono text-text-secondary">{order.item_count}</td>
+              <td className="px-4 py-2 text-right font-mono text-text-primary">
+                ${order.total_estimated_cost.toFixed(2)}
+              </td>
+              <td className="px-4 py-2">
+                <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${
+                  order.status === 'sent'
+                    ? 'bg-badge-green-bg text-badge-green-text'
+                    : 'bg-badge-amber-bg text-badge-amber-text'
+                }`}>
+                  {order.status === 'sent' ? 'Sent' : 'Draft'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OrderDetailView({ orderId, onBack }: { orderId: number; onBack: () => void }) {
+  const { data: order, isLoading } = useOrder(orderId);
+  const updateStatus = useUpdateOrderStatus();
+  const deleteOrder = useDeleteOrder();
+  const { toast } = useToast();
+
+  if (isLoading) return <div className="text-text-secondary text-sm">Loading...</div>;
+  if (!order) return <div className="text-accent-red text-sm">Order not found.</div>;
+
+  const handleMarkSent = () => {
+    updateStatus.mutate(
+      { id: order.id, status: 'sent' },
+      { onSuccess: () => toast('Order marked as sent', 'success') },
+    );
+  };
+
+  const handleDelete = () => {
+    if (!window.confirm('Delete this draft order?')) return;
+    deleteOrder.mutate(order.id, {
+      onSuccess: () => { toast('Order deleted', 'success'); onBack(); },
+      onError: (err) => toast(`Failed: ${err.message}`, 'error'),
+    });
+  };
+
+  const handleCopy = () => {
+    const lines = [
+      `Order for ${order.vendor_name}`,
+      `Date: ${new Date(order.created_at).toLocaleDateString()}`,
+      `Status: ${order.status}`,
+      '',
+    ];
+    for (const item of order.items) {
+      const price = item.unit_price > 0 ? ` @ $${item.unit_price.toFixed(2)}/${item.unit}` : '';
+      lines.push(`${item.item_name}: ${item.quantity} ${item.unit}${price}`);
+    }
+    lines.push('', `Estimated Total: $${order.total_estimated_cost.toFixed(2)}`);
+    navigator.clipboard.writeText(lines.join('\n'));
+    toast('Order copied to clipboard', 'success');
+  };
+
+  return (
+    <div className="space-y-4">
+      <button onClick={onBack} className="text-accent-indigo text-sm hover:underline">
+        &larr; Back to Order History
+      </button>
+
+      <div className="bg-bg-card rounded-xl shadow-sm">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-text-primary">{order.vendor_name}</h3>
+            <span className="text-xs text-text-muted">
+              {new Date(order.created_at).toLocaleDateString()} &middot;{' '}
+              <span className={order.status === 'sent' ? 'text-badge-green-text' : 'text-badge-amber-text'}>
+                {order.status === 'sent' ? 'Sent' : 'Draft'}
+              </span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopy}
+              className="border border-border text-text-secondary px-3 py-1.5 rounded-lg text-sm hover:bg-bg-hover transition-colors"
+            >
+              Copy
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="border border-border text-text-secondary px-3 py-1.5 rounded-lg text-sm hover:bg-bg-hover transition-colors"
+            >
+              Print
+            </button>
+            {order.status === 'draft' && (
+              <>
+                <button
+                  onClick={handleMarkSent}
+                  disabled={updateStatus.isPending}
+                  className="bg-accent-indigo text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
+                >
+                  Mark Sent
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleteOrder.isPending}
+                  className="bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm hover:bg-accent-red/20 transition-colors"
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-bg-table-header text-text-secondary text-left">
+              <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide">Item</th>
+              <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Qty</th>
+              <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide">Unit</th>
+              <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Unit Price</th>
+              <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.items.map((item) => (
+              <tr key={item.id} className="border-b border-border">
+                <td className="px-4 py-2 text-text-primary">{item.item_name}</td>
+                <td className="px-4 py-2 text-right font-mono">{item.quantity}</td>
+                <td className="px-4 py-2 text-text-secondary">{item.unit}</td>
+                <td className="px-4 py-2 text-right font-mono text-text-secondary">
+                  ${item.unit_price.toFixed(2)}
+                </td>
+                <td className="px-4 py-2 text-right font-mono text-text-primary">
+                  ${item.line_total.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-bg-page">
+              <td colSpan={4} className="px-4 py-3 text-sm text-text-secondary text-right font-medium">
+                Estimated Total
+              </td>
+              <td className="px-4 py-3 text-right font-mono font-semibold text-text-primary">
+                ${order.total_estimated_cost.toFixed(2)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {order.notes && (
+          <div className="px-4 py-3 border-t border-border text-sm text-text-secondary">
+            <span className="font-medium">Notes:</span> {order.notes}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
