@@ -39,7 +39,8 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(error.error || res.statusText);
+    const msg = typeof error.error === 'string' ? error.error : res.statusText;
+    throw new Error(msg);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
