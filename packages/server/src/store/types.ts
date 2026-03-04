@@ -1,5 +1,6 @@
 import type {
   CloseCountSessionInput,
+  CostReport,
   CountSession,
   CountSessionChecklistItem,
   CountSessionEntry,
@@ -25,9 +26,11 @@ import type {
   UpdateItemInput,
   UpdateOrderInput,
   UpdateStorageAreaInput,
+  UsageReport,
   Vendor,
   CreateVendorInput,
   UpdateVendorInput,
+  WasteReport,
 } from '@fifoflow/shared';
 
 export interface ItemListFilters {
@@ -40,6 +43,12 @@ export interface TransactionListFilters {
   type?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface ReportFilters {
+  start: string;
+  end: string;
+  groupBy?: string;
 }
 
 export interface InsertTransactionAndAdjustQtyInput {
@@ -133,4 +142,9 @@ export interface InventoryStore {
   updateOrder(id: number, input: UpdateOrderInput): Promise<OrderDetail>;
   updateOrderStatus(id: number, status: 'sent'): Promise<Order>;
   deleteOrder(id: number): Promise<void>;
+
+  // Reports
+  getUsageReport(filters: ReportFilters): Promise<UsageReport>;
+  getWasteReport(filters: ReportFilters): Promise<WasteReport>;
+  getCostReport(filters: ReportFilters): Promise<CostReport>;
 }

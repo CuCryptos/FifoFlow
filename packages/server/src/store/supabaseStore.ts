@@ -1,5 +1,6 @@
 import type {
   CloseCountSessionInput,
+  CostReport,
   CountSession,
   CountSessionChecklistItem,
   CountSessionEntry,
@@ -22,15 +23,18 @@ import type {
   UpdateItemInput,
   UpdateOrderInput,
   UpdateStorageAreaInput,
+  UsageReport,
   Vendor,
   CreateVendorInput,
   UpdateVendorInput,
+  WasteReport,
 } from '@fifoflow/shared';
 import {
   type InsertTransactionAndAdjustQtyInput,
   type InventoryStore,
   type ItemListFilters,
   type ReconcileOutcome,
+  type ReportFilters,
   type SetItemCountWithAdjustmentInput,
   type TransactionListFilters,
 } from './types.js';
@@ -545,6 +549,20 @@ export class SupabaseInventoryStore implements InventoryStore {
   async updateOrder(_id: number, _input: UpdateOrderInput): Promise<OrderDetail> { return this.notImplemented('updateOrder'); }
   async updateOrderStatus(_id: number, _status: 'sent'): Promise<Order> { return this.notImplemented('updateOrderStatus'); }
   async deleteOrder(_id: number): Promise<void> { return this.notImplemented('deleteOrder'); }
+
+  // Reports — stubs (not yet implemented for Supabase)
+
+  async getUsageReport(_filters: ReportFilters): Promise<UsageReport> {
+    return this.notImplemented('getUsageReport');
+  }
+
+  async getWasteReport(_filters: ReportFilters): Promise<WasteReport> {
+    return this.notImplemented('getWasteReport');
+  }
+
+  async getCostReport(_filters: ReportFilters): Promise<CostReport> {
+    return this.notImplemented('getCostReport');
+  }
 }
 
 export function createSupabaseInventoryStoreFromEnv(): SupabaseInventoryStore {

@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
 import type {
   CloseCountSessionInput,
+  CostReport,
+  CostRow,
   CountSession,
   CountSessionChecklistItem,
   CountSessionEntry,
@@ -23,15 +25,20 @@ import type {
   UpdateItemInput,
   UpdateOrderInput,
   UpdateStorageAreaInput,
+  UsageReport,
+  UsageRow,
   Vendor,
   CreateVendorInput,
   UpdateVendorInput,
+  WasteReport,
+  WasteRow,
 } from '@fifoflow/shared';
 import type {
   InsertTransactionAndAdjustQtyInput,
   InventoryStore,
   ItemListFilters,
   ReconcileOutcome,
+  ReportFilters,
   SetItemCountWithAdjustmentInput,
   TransactionListFilters,
 } from './types.js';
@@ -789,6 +796,107 @@ export class SqliteInventoryStore implements InventoryStore {
 
   async deleteOrder(id: number): Promise<void> {
     this.db.prepare('DELETE FROM orders WHERE id = ?').run(id);
+  }
+
+  // ── Reports ──────────────────────────────────────────────────
+
+  async getUsageReport(filters: ReportFilters): Promise<UsageReport> {
+    const { start, end, groupBy } = filters;
+    const periodExpr = groupBy === 'week'
+      ? "strftime('%Y-W%W', t.created_at)"
+      : "date(t.created_at)";
+
+    const rows = this.db.prepare(`
+      SELECT
+        ${periodExpr} as period,
+        i.name as item_name,
+        i.category,
+        COALESCE(SUM(CASE WHEN t.type = 'in' THEN t.quantity ELSE 0 END), 0) as in_qty,
+        COALESCE(SUM(CASE WHEN t.type = 'out' THEN t.quantity ELSE 0 END), 0) as out_qty,
+        COUNT(*) as tx_count
+      FROM transactions t
+      JOIN items i ON t.item_id = i.id
+      WHERE t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'
+      GROUP BY period, i.id
+      ORDER BY period DESC, out_qty DESC
+    `).all(start, end) as UsageRow[];
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        in_qty: acc.in_qty + r.in_qty,
+        out_qty: acc.out_qty + r.out_qty,
+        tx_count: acc.tx_count + r.tx_count,
+      }),
+      { in_qty: 0, out_qty: 0, tx_count: 0 },
+    );
+
+    return { rows, totals };
+  }
+
+  async getWasteReport(filters: ReportFilters): Promise<WasteReport> {
+    const { start, end } = filters;
+
+    const rows = this.db.prepare(`
+      SELECT
+        i.name as item_name,
+        i.category,
+        SUM(t.quantity) as quantity,
+        COALESCE(SUM(t.estimated_cost), 0) as estimated_cost
+      FROM transactions t
+      JOIN items i ON t.item_id = i.id
+      WHERE t.reason = 'Wasted'
+        AND t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'
+      GROUP BY i.id
+      ORDER BY estimated_cost DESC
+    `).all(start, end) as WasteRow[];
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        quantity: acc.quantity + r.quantity,
+        estimated_cost: acc.estimated_cost + r.estimated_cost,
+      }),
+      { quantity: 0, estimated_cost: 0 },
+    );
+
+    return { rows, totals };
+  }
+
+  async getCostReport(filters: ReportFilters): Promise<CostReport> {
+    const { start, end, groupBy } = filters;
+    const groupExpr = groupBy === 'vendor'
+      ? "COALESCE(v.name, 'No Vendor')"
+      : 'i.category';
+    const joinClause = groupBy === 'vendor'
+      ? 'LEFT JOIN vendors v ON i.vendor_id = v.id'
+      : '';
+
+    const rows = this.db.prepare(`
+      SELECT
+        ${groupExpr} as group_name,
+        COALESCE(SUM(CASE WHEN t.type = 'in' THEN t.estimated_cost ELSE 0 END), 0) as in_cost,
+        COALESCE(SUM(CASE WHEN t.type = 'out' THEN t.estimated_cost ELSE 0 END), 0) as out_cost,
+        COALESCE(SUM(CASE WHEN t.type = 'in' THEN t.estimated_cost ELSE 0 END), 0)
+          - COALESCE(SUM(CASE WHEN t.type = 'out' THEN t.estimated_cost ELSE 0 END), 0) as net_cost,
+        COUNT(*) as tx_count
+      FROM transactions t
+      JOIN items i ON t.item_id = i.id
+      ${joinClause}
+      WHERE t.estimated_cost IS NOT NULL
+        AND t.created_at >= ? AND t.created_at < ? || 'T23:59:59.999Z'
+      GROUP BY group_name
+      ORDER BY in_cost DESC
+    `).all(start, end) as CostRow[];
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        in_cost: acc.in_cost + r.in_cost,
+        out_cost: acc.out_cost + r.out_cost,
+        net_cost: acc.net_cost + r.net_cost,
+      }),
+      { in_cost: 0, out_cost: 0, net_cost: 0 },
+    );
+
+    return { rows, totals };
   }
 }
 
