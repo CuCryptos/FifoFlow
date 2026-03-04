@@ -9,6 +9,7 @@ import { createCountSessionRoutes } from './routes/countSessions.js';
 import { createStorageAreaRoutes } from './routes/storageAreas.js';
 import { createVendorRoutes } from './routes/vendors.js';
 import { createOrderRoutes } from './routes/orders.js';
+import { createReportRoutes } from './routes/reports.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
 import path from 'node:path';
@@ -33,6 +34,7 @@ app.use('/api/count-sessions', createCountSessionRoutes(store));
 app.use('/api/storage-areas', createStorageAreaRoutes(store));
 app.use('/api/vendors', createVendorRoutes(store));
 app.use('/api/orders', createOrderRoutes(store));
+app.use('/api/reports', createReportRoutes(store));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', store: storeDriver });
