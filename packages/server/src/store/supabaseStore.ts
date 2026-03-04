@@ -17,6 +17,9 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateStorageAreaInput,
+  Vendor,
+  CreateVendorInput,
+  UpdateVendorInput,
 } from '@fifoflow/shared';
 import {
   type InsertTransactionAndAdjustQtyInput,
@@ -514,6 +517,15 @@ export class SupabaseInventoryStore implements InventoryStore {
   async getItemStorageByArea(_itemId: number, _areaId: number): Promise<ItemStorage | undefined> {
     return undefined;
   }
+
+  // Vendors — stubs (not yet implemented for Supabase)
+
+  async listVendors(): Promise<Vendor[]> { return []; }
+  async getVendorById(_id: number): Promise<Vendor | undefined> { return undefined; }
+  async createVendor(_input: CreateVendorInput): Promise<Vendor> { return this.notImplemented('createVendor'); }
+  async updateVendor(_id: number, _input: UpdateVendorInput): Promise<Vendor> { return this.notImplemented('updateVendor'); }
+  async deleteVendor(_id: number): Promise<void> { return this.notImplemented('deleteVendor'); }
+  async countItemsForVendor(_vendorId: number): Promise<number> { return 0; }
 }
 
 export function createSupabaseInventoryStoreFromEnv(): SupabaseInventoryStore {

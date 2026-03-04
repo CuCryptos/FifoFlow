@@ -17,6 +17,9 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateStorageAreaInput,
+  Vendor,
+  CreateVendorInput,
+  UpdateVendorInput,
 } from '@fifoflow/shared';
 import type {
   InsertTransactionAndAdjustQtyInput,
@@ -653,6 +656,43 @@ export class SqliteInventoryStore implements InventoryStore {
       JOIN storage_areas sa ON sa.id = ist.area_id
       WHERE ist.item_id = ? AND ist.area_id = ?
     `).get(itemId, areaId) as ItemStorage | undefined;
+  }
+
+  // ── Vendors ──────────────────────────────────────────────────
+
+  async listVendors(): Promise<Vendor[]> {
+    return this.db.prepare('SELECT * FROM vendors ORDER BY name ASC').all() as Vendor[];
+  }
+
+  async getVendorById(id: number): Promise<Vendor | undefined> {
+    return this.db.prepare('SELECT * FROM vendors WHERE id = ?').get(id) as Vendor | undefined;
+  }
+
+  async createVendor(input: CreateVendorInput): Promise<Vendor> {
+    const result = this.db.prepare(
+      'INSERT INTO vendors (name, notes) VALUES (?, ?)'
+    ).run(input.name, input.notes ?? null);
+    return this.db.prepare('SELECT * FROM vendors WHERE id = ?').get(result.lastInsertRowid) as Vendor;
+  }
+
+  async updateVendor(id: number, input: UpdateVendorInput): Promise<Vendor> {
+    const fields = Object.entries(input).filter(([, v]) => v !== undefined);
+    if (fields.length === 0) return (await this.getVendorById(id)) as Vendor;
+    const setClauses = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([, v]) => v);
+    this.db.prepare(`UPDATE vendors SET ${setClauses} WHERE id = ?`).run(...values, id);
+    return this.db.prepare('SELECT * FROM vendors WHERE id = ?').get(id) as Vendor;
+  }
+
+  async deleteVendor(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM vendors WHERE id = ?').run(id);
+  }
+
+  async countItemsForVendor(vendorId: number): Promise<number> {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as count FROM items WHERE vendor_id = ?'
+    ).get(vendorId) as { count: number };
+    return row.count;
   }
 }
 

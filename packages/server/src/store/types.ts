@@ -19,6 +19,9 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateStorageAreaInput,
+  Vendor,
+  CreateVendorInput,
+  UpdateVendorInput,
 } from '@fifoflow/shared';
 
 export interface ItemListFilters {
@@ -107,4 +110,12 @@ export interface InventoryStore {
   listItemStorage(itemId: number): Promise<ItemStorage[]>;
   listAllItemStorage(): Promise<ItemStorage[]>;
   getItemStorageByArea(itemId: number, areaId: number): Promise<ItemStorage | undefined>;
+
+  // Vendors
+  listVendors(): Promise<Vendor[]>;
+  getVendorById(id: number): Promise<Vendor | undefined>;
+  createVendor(input: CreateVendorInput): Promise<Vendor>;
+  updateVendor(id: number, input: UpdateVendorInput): Promise<Vendor>;
+  deleteVendor(id: number): Promise<void>;
+  countItemsForVendor(vendorId: number): Promise<number>;
 }

@@ -139,7 +139,6 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
     CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders(vendor_id);
     CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
-    CREATE INDEX IF NOT EXISTS idx_items_vendor_id ON items(vendor_id);
   `);
 
   // Migrations — add inventory fields incrementally
@@ -163,6 +162,8 @@ export function initializeDb(db: Database.Database): void {
   addColumnIfMissing('reorder_level', 'REAL');
   addColumnIfMissing('reorder_qty', 'REAL');
   addColumnIfMissing('vendor_id', 'INTEGER REFERENCES vendors(id) ON DELETE SET NULL');
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_vendor_id ON items(vendor_id)');
 
   const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;
   const sessionColumnNames = sessionColumns.map((c) => c.name);
