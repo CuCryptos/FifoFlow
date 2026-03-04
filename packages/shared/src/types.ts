@@ -134,3 +134,44 @@ export interface ItemStorage {
   area_name: string;
   quantity: number;
 }
+
+export interface Vendor {
+  id: number;
+  name: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type OrderStatus = 'draft' | 'sent';
+
+export interface Order {
+  id: number;
+  vendor_id: number;
+  status: OrderStatus;
+  notes: string | null;
+  total_estimated_cost: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderWithVendor extends Order {
+  vendor_name: string;
+  item_count: number;
+}
+
+export interface OrderItem {
+  id: number;
+  order_id: number;
+  item_id: number;
+  item_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  line_total: number;
+}
+
+export interface OrderDetail extends Order {
+  vendor_name: string;
+  items: OrderItem[];
+}

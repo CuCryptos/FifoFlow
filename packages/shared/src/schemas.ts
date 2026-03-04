@@ -105,3 +105,44 @@ export type CreateStorageAreaInput = z.infer<typeof createStorageAreaSchema>;
 export type UpdateStorageAreaInput = z.infer<typeof updateStorageAreaSchema>;
 export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
 export type BulkDeleteItemsInput = z.infer<typeof bulkDeleteItemsSchema>;
+
+export const createVendorSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  notes: z.string().max(500).nullable().optional(),
+});
+
+export const updateVendorSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200).optional(),
+  notes: z.string().max(500).nullable().optional(),
+});
+
+export const createOrderSchema = z.object({
+  vendor_id: z.number().int().positive(),
+  notes: z.string().max(500).nullable().optional(),
+  items: z.array(z.object({
+    item_id: z.number().int().positive(),
+    quantity: z.number().positive(),
+    unit: z.string().min(1),
+    unit_price: z.number().min(0),
+  })).min(1),
+});
+
+export const updateOrderSchema = z.object({
+  notes: z.string().max(500).nullable().optional(),
+  items: z.array(z.object({
+    item_id: z.number().int().positive(),
+    quantity: z.number().positive(),
+    unit: z.string().min(1),
+    unit_price: z.number().min(0),
+  })).min(1).optional(),
+});
+
+export const updateOrderStatusSchema = z.object({
+  status: z.enum(['sent'] as const),
+});
+
+export type CreateVendorInput = z.infer<typeof createVendorSchema>;
+export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
