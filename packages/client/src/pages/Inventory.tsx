@@ -266,6 +266,19 @@ function SortHeader({
   );
 }
 
+function getPageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | '...')[] = [];
+  if (current <= 3) {
+    pages.push(1, 2, 3, 4, '...', total);
+  } else if (current >= total - 2) {
+    pages.push(1, '...', total - 3, total - 2, total - 1, total);
+  } else {
+    pages.push(1, '...', current - 1, current, current + 1, '...', total);
+  }
+  return pages;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Inventory Page                                                    */
 /* ------------------------------------------------------------------ */
@@ -353,6 +366,24 @@ export function Inventory() {
     });
     return arr;
   }, [itemsToRender, sortField, sortDir]);
+
+  const ITEMS_PER_PAGE = 50;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset to page 1 when filters or sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, category, areaFilter, showReorderOnly, sortField, sortDir]);
+
+  const totalPages = Math.ceil(sortedItems.length / ITEMS_PER_PAGE);
+  const paginatedItems = sortedItems.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
+  const showingStart = sortedItems.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const showingEnd = Math.min(currentPage * ITEMS_PER_PAGE, sortedItems.length);
+
+  const colSpanTotal = 7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1);
 
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
@@ -504,7 +535,7 @@ export function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {sortedItems.map((item) => {
+              {paginatedItems.map((item) => {
                 const displayUnit = getDisplayUnit(item.id, item.unit);
                 // When area filter is active, show area-specific qty; otherwise total
                 const baseQty = areaFilter
@@ -778,7 +809,7 @@ export function Inventory() {
                   </tr>
                   {expandedItems.has(item.id) && hasAreas && (
                     <tr className="bg-bg-area-row">
-                      <td colSpan={7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1)} className="px-3 py-2 pl-10">
+                      <td colSpan={colSpanTotal} className="px-3 py-2 pl-10">
                         <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
                           {itemAreas.map((is) => (
                             <span key={is.area_id}>
@@ -795,11 +826,45 @@ export function Inventory() {
             </tbody>
             <tfoot>
               <tr className="bg-bg-page">
-                <td colSpan={7 + (showOrdering ? 5 : 1) + (showPricing ? 4 : 1)} className="px-4 py-3 text-sm text-text-secondary">
+                <td colSpan={colSpanTotal} className="px-4 py-3 text-sm text-text-secondary">
                   <div className="flex items-center justify-between">
-                    <span>Showing {itemsToRender.length} items</span>
-                    {reorderSuggestions && reorderSuggestions.length > 0 && (
-                      <span>Reorder spend: <span className="text-accent-amber font-mono font-medium">{formatCurrency(reorderSpend)}</span></span>
+                    <span>
+                      Showing {showingStart}–{showingEnd} of {sortedItems.length} items
+                    </span>
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-2 py-1 rounded text-xs border border-border hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        {getPageNumbers(currentPage, totalPages).map((p, i) =>
+                          p === '...' ? (
+                            <span key={`ellipsis-${i}`} className="px-1 text-text-muted">…</span>
+                          ) : (
+                            <button
+                              key={p}
+                              onClick={() => setCurrentPage(p as number)}
+                              className={`px-2 py-1 rounded text-xs border ${
+                                p === currentPage
+                                  ? 'bg-accent-indigo text-white border-accent-indigo'
+                                  : 'border-border hover:bg-bg-hover'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          )
+                        )}
+                        <button
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-2 py-1 rounded text-xs border border-border hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
                     )}
                   </div>
                 </td>
