@@ -375,7 +375,7 @@ export function Inventory() {
         <div className="text-text-secondary text-sm">Loading...</div>
       ) : itemsToRender.length > 0 ? (
         <div className="bg-bg-card rounded-xl shadow-sm overflow-x-auto">
-          <table className="w-full text-sm whitespace-nowrap">
+          <table className="min-w-[1200px] w-full text-sm whitespace-nowrap">
             <thead>
               {/* Row 1 — Group headers */}
               <tr className="bg-bg-page">

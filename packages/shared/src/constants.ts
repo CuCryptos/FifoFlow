@@ -4,8 +4,12 @@ export const CATEGORIES = [
   'Seafood',
   'Dairy',
   'Dry Goods',
+  'Food',
   'Beverages',
+  'Beer',
+  'Spirits',
   'Supplies',
+  'Decorations',
   'Equipment',
 ] as const;
 

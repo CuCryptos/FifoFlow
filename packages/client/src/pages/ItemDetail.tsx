@@ -346,13 +346,16 @@ export function ItemDetail() {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button onClick={saveEdit} className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover">
-                Save
+            <div className="flex gap-2 items-center">
+              <button onClick={saveEdit} disabled={updateItem.isPending} className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-50">
+                {updateItem.isPending ? 'Saving...' : 'Save'}
               </button>
               <button onClick={() => setEditing(false)} className="text-text-secondary text-sm px-3 py-1.5 hover:text-text-primary">
                 Cancel
               </button>
+              {updateItem.error && (
+                <span className="text-accent-red text-xs">{updateItem.error.message}</span>
+              )}
             </div>
           </div>
         ) : (
