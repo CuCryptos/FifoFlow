@@ -566,6 +566,11 @@ export function ItemDetail() {
                       {tx.type === 'in' ? '+' : '-'}
                       {txDisplayQty} {activeDisplayUnit}
                     </span>
+                    {tx.estimated_cost != null && (
+                      <span className="text-text-muted text-xs font-mono ml-1">
+                        (${tx.estimated_cost.toFixed(2)})
+                      </span>
+                    )}
                     <span className="text-text-secondary">{tx.reason}</span>
                     {tx.notes && <span className="text-text-muted italic">&mdash; {tx.notes}</span>}
                   </div>
