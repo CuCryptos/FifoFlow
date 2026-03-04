@@ -10,6 +10,8 @@ import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
 import { ManageVendorsModal } from '../components/ManageVendorsModal';
 import { useVendors } from '../hooks/useVendors';
+import { useVenues } from '../hooks/useVenues';
+import { useVenueContext } from '../contexts/VenueContext';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '—';
@@ -317,10 +319,12 @@ export function Inventory() {
     }
   };
 
+  const { selectedVenueId } = useVenueContext();
   const updateItem = useUpdateItem();
   const { data: areas } = useStorageAreas();
   const { data: allItemStorage } = useAllItemStorage();
   const { data: vendors } = useVendors();
+  const { data: venues } = useVenues();
 
   // Build a lookup: Map<itemId, ItemStorage[]>
   const storageByItem = useMemo(() => {
@@ -347,6 +351,7 @@ export function Inventory() {
   const { data: items, isLoading } = useItems({
     search: search || undefined,
     category: category || undefined,
+    venue_id: selectedVenueId ?? undefined,
   });
   const { data: reorderSuggestions } = useReorderSuggestions();
 
@@ -557,6 +562,7 @@ export function Inventory() {
                 <SortHeader label="Name" field="name" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Vendor</th>
+                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Venue</th>
                 <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
                 <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Stock Unit</th>
                 <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
@@ -683,6 +689,23 @@ export function Inventory() {
                       >
                         <option value="">—</option>
                         {(vendors ?? []).map((v) => (
+                          <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Venue – inline select */}
+                    <td className="px-3 py-2">
+                      <select
+                        value={item.venue_id ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          updateItem.mutate({ id: item.id, data: { venue_id: val } });
+                        }}
+                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="">—</option>
+                        {(venues ?? []).map((v) => (
                           <option key={v.id} value={v.id}>{v.name}</option>
                         ))}
                       </select>

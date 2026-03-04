@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTransactions } from '../hooks/useTransactions';
 import { Link } from 'react-router-dom';
+import { useVenueContext } from '../contexts/VenueContext';
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -14,10 +15,12 @@ function timeAgo(dateStr: string): string {
 }
 
 export function Activity() {
+  const { selectedVenueId } = useVenueContext();
   const [typeFilter, setTypeFilter] = useState<string>('');
   const { data: transactions, isLoading } = useTransactions({
     type: typeFilter || undefined,
     limit: 100,
+    venue_id: selectedVenueId ?? undefined,
   });
 
   return (

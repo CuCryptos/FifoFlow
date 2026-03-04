@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useDashboardStats } from '../hooks/useDashboard';
 import { useTransactions } from '../hooks/useTransactions';
 import { useReorderSuggestions } from '../hooks/useItems';
+import { useVenueContext } from '../contexts/VenueContext';
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -15,9 +16,10 @@ function timeAgo(dateStr: string): string {
 }
 
 export function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const { data: recentTx, isLoading: txLoading } = useTransactions({ limit: 10 });
-  const { data: reorderSuggestions } = useReorderSuggestions();
+  const { selectedVenueId } = useVenueContext();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(selectedVenueId ?? undefined);
+  const { data: recentTx, isLoading: txLoading } = useTransactions({ limit: 10, venue_id: selectedVenueId ?? undefined });
+  const { data: reorderSuggestions } = useReorderSuggestions(selectedVenueId ?? undefined);
 
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, r) => sum + (r.estimated_total_cost ?? 0),

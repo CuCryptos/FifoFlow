@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useUsageReport, useWasteReport, useCostReport } from '../hooks/useReports';
+import { useVenueContext } from '../contexts/VenueContext';
 
 type Tab = 'usage' | 'waste' | 'cost';
 type UsageGroupBy = 'day' | 'week';
@@ -29,11 +30,13 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 }
 
 export function Reports() {
+  const { selectedVenueId } = useVenueContext();
   const [tab, setTab] = useState<Tab>('usage');
   const [start, setStart] = useState(() => daysAgo(30));
   const [end, setEnd] = useState(() => formatDate(new Date()));
   const [usageGroupBy, setUsageGroupBy] = useState<UsageGroupBy>('day');
   const [costGroupBy, setCostGroupBy] = useState<CostGroupBy>('category');
+  const venueId = selectedVenueId ?? undefined;
 
   const presets = [
     { label: 'Today', fn: () => { setStart(formatDate(new Date())); setEnd(formatDate(new Date())); } },
@@ -101,11 +104,11 @@ export function Reports() {
 
       {/* Tab content */}
       {tab === 'usage' && (
-        <UsageTab start={start} end={end} groupBy={usageGroupBy} setGroupBy={setUsageGroupBy} />
+        <UsageTab start={start} end={end} groupBy={usageGroupBy} setGroupBy={setUsageGroupBy} venueId={venueId} />
       )}
-      {tab === 'waste' && <WasteTab start={start} end={end} />}
+      {tab === 'waste' && <WasteTab start={start} end={end} venueId={venueId} />}
       {tab === 'cost' && (
-        <CostTab start={start} end={end} groupBy={costGroupBy} setGroupBy={setCostGroupBy} />
+        <CostTab start={start} end={end} groupBy={costGroupBy} setGroupBy={setCostGroupBy} venueId={venueId} />
       )}
     </div>
   );
@@ -144,13 +147,15 @@ function UsageTab({
   end,
   groupBy,
   setGroupBy,
+  venueId,
 }: {
   start: string;
   end: string;
   groupBy: UsageGroupBy;
   setGroupBy: (v: UsageGroupBy) => void;
+  venueId?: number;
 }) {
-  const { data, isLoading } = useUsageReport(start, end, groupBy);
+  const { data, isLoading } = useUsageReport(start, end, groupBy, venueId);
 
   if (isLoading) return <div className="text-text-muted">Loading...</div>;
   if (!data) return null;
@@ -215,8 +220,8 @@ function UsageTab({
   );
 }
 
-function WasteTab({ start, end }: { start: string; end: string }) {
-  const { data, isLoading } = useWasteReport(start, end);
+function WasteTab({ start, end, venueId }: { start: string; end: string; venueId?: number }) {
+  const { data, isLoading } = useWasteReport(start, end, venueId);
 
   if (isLoading) return <div className="text-text-muted">Loading...</div>;
   if (!data) return null;
@@ -269,13 +274,15 @@ function CostTab({
   end,
   groupBy,
   setGroupBy,
+  venueId,
 }: {
   start: string;
   end: string;
   groupBy: CostGroupBy;
   setGroupBy: (v: CostGroupBy) => void;
+  venueId?: number;
 }) {
-  const { data, isLoading } = useCostReport(start, end, groupBy);
+  const { data, isLoading } = useCostReport(start, end, groupBy, venueId);
 
   if (isLoading) return <div className="text-text-muted">Loading...</div>;
   if (!data) return null;
