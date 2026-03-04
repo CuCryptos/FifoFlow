@@ -7,8 +7,9 @@ import type { InventoryStore } from '../store/types.js';
 export function createItemRoutes(store: InventoryStore): Router {
   const router = Router();
 
-  router.get('/reorder-suggestions', async (_req, res) => {
-    const items = await store.listItemsWithReorderLevel() as Item[];
+  router.get('/reorder-suggestions', async (req, res) => {
+    const venueId = typeof req.query.venue_id === 'string' ? Number(req.query.venue_id) : undefined;
+    const items = await store.listItemsWithReorderLevel(venueId) as Item[];
     const suggestions: ReorderSuggestion[] = items
       .filter((item) => item.reorder_level !== null && item.current_qty <= item.reorder_level)
       .map((item) => {
@@ -97,10 +98,11 @@ export function createItemRoutes(store: InventoryStore): Router {
 
   // GET /api/items
   router.get('/', async (req, res) => {
-    const { search, category } = req.query;
+    const { search, category, venue_id } = req.query;
     const items = await store.listItems({
       search: typeof search === 'string' ? search : undefined,
       category: typeof category === 'string' ? category : undefined,
+      venueId: typeof venue_id === 'string' ? Number(venue_id) : undefined,
     });
     res.json(items);
   });

@@ -18,14 +18,16 @@ export function createReportRoutes(store: InventoryStore): Router {
     const start = (req.query.start as string) || defaultStart();
     const end = (req.query.end as string) || defaultEnd();
     const groupBy = (req.query.group_by as string) || 'day';
-    const report = await store.getUsageReport({ start, end, groupBy });
+    const venueId = typeof req.query.venue_id === 'string' ? Number(req.query.venue_id) : undefined;
+    const report = await store.getUsageReport({ start, end, groupBy, venueId });
     res.json(report);
   });
 
   router.get('/waste', async (req, res) => {
     const start = (req.query.start as string) || defaultStart();
     const end = (req.query.end as string) || defaultEnd();
-    const report = await store.getWasteReport({ start, end });
+    const venueId = typeof req.query.venue_id === 'string' ? Number(req.query.venue_id) : undefined;
+    const report = await store.getWasteReport({ start, end, venueId });
     res.json(report);
   });
 
@@ -33,7 +35,8 @@ export function createReportRoutes(store: InventoryStore): Router {
     const start = (req.query.start as string) || defaultStart();
     const end = (req.query.end as string) || defaultEnd();
     const groupBy = (req.query.group_by as string) || 'category';
-    const report = await store.getCostReport({ start, end, groupBy });
+    const venueId = typeof req.query.venue_id === 'string' ? Number(req.query.venue_id) : undefined;
+    const report = await store.getCostReport({ start, end, groupBy, venueId });
     res.json(report);
   });
 

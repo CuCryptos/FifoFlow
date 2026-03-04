@@ -8,12 +8,14 @@ export function createTransactionRoutes(store: InventoryStore): Router {
 
   // GET /api/transactions
   router.get('/', async (req, res) => {
-    const { item_id, type, limit = '50', offset = '0' } = req.query;
+    const { item_id, type, limit = '50', offset = '0', venue_id } = req.query;
+    const venueId = typeof venue_id === 'string' ? Number(venue_id) : undefined;
     const transactions = await store.listTransactions({
       item_id: item_id ? Number(item_id) : undefined,
       type: typeof type === 'string' ? type : undefined,
       limit: Number(limit),
       offset: Number(offset),
+      venueId,
     }) as TransactionWithItem[];
     res.json(transactions);
   });
