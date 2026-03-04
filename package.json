@@ -7,7 +7,7 @@
     "packages/client"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c green,blue \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
+    "dev": "npm run build -w packages/shared && concurrently -n server,client -c green,blue \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/server && npm run build --workspace=packages/client",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"

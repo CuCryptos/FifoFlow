@@ -292,6 +292,8 @@ export class SupabaseInventoryStore implements InventoryStore {
       reason: row.reason as TransactionWithItem['reason'],
       notes: row.notes,
       created_at: row.created_at,
+      from_area_id: null,
+      to_area_id: null,
       item_name: row.items?.name ?? '',
       item_unit: row.items?.unit ?? '',
     }));

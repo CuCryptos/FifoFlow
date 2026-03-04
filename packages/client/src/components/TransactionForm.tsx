@@ -46,11 +46,15 @@ export function TransactionForm({ item }: { item: Item }) {
   }, [type, reason]);
 
   useEffect(() => {
-    if (itemStorage && itemStorage.length === 1) {
-      if (type === 'out') setFromAreaId(itemStorage[0].area_id);
-      if (type === 'in') setToAreaId(itemStorage[0].area_id);
+    if (!itemStorage) return;
+    const areasWithStock = itemStorage.filter((s) => s.quantity > 0);
+    if (type === 'out' && areasWithStock.length === 1) {
+      setFromAreaId(areasWithStock[0].area_id);
     }
-  }, [type, itemStorage]);
+    if (type === 'in' && itemStorage.length === 1) {
+      setToAreaId(itemStorage[0].area_id);
+    }
+  }, [type, reason, itemStorage]);
 
   const parsedQty = Number(quantity);
   const hasQty = quantity.trim() !== '' && Number.isFinite(parsedQty) && parsedQty > 0;
@@ -105,10 +109,10 @@ export function TransactionForm({ item }: { item: Item }) {
   };
 
   return (
-    <div className="bg-navy-light border border-border rounded-lg p-4">
-      <h2 className="text-sm font-medium text-text-secondary mb-3">Log Transaction</h2>
+    <div className="bg-bg-card rounded-xl shadow-sm p-5">
+      <h2 className="text-base font-semibold text-text-primary mb-4">Log Transaction</h2>
       <form onSubmit={handleSubmit} className="flex flex-wrap gap-3 items-end">
-        <div className="flex rounded overflow-hidden border border-border">
+        <div className="flex rounded-lg overflow-hidden border border-border">
           {TRANSACTION_TYPES.map((t) => (
             <button
               key={t}
@@ -116,8 +120,8 @@ export function TransactionForm({ item }: { item: Item }) {
               onClick={() => setType(t)}
               className={`px-3 py-2 text-sm font-medium transition-colors ${
                 type === t
-                  ? t === 'in' ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red'
-                  : 'text-text-secondary hover:text-text-primary'
+                  ? t === 'in' ? 'bg-accent-green/10 text-accent-green' : 'bg-accent-red/10 text-accent-red'
+                  : 'text-text-muted hover:text-text-secondary'
               }`}
             >
               {t.toUpperCase()}
@@ -132,12 +136,12 @@ export function TransactionForm({ item }: { item: Item }) {
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
           required
-          className="w-24 bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+          className="w-24 bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         />
         <select
           value={unit}
           onChange={(e) => setUnit(e.target.value as Unit)}
-          className="bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         >
           {unitOptions.map((optionUnit) => (
             <option key={optionUnit} value={optionUnit}>{optionUnit}</option>
@@ -146,7 +150,7 @@ export function TransactionForm({ item }: { item: Item }) {
         <select
           value={reason}
           onChange={(e) => setReason(e.target.value as TransactionReason)}
-          className="bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green"
+          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         >
           {TRANSACTION_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
@@ -157,7 +161,7 @@ export function TransactionForm({ item }: { item: Item }) {
               <select
                 value={fromAreaId ?? ''}
                 onChange={(e) => setFromAreaId(e.target.value ? Number(e.target.value) : null)}
-                className="bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green flex-1"
+                className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo flex-1"
               >
                 <option value="">From Area...</option>
                 {(itemStorage ?? []).filter(is => is.quantity > 0).map((is) => (
@@ -171,7 +175,7 @@ export function TransactionForm({ item }: { item: Item }) {
               <select
                 value={toAreaId ?? ''}
                 onChange={(e) => setToAreaId(e.target.value ? Number(e.target.value) : null)}
-                className="bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-green flex-1"
+                className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo flex-1"
               >
                 <option value="">To Area...</option>
                 {areas.map((area) => (
@@ -187,12 +191,12 @@ export function TransactionForm({ item }: { item: Item }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           required={notesRequired}
-          className="flex-1 min-w-32 bg-navy border border-border rounded px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent-green"
+          className="flex-1 min-w-32 bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
         />
         <button
           type="submit"
           disabled={createTx.isPending}
-          className="bg-accent-green text-navy px-4 py-2 rounded text-sm font-medium hover:opacity-90 disabled:opacity-50"
+          className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-50 transition-colors"
         >
           {createTx.isPending ? 'Logging...' : 'Log'}
         </button>
@@ -201,7 +205,7 @@ export function TransactionForm({ item }: { item: Item }) {
         <div className={`text-xs mt-2 ${convertedQty === null ? 'text-accent-red' : 'text-text-secondary'}`}>
           {helperText}
           {estimatedTotalCost != null && (
-            <span className="ml-2 text-text-primary">
+            <span className="ml-2 font-mono text-text-primary">
               Est. total: {formatCurrency(estimatedTotalCost)}
             </span>
           )}

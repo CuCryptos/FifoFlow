@@ -1,22 +1,51 @@
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @theme {
-  --color-navy: #0F1419;
-  --color-navy-light: #1A2332;
-  --color-navy-lighter: #243044;
-  --color-border: #2D3A4A;
-  --color-text-primary: #E8EAED;
-  --color-text-secondary: #8B95A5;
-  --color-accent-green: #34D399;
-  --color-accent-red: #F87171;
-  --color-accent-amber: #E8A838;
-  --font-mono: 'IBM Plex Mono', monospace;
+  /* Backgrounds */
+  --color-bg-page: #FAFBFC;
+  --color-bg-card: #FFFFFF;
+  --color-bg-table-header: #F8FAFC;
+  --color-bg-hover: #F8FAFC;
+  --color-bg-area-row: #EEF2FF;
+
+  /* Sidebar */
+  --color-sidebar: #0F172A;
+  --color-sidebar-hover: #1E293B;
+  --color-sidebar-active: #334155;
+
+  /* Text */
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
+
+  /* Borders */
+  --color-border: #E2E8F0;
+  --color-border-emphasis: #CBD5E1;
+
+  /* Accents */
+  --color-accent-green: #10B981;
+  --color-accent-red: #EF4444;
+  --color-accent-amber: #F59E0B;
+  --color-accent-indigo: #6366F1;
+  --color-accent-indigo-hover: #4F46E5;
+
+  /* Badge backgrounds */
+  --color-badge-green-bg: #ECFDF5;
+  --color-badge-green-text: #047857;
+  --color-badge-red-bg: #FEF2F2;
+  --color-badge-red-text: #B91C1C;
+  --color-badge-amber-bg: #FFFBEB;
+  --color-badge-amber-text: #B45309;
+
+  /* Typography */
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 body {
-  font-family: var(--font-mono);
-  background-color: var(--color-navy);
+  font-family: var(--font-sans);
+  background-color: var(--color-bg-page);
   color: var(--color-text-primary);
   margin: 0;
 }

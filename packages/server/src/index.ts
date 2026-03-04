@@ -9,6 +9,8 @@ import { createCountSessionRoutes } from './routes/countSessions.js';
 import { createStorageAreaRoutes } from './routes/storageAreas.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +33,17 @@ app.use('/api/storage-areas', createStorageAreaRoutes(store));
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', store: storeDriver });
 });
+
+// In production, serve the Vite-built client
+if (process.env.NODE_ENV === 'production') {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const clientDist = path.join(__dirname, '../../client/dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = typeof err?.status === 'number' ? err.status : 500;

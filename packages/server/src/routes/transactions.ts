@@ -79,12 +79,25 @@ export function createTransactionHandler(store: InventoryStore) {
       }
     }
 
-    // Check source area has sufficient quantity
+    // Validate area existence
     if (from_area_id) {
+      const fromArea = await store.getStorageAreaById(from_area_id);
+      if (!fromArea) {
+        res.status(404).json({ error: 'Source storage area not found' });
+        return;
+      }
+      // Check source area has sufficient quantity
       const areaStock = await store.getItemStorageByArea(item.id, from_area_id);
       const areaQty = areaStock?.quantity ?? 0;
       if (areaQty < normalizedQty) {
         res.status(400).json({ error: 'Insufficient quantity in source area' });
+        return;
+      }
+    }
+    if (to_area_id) {
+      const toArea = await store.getStorageAreaById(to_area_id);
+      if (!toArea) {
+        res.status(404).json({ error: 'Destination storage area not found' });
         return;
       }
     }
