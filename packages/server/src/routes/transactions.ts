@@ -39,7 +39,7 @@ export function createTransactionHandler(store: InventoryStore) {
       return;
     }
 
-    const { type, quantity, unit, reason, notes, from_area_id, to_area_id } = parsed.data;
+    const { type, quantity, unit, reason, notes, from_area_id, to_area_id, vendor_price_id } = parsed.data;
     const transactionUnit = (unit ?? item.unit) as Unit;
     const normalizedQty = tryConvertQuantity(
       quantity,
@@ -62,9 +62,20 @@ export function createTransactionHandler(store: InventoryStore) {
       return;
     }
 
-    // Calculate estimated cost from item's unit price
+    // If vendor_price_id provided, validate and use its pricing
+    let vendorPriceId: number | null = vendor_price_id ?? null;
     let estimatedCost: number | null = null;
-    if (item.order_unit_price != null) {
+
+    if (vendorPriceId) {
+      const vp = await store.getVendorPriceById(vendorPriceId);
+      if (!vp || vp.item_id !== item.id) {
+        res.status(400).json({ error: 'Invalid vendor price for this item.' });
+        return;
+      }
+      const perBaseUnitCost = vp.order_unit_price / ((vp.qty_per_unit != null && vp.qty_per_unit > 0) ? vp.qty_per_unit : 1);
+      estimatedCost = Math.round(normalizedQty * perBaseUnitCost * 100) / 100;
+    } else if (item.order_unit_price != null) {
+      // Fall back to item's default pricing
       const perBaseUnitCost = item.order_unit_price / ((item.qty_per_unit != null && item.qty_per_unit > 0) ? item.qty_per_unit : 1);
       estimatedCost = Math.round(normalizedQty * perBaseUnitCost * 100) / 100;
     }
@@ -121,6 +132,7 @@ export function createTransactionHandler(store: InventoryStore) {
       fromAreaId: from_area_id ?? null,
       toAreaId: to_area_id ?? null,
       estimatedCost,
+      vendorPriceId,
     });
     res.status(201).json(result);
   };

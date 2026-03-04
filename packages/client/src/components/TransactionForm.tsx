@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useCreateTransaction } from '../hooks/useTransactions';
 import { useStorageAreas, useItemStorage } from '../hooks/useStorageAreas';
+import { useVendorPrices } from '../hooks/useVendorPrices';
 import { TRANSACTION_TYPES, TRANSACTION_REASONS } from '@fifoflow/shared';
 import { getCompatibleUnits, tryConvertQuantity } from '@fifoflow/shared';
 import type { Item } from '@fifoflow/shared';
@@ -23,9 +24,11 @@ export function TransactionForm({ item }: { item: Item }) {
   const [unit, setUnit] = useState<Unit>(item.unit);
   const [fromAreaId, setFromAreaId] = useState<number | null>(null);
   const [toAreaId, setToAreaId] = useState<number | null>(null);
+  const [vendorPriceId, setVendorPriceId] = useState<number | null>(null);
   const createTx = useCreateTransaction();
   const { data: areas } = useStorageAreas();
   const { data: itemStorage } = useItemStorage(item.id);
+  const { data: vendorPrices } = useVendorPrices(item.id);
   const packaging = {
     baseUnit: item.unit,
     orderUnit: item.order_unit,
@@ -62,10 +65,13 @@ export function TransactionForm({ item }: { item: Item }) {
   const convertedQty = hasQty
     ? tryConvertQuantity(parsedQty, unit, item.unit, packaging)
     : null;
+  const selectedVp = vendorPriceId ? vendorPrices?.find((vp) => vp.id === vendorPriceId) : null;
+  const effectiveOrderUnitPrice = selectedVp ? selectedVp.order_unit_price : item.order_unit_price;
+  const effectiveQtyPerUnit = selectedVp ? selectedVp.qty_per_unit : item.qty_per_unit;
   const priceUnit = item.inner_unit ?? item.order_unit ?? item.unit;
   const insideUnitPrice =
-    item.order_unit_price != null
-      ? item.order_unit_price / ((item.qty_per_unit != null && item.qty_per_unit > 0) ? item.qty_per_unit : 1)
+    effectiveOrderUnitPrice != null
+      ? effectiveOrderUnitPrice / ((effectiveQtyPerUnit != null && effectiveQtyPerUnit > 0) ? effectiveQtyPerUnit : 1)
       : null;
   const priceUnitFactor = hasQty
     ? tryConvertQuantity(1, unit, priceUnit, packaging)
@@ -95,6 +101,7 @@ export function TransactionForm({ item }: { item: Item }) {
           notes: notes || null,
           from_area_id: fromAreaId,
           to_area_id: toAreaId,
+          vendor_price_id: vendorPriceId,
         },
       },
       {
@@ -103,6 +110,7 @@ export function TransactionForm({ item }: { item: Item }) {
           setNotes('');
           setFromAreaId(null);
           setToAreaId(null);
+          setVendorPriceId(null);
         },
       }
     );
@@ -184,6 +192,21 @@ export function TransactionForm({ item }: { item: Item }) {
               </select>
             )}
           </>
+        )}
+        {/* Vendor Source dropdown — shown when receiving and vendor prices exist */}
+        {type === 'in' && reason === 'Received' && vendorPrices && vendorPrices.length > 0 && (
+          <select
+            value={vendorPriceId ?? ''}
+            onChange={(e) => setVendorPriceId(e.target.value ? Number(e.target.value) : null)}
+            className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
+          >
+            <option value="">(Item default pricing)</option>
+            {vendorPrices.map((vp) => (
+              <option key={vp.id} value={vp.id}>
+                {vp.vendor_name}{vp.vendor_item_name ? ` — ${vp.vendor_item_name}` : ''} (${vp.order_unit_price.toFixed(2)}/{vp.order_unit ?? 'unit'})
+              </option>
+            ))}
+          </select>
         )}
         <input
           type="text"

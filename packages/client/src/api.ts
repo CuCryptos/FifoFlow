@@ -12,6 +12,7 @@ import type {
   ReorderSuggestion,
   StorageArea,
   Vendor,
+  VendorPrice,
   Venue,
   Order,
   OrderWithVendor,
@@ -24,9 +25,11 @@ import type {
   CreateCountSessionInput,
   CreateStorageAreaInput,
   CreateVendorInput,
+  CreateVendorPriceInput,
   CreateVenueInput,
   CreateOrderInput,
   UpdateOrderInput,
+  UpdateVendorPriceInput,
   RecordCountEntryInput,
   SetItemCountInput,
   UpdateItemInput,
@@ -113,6 +116,16 @@ export const api = {
       fetchJson<Venue>(`/venues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/venues/${id}`, { method: 'DELETE' }),
+  },
+  vendorPrices: {
+    list: (itemId: number) =>
+      fetchJson<VendorPrice[]>(`/items/${itemId}/vendor-prices`),
+    create: (itemId: number, data: CreateVendorPriceInput) =>
+      fetchJson<VendorPrice>(`/items/${itemId}/vendor-prices`, { method: 'POST', body: JSON.stringify(data) }),
+    update: (itemId: number, id: number, data: UpdateVendorPriceInput) =>
+      fetchJson<VendorPrice>(`/items/${itemId}/vendor-prices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (itemId: number, id: number) =>
+      fetchJson<void>(`/items/${itemId}/vendor-prices/${id}`, { method: 'DELETE' }),
   },
   orders: {
     list: () => fetchJson<OrderWithVendor[]>('/orders'),

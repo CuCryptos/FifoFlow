@@ -9,6 +9,7 @@ import type {
   CreateItemInput,
   CreateOrderInput,
   CreateStorageAreaInput,
+  CreateVendorPriceInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
@@ -23,11 +24,13 @@ import type {
   UpdateItemInput,
   UpdateOrderInput,
   UpdateStorageAreaInput,
+  UpdateVendorPriceInput,
   UsageReport,
   Venue,
   CreateVenueInput,
   UpdateVenueInput,
   Vendor,
+  VendorPrice,
   CreateVendorInput,
   UpdateVendorInput,
   WasteReport,
@@ -313,6 +316,7 @@ export class SupabaseInventoryStore implements InventoryStore {
       from_area_id: null,
       to_area_id: null,
       estimated_cost: null,
+      vendor_price_id: null,
       item_name: row.items?.name ?? '',
       item_unit: row.items?.unit ?? '',
     }));
@@ -546,6 +550,13 @@ export class SupabaseInventoryStore implements InventoryStore {
   async updateVendor(_id: number, _input: UpdateVendorInput): Promise<Vendor> { return this.notImplemented('updateVendor'); }
   async deleteVendor(_id: number): Promise<void> { return this.notImplemented('deleteVendor'); }
   async countItemsForVendor(_vendorId: number): Promise<number> { return 0; }
+
+  // Vendor Prices — stubs (not yet implemented for Supabase)
+  async listVendorPricesForItem(_itemId: number): Promise<VendorPrice[]> { return []; }
+  async getVendorPriceById(_id: number): Promise<VendorPrice | undefined> { return undefined; }
+  async createVendorPrice(_itemId: number, _input: CreateVendorPriceInput): Promise<VendorPrice> { return this.notImplemented('createVendorPrice'); }
+  async updateVendorPrice(_id: number, _input: UpdateVendorPriceInput): Promise<VendorPrice> { return this.notImplemented('updateVendorPrice'); }
+  async deleteVendorPrice(_id: number): Promise<void> { return this.notImplemented('deleteVendorPrice'); }
 
   // Venues — stubs (not yet implemented for Supabase)
 

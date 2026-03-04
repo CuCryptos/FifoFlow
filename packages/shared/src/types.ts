@@ -38,6 +38,7 @@ export interface Transaction {
   from_area_id: number | null;
   to_area_id: number | null;
   estimated_cost: number | null;
+  vendor_price_id: number | null;
   created_at: string;
 }
 
@@ -151,6 +152,20 @@ export interface Vendor {
   id: number;
   name: string;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VendorPrice {
+  id: number;
+  item_id: number;
+  vendor_id: number;
+  vendor_name?: string;
+  vendor_item_name: string | null;
+  order_unit: Unit | null;
+  order_unit_price: number;
+  qty_per_unit: number | null;
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 }

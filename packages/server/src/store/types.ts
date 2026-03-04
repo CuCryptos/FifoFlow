@@ -9,6 +9,7 @@ import type {
   CreateItemInput,
   CreateOrderInput,
   CreateStorageAreaInput,
+  CreateVendorPriceInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
@@ -26,11 +27,13 @@ import type {
   UpdateItemInput,
   UpdateOrderInput,
   UpdateStorageAreaInput,
+  UpdateVendorPriceInput,
   UsageReport,
   Venue,
   CreateVenueInput,
   UpdateVenueInput,
   Vendor,
+  VendorPrice,
   CreateVendorInput,
   UpdateVendorInput,
   WasteReport,
@@ -67,6 +70,7 @@ export interface InsertTransactionAndAdjustQtyInput {
   fromAreaId?: number | null;
   toAreaId?: number | null;
   estimatedCost?: number | null;
+  vendorPriceId?: number | null;
 }
 
 export interface SetItemCountWithAdjustmentInput {
@@ -140,6 +144,13 @@ export interface InventoryStore {
   updateVendor(id: number, input: UpdateVendorInput): Promise<Vendor>;
   deleteVendor(id: number): Promise<void>;
   countItemsForVendor(vendorId: number): Promise<number>;
+
+  // Vendor Prices
+  listVendorPricesForItem(itemId: number): Promise<VendorPrice[]>;
+  getVendorPriceById(id: number): Promise<VendorPrice | undefined>;
+  createVendorPrice(itemId: number, input: CreateVendorPriceInput): Promise<VendorPrice>;
+  updateVendorPrice(id: number, input: UpdateVendorPriceInput): Promise<VendorPrice>;
+  deleteVendorPrice(id: number): Promise<void>;
 
   // Orders
   listOrders(): Promise<OrderWithVendor[]>;

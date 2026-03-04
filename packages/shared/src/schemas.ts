@@ -46,6 +46,7 @@ export const createTransactionSchema = z.object({
   notes: z.string().max(500).nullable().optional(),
   from_area_id: z.number().int().positive().nullable().optional(),
   to_area_id: z.number().int().positive().nullable().optional(),
+  vendor_price_id: z.number().int().positive().nullable().optional(),
 }).superRefine((data, ctx) => {
   const noteRequiredReasons = new Set(['Wasted', 'Adjustment', 'Transferred']);
   if (noteRequiredReasons.has(data.reason)) {
@@ -159,8 +160,27 @@ export const updateOrderStatusSchema = z.object({
   status: z.enum(['sent'] as const),
 });
 
+export const createVendorPriceSchema = z.object({
+  vendor_id: z.number().int().positive(),
+  vendor_item_name: z.string().max(200).nullable().optional(),
+  order_unit: z.enum(UNITS).nullable().optional(),
+  order_unit_price: z.number().min(0),
+  qty_per_unit: z.number().min(0).nullable().optional(),
+  is_default: z.boolean().optional().default(false),
+});
+
+export const updateVendorPriceSchema = z.object({
+  vendor_item_name: z.string().max(200).nullable().optional(),
+  order_unit: z.enum(UNITS).nullable().optional(),
+  order_unit_price: z.number().min(0).optional(),
+  qty_per_unit: z.number().min(0).nullable().optional(),
+  is_default: z.boolean().optional(),
+});
+
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
+export type CreateVendorPriceInput = z.infer<typeof createVendorPriceSchema>;
+export type UpdateVendorPriceInput = z.infer<typeof updateVendorPriceSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;

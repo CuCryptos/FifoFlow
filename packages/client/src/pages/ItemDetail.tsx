@@ -6,6 +6,7 @@ import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
 import type { Category, Unit } from '@fifoflow/shared';
 import { TransactionForm } from '../components/TransactionForm';
+import { VendorPricesSection } from '../components/VendorPricesSection';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '\u2014';
@@ -536,6 +537,9 @@ export function ItemDetail() {
           )}
         </div>
       </div>
+
+      {/* Vendor Prices */}
+      <VendorPricesSection itemId={item.id} />
 
       {/* Transaction history */}
       <div className="bg-bg-card rounded-xl shadow-sm p-5">

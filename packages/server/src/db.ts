@@ -152,6 +152,28 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
     CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders(vendor_id);
     CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+
+    CREATE TABLE IF NOT EXISTS vendor_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+      vendor_item_name TEXT,
+      order_unit TEXT,
+      order_unit_price REAL NOT NULL,
+      qty_per_unit REAL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vendor_prices_item_id ON vendor_prices(item_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_prices_vendor_id ON vendor_prices(vendor_id);
+
+    CREATE TRIGGER IF NOT EXISTS update_vendor_price_timestamp
+    AFTER UPDATE ON vendor_prices
+    BEGIN
+      UPDATE vendor_prices SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
   `);
 
   // Migrations — add inventory fields incrementally
@@ -227,6 +249,20 @@ export function initializeDb(db: Database.Database): void {
   if (!txColumnNames.includes('estimated_cost')) {
     db.exec('ALTER TABLE transactions ADD COLUMN estimated_cost REAL;');
   }
+  if (!txColumnNames.includes('vendor_price_id')) {
+    db.exec('ALTER TABLE transactions ADD COLUMN vendor_price_id INTEGER REFERENCES vendor_prices(id) ON DELETE SET NULL;');
+  }
+
+  // Backfill vendor_prices from existing item vendor+pricing data
+  db.exec(`
+    INSERT OR IGNORE INTO vendor_prices (item_id, vendor_id, order_unit, order_unit_price, qty_per_unit, is_default)
+    SELECT id, vendor_id, order_unit, order_unit_price, qty_per_unit, 1
+    FROM items
+    WHERE vendor_id IS NOT NULL AND order_unit_price IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM vendor_prices vp WHERE vp.item_id = items.id AND vp.vendor_id = items.vendor_id
+      )
+  `);
 
   // Seed default "General" storage area and populate item_storage
   const generalArea = db.prepare(

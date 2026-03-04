@@ -11,6 +11,7 @@ import type {
   CreateItemInput,
   CreateOrderInput,
   CreateStorageAreaInput,
+  CreateVendorPriceInput,
   DashboardStats,
   ItemCountAdjustmentResult,
   Item,
@@ -25,12 +26,14 @@ import type {
   UpdateItemInput,
   UpdateOrderInput,
   UpdateStorageAreaInput,
+  UpdateVendorPriceInput,
   UsageReport,
   UsageRow,
   Venue,
   CreateVenueInput,
   UpdateVenueInput,
   Vendor,
+  VendorPrice,
   CreateVendorInput,
   UpdateVendorInput,
   WasteReport,
@@ -203,8 +206,8 @@ export class SqliteInventoryStore implements InventoryStore {
     const execute = this.db.transaction(() => {
       // Insert transaction with area references
       const result = this.db.prepare(
-        'INSERT INTO transactions (item_id, type, quantity, reason, notes, from_area_id, to_area_id, estimated_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(input.itemId, input.type, input.quantity, input.reason, input.notes, input.fromAreaId ?? null, input.toAreaId ?? null, input.estimatedCost ?? null);
+        'INSERT INTO transactions (item_id, type, quantity, reason, notes, from_area_id, to_area_id, estimated_cost, vendor_price_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(input.itemId, input.type, input.quantity, input.reason, input.notes, input.fromAreaId ?? null, input.toAreaId ?? null, input.estimatedCost ?? null, input.vendorPriceId ?? null);
 
       if (!input.fromAreaId && !input.toAreaId) {
         // Legacy path — no area references, just update current_qty directly
@@ -736,10 +739,143 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async countItemsForVendor(vendorId: number): Promise<number> {
-    const row = this.db.prepare(
+    const itemRow = this.db.prepare(
       'SELECT COUNT(*) as count FROM items WHERE vendor_id = ?'
     ).get(vendorId) as { count: number };
-    return row.count;
+    const vpRow = this.db.prepare(
+      'SELECT COUNT(*) as count FROM vendor_prices WHERE vendor_id = ?'
+    ).get(vendorId) as { count: number };
+    return itemRow.count + vpRow.count;
+  }
+
+  // ── Vendor Prices ──────────────────────────────────────────────────
+
+  private vendorPriceSelectSql = `
+    SELECT vp.*, v.name as vendor_name
+    FROM vendor_prices vp
+    JOIN vendors v ON v.id = vp.vendor_id
+  `;
+
+  private mapVendorPrice(row: any): VendorPrice {
+    return {
+      ...row,
+      is_default: row.is_default === 1,
+    };
+  }
+
+  async listVendorPricesForItem(itemId: number): Promise<VendorPrice[]> {
+    const rows = this.db.prepare(
+      `${this.vendorPriceSelectSql} WHERE vp.item_id = ? ORDER BY vp.is_default DESC, v.name ASC`
+    ).all(itemId) as any[];
+    return rows.map(this.mapVendorPrice);
+  }
+
+  async getVendorPriceById(id: number): Promise<VendorPrice | undefined> {
+    const row = this.db.prepare(
+      `${this.vendorPriceSelectSql} WHERE vp.id = ?`
+    ).get(id) as any | undefined;
+    return row ? this.mapVendorPrice(row) : undefined;
+  }
+
+  async createVendorPrice(itemId: number, input: CreateVendorPriceInput): Promise<VendorPrice> {
+    const execute = this.db.transaction(() => {
+      if (input.is_default) {
+        this.db.prepare('UPDATE vendor_prices SET is_default = 0 WHERE item_id = ?').run(itemId);
+      }
+
+      const result = this.db.prepare(
+        `INSERT INTO vendor_prices (item_id, vendor_id, vendor_item_name, order_unit, order_unit_price, qty_per_unit, is_default)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        itemId,
+        input.vendor_id,
+        input.vendor_item_name ?? null,
+        input.order_unit ?? null,
+        input.order_unit_price,
+        input.qty_per_unit ?? null,
+        input.is_default ? 1 : 0,
+      );
+
+      if (input.is_default) {
+        this.syncDefaultToItem(itemId, {
+          vendor_id: input.vendor_id,
+          order_unit: input.order_unit ?? null,
+          order_unit_price: input.order_unit_price,
+          qty_per_unit: input.qty_per_unit ?? null,
+        });
+      }
+
+      return this.db.prepare(
+        `${this.vendorPriceSelectSql} WHERE vp.id = ?`
+      ).get(result.lastInsertRowid) as any;
+    });
+
+    return this.mapVendorPrice(execute());
+  }
+
+  async updateVendorPrice(id: number, input: UpdateVendorPriceInput): Promise<VendorPrice> {
+    const existing = this.db.prepare('SELECT * FROM vendor_prices WHERE id = ?').get(id) as any;
+    if (!existing) throw new Error('Vendor price not found');
+
+    const execute = this.db.transaction(() => {
+      if (input.is_default) {
+        this.db.prepare('UPDATE vendor_prices SET is_default = 0 WHERE item_id = ?').run(existing.item_id);
+      }
+
+      const fields = Object.entries(input).filter(([, v]) => v !== undefined);
+      if (fields.length > 0) {
+        const setClauses = fields.map(([key]) => {
+          if (key === 'is_default') return 'is_default = ?';
+          return `${key} = ?`;
+        }).join(', ');
+        const values = fields.map(([key, v]) => key === 'is_default' ? (v ? 1 : 0) : v);
+        this.db.prepare(`UPDATE vendor_prices SET ${setClauses} WHERE id = ?`).run(...values, id);
+      }
+
+      const updated = this.db.prepare('SELECT * FROM vendor_prices WHERE id = ?').get(id) as any;
+      if (updated.is_default === 1) {
+        this.syncDefaultToItem(existing.item_id, {
+          vendor_id: updated.vendor_id,
+          order_unit: updated.order_unit,
+          order_unit_price: updated.order_unit_price,
+          qty_per_unit: updated.qty_per_unit,
+        });
+      }
+
+      return this.db.prepare(
+        `${this.vendorPriceSelectSql} WHERE vp.id = ?`
+      ).get(id) as any;
+    });
+
+    return this.mapVendorPrice(execute());
+  }
+
+  async deleteVendorPrice(id: number): Promise<void> {
+    const existing = this.db.prepare('SELECT * FROM vendor_prices WHERE id = ?').get(id) as any;
+    if (!existing) return;
+
+    const execute = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM vendor_prices WHERE id = ?').run(id);
+
+      if (existing.is_default === 1) {
+        this.db.prepare(
+          'UPDATE items SET vendor_id = NULL, order_unit = NULL, order_unit_price = NULL, qty_per_unit = NULL WHERE id = ?'
+        ).run(existing.item_id);
+      }
+    });
+
+    execute();
+  }
+
+  private syncDefaultToItem(itemId: number, fields: {
+    vendor_id: number;
+    order_unit: string | null;
+    order_unit_price: number;
+    qty_per_unit: number | null;
+  }): void {
+    this.db.prepare(
+      'UPDATE items SET vendor_id = ?, order_unit = ?, order_unit_price = ?, qty_per_unit = ? WHERE id = ?'
+    ).run(fields.vendor_id, fields.order_unit, fields.order_unit_price, fields.qty_per_unit, itemId);
   }
 
   // ── Venues ──────────────────────────────────────────────────

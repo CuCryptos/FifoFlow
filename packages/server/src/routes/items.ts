@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, tryConvertQuantity } from '@fifoflow/shared';
 import type { Item, ItemCountAdjustmentResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
 import { createTransactionHandler } from './transactions.js';
+import { createVendorPriceRoutes } from './vendorPrices.js';
 import type { InventoryStore } from '../store/types.js';
 
 export function createItemRoutes(store: InventoryStore): Router {
@@ -213,6 +214,9 @@ export function createItemRoutes(store: InventoryStore): Router {
 
   // POST /api/items/:id/transactions
   router.post('/:id/transactions', createTransactionHandler(store));
+
+  // Vendor prices sub-router
+  router.use('/:id/vendor-prices', createVendorPriceRoutes(store));
 
   return router;
 }
