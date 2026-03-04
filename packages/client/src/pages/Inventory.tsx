@@ -593,16 +593,10 @@ export function Inventory() {
               {paginatedItems.map((item) => {
                 const itemAreas = storageByItem.get(item.id) ?? [];
                 const hasAreas = itemAreas.length > 0;
-                const insideUnitPrice =
-                  item.order_unit_price != null &&
-                  item.qty_per_unit != null &&
-                  item.qty_per_unit > 0
-                    ? item.order_unit_price / item.qty_per_unit
-                    : item.order_unit_price;
                 const insideUnitLabel = item.inner_unit ?? item.order_unit ?? item.unit;
                 const totalValue =
-                  insideUnitPrice != null && item.current_qty > 0
-                    ? insideUnitPrice * item.current_qty
+                  item.order_unit_price != null && item.current_qty > 0
+                    ? item.order_unit_price * item.current_qty
                     : null;
 
                 return (

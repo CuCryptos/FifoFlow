@@ -26,7 +26,7 @@ function buildRows(items: Item[], areaLookup: Map<number, string>): RowData[] {
         ? item.order_unit_price / item.qty_per_unit
         : item.order_unit_price;
     const totalValue =
-      unitPrice != null && item.current_qty > 0 ? unitPrice * item.current_qty : null;
+      item.order_unit_price != null && item.current_qty > 0 ? item.order_unit_price * item.current_qty : null;
 
     return {
       Name: item.name,
