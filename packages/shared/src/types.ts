@@ -178,3 +178,42 @@ export interface OrderDetail extends Order {
   vendor_name: string;
   items: OrderItem[];
 }
+
+export interface UsageRow {
+  period: string;
+  item_name: string;
+  category: string;
+  in_qty: number;
+  out_qty: number;
+  tx_count: number;
+}
+
+export interface UsageReport {
+  rows: UsageRow[];
+  totals: { in_qty: number; out_qty: number; tx_count: number };
+}
+
+export interface WasteRow {
+  item_name: string;
+  category: string;
+  quantity: number;
+  estimated_cost: number;
+}
+
+export interface WasteReport {
+  rows: WasteRow[];
+  totals: { quantity: number; estimated_cost: number };
+}
+
+export interface CostRow {
+  group_name: string;
+  in_cost: number;
+  out_cost: number;
+  net_cost: number;
+  tx_count: number;
+}
+
+export interface CostReport {
+  rows: CostRow[];
+  totals: { in_cost: number; out_cost: number; net_cost: number };
+}
