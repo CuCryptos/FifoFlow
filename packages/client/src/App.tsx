@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './contexts/ToastContext';
+import { VenueProvider } from './contexts/VenueContext';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
@@ -20,19 +21,21 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/inventory/:id" element={<ItemDetail />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/activity" element={<Activity />} />
-              <Route path="/counts" element={<Counts />} />
-              <Route path="/reports" element={<Reports />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <VenueProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/inventory" element={<Inventory />} />
+                <Route path="/inventory/:id" element={<ItemDetail />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/activity" element={<Activity />} />
+                <Route path="/counts" element={<Counts />} />
+                <Route path="/reports" element={<Reports />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </VenueProvider>
       </ToastProvider>
     </QueryClientProvider>
   );

@@ -12,6 +12,7 @@ import type {
   ReorderSuggestion,
   StorageArea,
   Vendor,
+  Venue,
   Order,
   OrderWithVendor,
   OrderDetail,
@@ -23,6 +24,7 @@ import type {
   CreateCountSessionInput,
   CreateStorageAreaInput,
   CreateVendorInput,
+  CreateVenueInput,
   CreateOrderInput,
   UpdateOrderInput,
   RecordCountEntryInput,
@@ -30,6 +32,7 @@ import type {
   UpdateItemInput,
   UpdateStorageAreaInput,
   UpdateVendorInput,
+  UpdateVenueInput,
   CreateTransactionInput,
 } from '@fifoflow/shared';
 
@@ -51,14 +54,18 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   items: {
-    list: (params?: { search?: string; category?: string }) => {
+    list: (params?: { search?: string; category?: string; venue_id?: number }) => {
       const qs = new URLSearchParams();
       if (params?.search) qs.set('search', params.search);
       if (params?.category) qs.set('category', params.category);
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
       const query = qs.toString();
       return fetchJson<Item[]>(`/items${query ? `?${query}` : ''}`);
     },
-    reorderSuggestions: () => fetchJson<ReorderSuggestion[]>('/items/reorder-suggestions'),
+    reorderSuggestions: (venueId?: number) => {
+      const qs = venueId ? `?venue_id=${venueId}` : '';
+      return fetchJson<ReorderSuggestion[]>(`/items/reorder-suggestions${qs}`);
+    },
     get: (id: number) => fetchJson<{ item: Item; transactions: Transaction[] }>(`/items/${id}`),
     create: (data: CreateItemInput) =>
       fetchJson<Item>('/items', { method: 'POST', body: JSON.stringify(data) }),
@@ -97,6 +104,16 @@ export const api = {
     delete: (id: number) =>
       fetchJson<void>(`/vendors/${id}`, { method: 'DELETE' }),
   },
+  venues: {
+    list: () => fetchJson<Venue[]>('/venues'),
+    get: (id: number) => fetchJson<Venue>(`/venues/${id}`),
+    create: (data: CreateVenueInput) =>
+      fetchJson<Venue>('/venues', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: UpdateVenueInput) =>
+      fetchJson<Venue>(`/venues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/venues/${id}`, { method: 'DELETE' }),
+  },
   orders: {
     list: () => fetchJson<OrderWithVendor[]>('/orders'),
     get: (id: number) => fetchJson<OrderDetail>(`/orders/${id}`),
@@ -124,12 +141,13 @@ export const api = {
       fetchJson<CountSession>(`/count-sessions/${sessionId}/close`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
   },
   transactions: {
-    list: (params?: { item_id?: number; type?: string; limit?: number; offset?: number }) => {
+    list: (params?: { item_id?: number; type?: string; limit?: number; offset?: number; venue_id?: number }) => {
       const qs = new URLSearchParams();
       if (params?.item_id) qs.set('item_id', String(params.item_id));
       if (params?.type) qs.set('type', params.type);
       if (params?.limit) qs.set('limit', String(params.limit));
       if (params?.offset) qs.set('offset', String(params.offset));
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
       const query = qs.toString();
       return fetchJson<TransactionWithItem[]>(`/transactions${query ? `?${query}` : ''}`);
     },
@@ -140,21 +158,27 @@ export const api = {
       ),
   },
   dashboard: {
-    stats: () => fetchJson<DashboardStats>('/dashboard/stats'),
+    stats: (venueId?: number) => {
+      const qs = venueId ? `?venue_id=${venueId}` : '';
+      return fetchJson<DashboardStats>(`/dashboard/stats${qs}`);
+    },
   },
   reports: {
-    usage: (params: { start: string; end: string; group_by?: string }) => {
+    usage: (params: { start: string; end: string; group_by?: string; venue_id?: number }) => {
       const qs = new URLSearchParams({ start: params.start, end: params.end });
       if (params.group_by) qs.set('group_by', params.group_by);
+      if (params.venue_id) qs.set('venue_id', String(params.venue_id));
       return fetchJson<UsageReport>(`/reports/usage?${qs}`);
     },
-    waste: (params: { start: string; end: string }) => {
+    waste: (params: { start: string; end: string; venue_id?: number }) => {
       const qs = new URLSearchParams({ start: params.start, end: params.end });
+      if (params.venue_id) qs.set('venue_id', String(params.venue_id));
       return fetchJson<WasteReport>(`/reports/waste?${qs}`);
     },
-    cost: (params: { start: string; end: string; group_by?: string }) => {
+    cost: (params: { start: string; end: string; group_by?: string; venue_id?: number }) => {
       const qs = new URLSearchParams({ start: params.start, end: params.end });
       if (params.group_by) qs.set('group_by', params.group_by);
+      if (params.venue_id) qs.set('venue_id', String(params.venue_id));
       return fetchJson<CostReport>(`/reports/cost?${qs}`);
     },
   },

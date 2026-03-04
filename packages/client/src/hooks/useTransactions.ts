@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { CreateTransactionInput } from '@fifoflow/shared';
 
-export function useTransactions(params?: { item_id?: number; type?: string; limit?: number }) {
+export function useTransactions(params?: { item_id?: number; type?: string; limit?: number; venue_id?: number }) {
   return useQuery({
     queryKey: ['transactions', params],
     queryFn: () => api.transactions.list(params),

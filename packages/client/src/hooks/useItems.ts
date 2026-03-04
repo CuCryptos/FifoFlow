@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { CreateItemInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
 
-export function useItems(params?: { search?: string; category?: string }) {
+export function useItems(params?: { search?: string; category?: string; venue_id?: number }) {
   return useQuery({
     queryKey: ['items', params],
     queryFn: () => api.items.list(params),
@@ -16,10 +16,10 @@ export function useItem(id: number) {
   });
 }
 
-export function useReorderSuggestions() {
+export function useReorderSuggestions(venueId?: number) {
   return useQuery({
-    queryKey: ['items', 'reorder-suggestions'],
-    queryFn: () => api.items.reorderSuggestions(),
+    queryKey: ['items', 'reorder-suggestions', venueId],
+    queryFn: () => api.items.reorderSuggestions(venueId),
   });
 }
 

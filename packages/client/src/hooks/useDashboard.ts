@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 
-export function useDashboardStats() {
+export function useDashboardStats(venueId?: number) {
   return useQuery({
-    queryKey: ['dashboard', 'stats'],
-    queryFn: () => api.dashboard.stats(),
+    queryKey: ['dashboard', 'stats', venueId],
+    queryFn: () => api.dashboard.stats(venueId),
     refetchInterval: 30000,
   });
 }
