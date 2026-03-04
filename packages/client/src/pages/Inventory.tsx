@@ -475,11 +475,11 @@ export function Inventory() {
       {isLoading ? (
         <div className="text-text-secondary text-sm">Loading...</div>
       ) : itemsToRender.length > 0 ? (
-        <div className="bg-bg-card rounded-xl shadow-sm overflow-x-auto">
+        <div className="bg-bg-card rounded-xl shadow-sm overflow-x-auto max-h-[calc(100vh-16rem)] overflow-y-auto">
           <table className="min-w-[1200px] w-full text-sm whitespace-nowrap">
             <thead>
               {/* Row 1 — Group headers */}
-              <tr className="bg-bg-page">
+              <tr className="bg-bg-page sticky top-0 z-20">
                 <th colSpan={7} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
                   Stock
                 </th>
@@ -503,7 +503,7 @@ export function Inventory() {
                 </th>
               </tr>
               {/* Row 2 — Column headers */}
-              <tr className="bg-bg-table-header text-text-secondary text-left">
+              <tr className="bg-bg-table-header text-text-secondary text-left sticky top-[29px] z-20 shadow-[0_1px_0_0_var(--color-border)]">
                 <SortHeader label="Name" field="name" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
                 <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
