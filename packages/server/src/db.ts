@@ -76,6 +76,34 @@ export function initializeDb(db: Database.Database): void {
       UNIQUE(item_id, area_id)
     );
 
+    CREATE TABLE IF NOT EXISTS vendors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vendor_id INTEGER NOT NULL REFERENCES vendors(id),
+      status TEXT NOT NULL CHECK(status IN ('draft', 'sent')) DEFAULT 'draft',
+      notes TEXT,
+      total_estimated_cost REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      quantity REAL NOT NULL,
+      unit TEXT NOT NULL,
+      unit_price REAL NOT NULL,
+      line_total REAL NOT NULL
+    );
+
     CREATE TRIGGER IF NOT EXISTS update_item_timestamp
     AFTER UPDATE ON items
     BEGIN
@@ -88,6 +116,18 @@ export function initializeDb(db: Database.Database): void {
       UPDATE storage_areas SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
+    CREATE TRIGGER IF NOT EXISTS update_vendor_timestamp
+    AFTER UPDATE ON vendors
+    BEGIN
+      UPDATE vendors SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_order_timestamp
+    AFTER UPDATE ON orders
+    BEGIN
+      UPDATE orders SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
     CREATE INDEX IF NOT EXISTS idx_transactions_item_id ON transactions(item_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
     CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
@@ -97,6 +137,9 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_count_session_items_item_id ON count_session_items(item_id);
     CREATE INDEX IF NOT EXISTS idx_item_storage_item_id ON item_storage(item_id);
     CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders(vendor_id);
+    CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+    CREATE INDEX IF NOT EXISTS idx_items_vendor_id ON items(vendor_id);
   `);
 
   // Migrations — add inventory fields incrementally
@@ -119,6 +162,7 @@ export function initializeDb(db: Database.Database): void {
   addColumnIfMissing('item_size', 'TEXT');
   addColumnIfMissing('reorder_level', 'REAL');
   addColumnIfMissing('reorder_qty', 'REAL');
+  addColumnIfMissing('vendor_id', 'INTEGER REFERENCES vendors(id) ON DELETE SET NULL');
 
   const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;
   const sessionColumnNames = sessionColumns.map((c) => c.name);
