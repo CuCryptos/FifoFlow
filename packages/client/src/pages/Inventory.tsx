@@ -572,6 +572,71 @@ export function Inventory() {
         </div>
       )}
 
+      {/* Selection actions bar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-bg-card rounded-xl shadow-sm px-4 py-3 flex items-center gap-4 flex-wrap">
+          <span className="text-sm font-medium text-text-primary">
+            {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
+          </span>
+
+          {/* Category reassign */}
+          <div className="flex items-center gap-2">
+            <select
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+            >
+              <option value="">Reassign category…</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                if (!bulkCategory) return;
+                bulkUpdate.mutate(
+                  { ids: Array.from(selectedIds), updates: { category: bulkCategory } },
+                  {
+                    onSuccess: (data) => {
+                      toast(`Updated ${data.updated} item${data.updated !== 1 ? 's' : ''} to ${bulkCategory}`, 'success');
+                      setSelectedIds(new Set());
+                      setBulkCategory('');
+                    },
+                    onError: (err) => {
+                      toast(`Failed to update: ${err.message}`, 'error');
+                    },
+                  },
+                );
+              }}
+              disabled={!bulkCategory || bulkUpdate.isPending}
+              className="bg-accent-indigo text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Apply
+            </button>
+          </div>
+
+          <div className="ml-auto flex gap-2">
+            {selectedIds.size >= 2 && (
+              <button
+                onClick={() => {
+                  setMergeTargetId(null);
+                  setShowMergeModal(true);
+                }}
+                className="bg-accent-indigo/10 text-accent-indigo border border-accent-indigo/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo/20 transition-colors"
+              >
+                Merge Selected
+              </button>
+            )}
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-red/20 transition-colors"
+            >
+              Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Spreadsheet table */}
       {isLoading ? (
         <div className="text-text-secondary text-sm">Loading...</div>
@@ -985,70 +1050,6 @@ export function Inventory() {
               </tr>
             </tfoot>
           </table>
-          {selectedIds.size > 0 && (
-            <div className="border-t border-border bg-bg-page px-4 py-3 flex items-center gap-4 flex-wrap">
-              <span className="text-sm font-medium text-text-primary">
-                {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
-              </span>
-
-              {/* Category reassign */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={bulkCategory}
-                  onChange={(e) => setBulkCategory(e.target.value)}
-                  className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-                >
-                  <option value="">Reassign category…</option>
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    if (!bulkCategory) return;
-                    bulkUpdate.mutate(
-                      { ids: Array.from(selectedIds), updates: { category: bulkCategory } },
-                      {
-                        onSuccess: (data) => {
-                          toast(`Updated ${data.updated} item${data.updated !== 1 ? 's' : ''} to ${bulkCategory}`, 'success');
-                          setSelectedIds(new Set());
-                          setBulkCategory('');
-                        },
-                        onError: (err) => {
-                          toast(`Failed to update: ${err.message}`, 'error');
-                        },
-                      },
-                    );
-                  }}
-                  disabled={!bulkCategory || bulkUpdate.isPending}
-                  className="bg-accent-indigo text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Apply
-                </button>
-              </div>
-
-              {/* Merge + Bulk delete */}
-              <div className="ml-auto flex gap-2">
-                {selectedIds.size >= 2 && (
-                  <button
-                    onClick={() => {
-                      setMergeTargetId(null);
-                      setShowMergeModal(true);
-                    }}
-                    className="bg-accent-indigo/10 text-accent-indigo border border-accent-indigo/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo/20 transition-colors"
-                  >
-                    Merge Selected
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-red/20 transition-colors"
-                >
-                  Delete Selected
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       ) : (
         <div className="text-text-secondary text-sm">No items found.</div>
