@@ -3,8 +3,8 @@ import { api } from '../api';
 
 export function useParseInvoice() {
   return useMutation({
-    mutationFn: ({ file, vendorId }: { file: File; vendorId: number }) =>
-      api.invoices.parse(file, vendorId),
+    mutationFn: ({ files, vendorId }: { files: File[]; vendorId?: number }) =>
+      api.invoices.parse(files, vendorId),
   });
 }
 

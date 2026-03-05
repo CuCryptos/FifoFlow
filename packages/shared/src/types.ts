@@ -263,8 +263,9 @@ export interface InvoiceLine {
 }
 
 export interface InvoiceParseResult {
-  vendor_id: number;
+  vendor_id: number | null;
   vendor_name: string;
+  detected_vendor_name: string | null;
   invoice_date: string | null;
   invoice_number: string | null;
   lines: InvoiceLine[];

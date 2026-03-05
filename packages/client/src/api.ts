@@ -202,10 +202,14 @@ export const api = {
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
   invoices: {
-    parse: async (file: File, vendorId: number): Promise<InvoiceParseResult> => {
+    parse: async (files: File[], vendorId?: number): Promise<InvoiceParseResult[]> => {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('vendor_id', String(vendorId));
+      for (const file of files) {
+        formData.append('files', file);
+      }
+      if (vendorId) {
+        formData.append('vendor_id', String(vendorId));
+      }
       const res = await fetch(`${BASE}/invoices/parse`, {
         method: 'POST',
         body: formData,
