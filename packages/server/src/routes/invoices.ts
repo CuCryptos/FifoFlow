@@ -56,7 +56,7 @@ async function parseOneFile(
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
+    max_tokens: 16384,
     messages: [
       {
         role: 'user',
@@ -83,8 +83,9 @@ async function parseOneFile(
 Known vendors in our system: ${vendorNames || 'none yet'}
 
 Rules:
+- IMPORTANT: This may be a multi-page document. Extract line items from ALL pages, not just the first page
 - The vendor_name should be the company that issued/sold the items on this invoice
-- Extract every line item, even if partially visible
+- Extract every single line item from every page, even if partially visible
 - Use the exact product name as printed on the invoice
 - Prices should be numbers without currency symbols
 - If unit_price or line_total is missing, calculate from the other
