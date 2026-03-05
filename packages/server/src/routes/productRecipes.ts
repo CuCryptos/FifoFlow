@@ -132,13 +132,22 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
         orderUnit = price.order_unit;
         orderUnitPrice = price.order_unit_price;
 
+        // Build packaging that uses vendor price's order_unit/qty_per_unit
+        // so tryConvertQuantity can resolve e.g. "each" → "bag"
+        const vendorPackaging = {
+          ...packaging,
+          orderUnit: price.order_unit ?? packaging.orderUnit,
+          innerUnit: packaging.innerUnit ?? packaging.baseUnit,
+          qtyPerUnit: price.qty_per_unit ?? packaging.qtyPerUnit,
+        };
+
         // Convert total_needed and shortage to order units
         if (price.order_unit) {
           const neededInOrder = tryConvertQuantity(
             Math.round(agg.total_needed * 100) / 100,
             agg.recipe_unit as Unit,
             price.order_unit as Unit,
-            packaging,
+            vendorPackaging,
           );
           if (neededInOrder !== null) {
             totalNeededOrder = Math.round(neededInOrder * 100) / 100;
@@ -149,7 +158,7 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
               shortage,
               agg.recipe_unit as Unit,
               price.order_unit as Unit,
-              packaging,
+              vendorPackaging,
             );
             if (shortageInOrder !== null) {
               shortageOrder = Math.round(shortageInOrder * 100) / 100;
