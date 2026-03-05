@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useVendors } from '../hooks/useVendors';
 import { useItems } from '../hooks/useItems';
-import { useParseInvoice, useConfirmInvoice } from '../hooks/useInvoices';
+import { useParseInvoice } from '../hooks/useInvoices';
 import { useToast } from '../contexts/ToastContext';
+import { api } from '../api';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
 
 interface Props {
@@ -14,7 +15,6 @@ export function InvoiceUpload({ onClose }: Props) {
   const { data: vendors } = useVendors();
   const { data: items } = useItems();
   const parseInvoice = useParseInvoice();
-  const confirmInvoice = useConfirmInvoice();
   const { toast } = useToast();
 
   const [files, setFiles] = useState<File[]>([]);
@@ -48,27 +48,13 @@ export function InvoiceUpload({ onClose }: Props) {
     );
   };
 
-  const handleConfirm = () => {
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const handleConfirm = async () => {
     if (results.length === 0) return;
 
-    // Confirm each result that has a vendor
-    let totalVpCreated = 0;
-    let totalTxCreated = 0;
-    let pending = 0;
-    let errors = 0;
-
-    const confirmableResults = results.filter((r, ri) => {
-      const vid = vendorOverrides.get(ri) ?? r.vendor_id;
-      return vid !== null;
-    });
-
-    if (confirmableResults.length === 0) {
-      toast('No invoices with matched vendors to confirm', 'info');
-      return;
-    }
-
-    pending = confirmableResults.length;
-
+    // Build all confirmable payloads
+    const payloads: Array<Parameters<typeof api.invoices.confirm>[0]> = [];
     results.forEach((result, ri) => {
       const vendorId = vendorOverrides.get(ri) ?? result.vendor_id;
       if (!vendorId) return;
@@ -90,30 +76,36 @@ export function InvoiceUpload({ onClose }: Props) {
         })
         .filter((l): l is NonNullable<typeof l> => l !== null);
 
-      confirmInvoice.mutate(
-        { vendor_id: vendorId, lines, record_transactions: recordTransactions },
-        {
-          onSuccess: (data) => {
-            totalVpCreated += data.vendor_prices_created;
-            totalTxCreated += data.transactions_created;
-            pending--;
-            if (pending === 0) {
-              const parts = [];
-              if (totalVpCreated > 0) parts.push(`${totalVpCreated} vendor prices created`);
-              if (totalTxCreated > 0) parts.push(`${totalTxCreated} transactions recorded`);
-              toast(parts.join(', ') || 'No changes made', errors > 0 ? 'info' : 'success');
-              onClose();
-            }
-          },
-          onError: (err) => {
-            errors++;
-            pending--;
-            toast(`Confirm failed: ${err.message}`, 'error');
-            if (pending === 0) onClose();
-          },
-        },
-      );
+      if (lines.length > 0) {
+        payloads.push({ vendor_id: vendorId, lines, record_transactions: recordTransactions });
+      }
     });
+
+    if (payloads.length === 0) {
+      toast('No invoices with matched vendors to confirm', 'info');
+      return;
+    }
+
+    setIsConfirming(true);
+    let totalVpCreated = 0;
+    let totalTxCreated = 0;
+
+    try {
+      for (const payload of payloads) {
+        const data = await api.invoices.confirm(payload);
+        totalVpCreated += data.vendor_prices_created;
+        totalTxCreated += data.transactions_created;
+      }
+      const parts = [];
+      if (totalVpCreated > 0) parts.push(`${totalVpCreated} vendor prices created`);
+      if (totalTxCreated > 0) parts.push(`${totalTxCreated} transactions recorded`);
+      toast(parts.join(', ') || 'No changes made', 'success');
+      onClose();
+    } catch (err: any) {
+      toast(`Confirm failed: ${err.message}`, 'error');
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
   const getConfidenceBadge = (confidence: InvoiceLine['match_confidence']) => {
@@ -350,10 +342,10 @@ export function InvoiceUpload({ onClose }: Props) {
                 </button>
                 <button
                   onClick={handleConfirm}
-                  disabled={confirmInvoice.isPending}
+                  disabled={isConfirming}
                   className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {confirmInvoice.isPending ? 'Confirming...' : `Confirm All (${results.length} invoice${results.length > 1 ? 's' : ''})`}
+                  {isConfirming ? 'Confirming...' : `Confirm All (${results.length} invoice${results.length > 1 ? 's' : ''})`}
                 </button>
               </div>
             </div>
