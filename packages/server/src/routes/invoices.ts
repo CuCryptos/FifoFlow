@@ -23,12 +23,25 @@ function getMediaType(mimetype: string): 'image/png' | 'image/jpeg' | 'image/web
   return 'image/jpeg';
 }
 
+interface ParsedInvoice {
+  vendor_name: string;
+  invoice_date: string | null;
+  invoice_number: string | null;
+  lines: Array<{
+    vendor_item_name: string;
+    quantity: number;
+    unit: string;
+    unit_price: number;
+    line_total: number;
+  }>;
+}
+
 async function parseOneFile(
   client: Anthropic,
   file: Express.Multer.File,
   store: InventoryStore,
   vendorIdOverride?: number,
-): Promise<InvoiceParseResult> {
+): Promise<InvoiceParseResult[]> {
   const base64Data = file.buffer.toString('base64');
   const isPdf = file.mimetype === 'application/pdf';
 
@@ -64,18 +77,23 @@ async function parseOneFile(
           contentBlock,
           {
             type: 'text',
-            text: `Extract the vendor name and all line items from this invoice. Return a JSON object with this exact structure:
+            text: `Extract ALL invoices and their line items from this document. This document may contain MULTIPLE invoices from DIFFERENT vendors across multiple pages. Return a JSON object with this exact structure:
+
 {
-  "vendor_name": "the company/vendor name on the invoice",
-  "invoice_date": "YYYY-MM-DD or null",
-  "invoice_number": "string or null",
-  "lines": [
+  "invoices": [
     {
-      "vendor_item_name": "product name as shown on invoice",
-      "quantity": number,
-      "unit": "unit of measure (case, each, lb, oz, etc.)",
-      "unit_price": number (price per unit),
-      "line_total": number (quantity * unit_price)
+      "vendor_name": "the company/vendor name on this invoice",
+      "invoice_date": "YYYY-MM-DD or null",
+      "invoice_number": "string or null",
+      "lines": [
+        {
+          "vendor_item_name": "product name as shown on invoice",
+          "quantity": number,
+          "unit": "unit of measure (case, each, lb, oz, etc.)",
+          "unit_price": number (price per unit),
+          "line_total": number (quantity * unit_price)
+        }
+      ]
     }
   ]
 }
@@ -83,9 +101,10 @@ async function parseOneFile(
 Known vendors in our system: ${vendorNames || 'none yet'}
 
 Rules:
-- IMPORTANT: This may be a multi-page document. Extract line items from ALL pages, not just the first page
-- The vendor_name should be the company that issued/sold the items on this invoice
-- Extract every single line item from every page, even if partially visible
+- CRITICAL: Read EVERY page of this document from start to finish
+- This document may contain multiple separate invoices from different vendors — return each as a separate entry in the "invoices" array
+- If the same vendor has multiple invoice pages (continuation), combine their line items into one invoice entry
+- Extract every single line item from every page
 - Use the exact product name as printed on the invoice
 - Prices should be numbers without currency symbols
 - If unit_price or line_total is missing, calculate from the other
@@ -101,73 +120,24 @@ Rules:
     throw new Error('Failed to extract invoice data');
   }
 
-  let parsed: {
-    vendor_name: string;
-    invoice_date: string | null;
-    invoice_number: string | null;
-    lines: Array<{
-      vendor_item_name: string;
-      quantity: number;
-      unit: string;
-      unit_price: number;
-      line_total: number;
-    }>;
-  };
+  let rawParsed: { invoices: ParsedInvoice[] };
   try {
     const jsonMatch = textContent.text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, textContent.text];
-    parsed = JSON.parse(jsonMatch[1]!.trim());
+    const jsonData = JSON.parse(jsonMatch[1]!.trim());
+    // Handle both old single-invoice format and new multi-invoice format
+    if (Array.isArray(jsonData.invoices)) {
+      rawParsed = jsonData;
+    } else if (jsonData.vendor_name && Array.isArray(jsonData.lines)) {
+      rawParsed = { invoices: [jsonData] };
+    } else {
+      throw new Error('Unexpected format');
+    }
   } catch {
     throw new Error('Failed to parse invoice data from AI response');
   }
 
-  // Match vendor: use override if provided, otherwise fuzzy-match detected name
-  let vendorId: number | null = vendorIdOverride ?? null;
-  let vendorName = parsed.vendor_name;
-  const detectedVendorName = parsed.vendor_name;
-
-  if (!vendorId && parsed.vendor_name) {
-    const nameLower = parsed.vendor_name.toLowerCase().trim();
-    // Exact match
-    const exactMatch = vendors.find((v) => v.name.toLowerCase().trim() === nameLower);
-    if (exactMatch) {
-      vendorId = exactMatch.id;
-      vendorName = exactMatch.name;
-    } else {
-      // Fuzzy: substring match
-      const fuzzyMatch = vendors.find((v) => {
-        const vLower = v.name.toLowerCase();
-        return vLower.includes(nameLower) || nameLower.includes(vLower);
-      });
-      if (fuzzyMatch) {
-        vendorId = fuzzyMatch.id;
-        vendorName = fuzzyMatch.name;
-      } else {
-        // Word overlap
-        const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 2);
-        let best: { vendor: typeof vendors[0]; overlap: number } | null = null;
-        for (const v of vendors) {
-          const vWords = v.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-          const overlap = nameWords.filter((w) => vWords.some((vw) => vw.includes(w) || w.includes(vw))).length;
-          if (overlap > 0 && (!best || overlap > best.overlap)) {
-            best = { vendor: v, overlap };
-          }
-        }
-        if (best) {
-          vendorId = best.vendor.id;
-          vendorName = best.vendor.name;
-        }
-      }
-    }
-  }
-
-  if (vendorId) {
-    const v = vendors.find((v) => v.id === vendorId);
-    if (v) vendorName = v.name;
-  }
-
-  // Get all items and vendor prices for matching
+  // Process each extracted invoice
   const items = await store.listItems();
-
   const allVendorPrices: Array<{ id: number; item_id: number; vendor_id: number; vendor_item_name: string | null }> = [];
   for (const item of items) {
     const prices = await store.listVendorPricesForItem(item.id);
@@ -176,121 +146,169 @@ Rules:
     }
   }
 
-  // Filter to this vendor's prices if we know the vendor
-  const vendorSpecificPrices = vendorId
-    ? allVendorPrices.filter((vp) => vp.vendor_id === vendorId)
-    : allVendorPrices;
+  const results: InvoiceParseResult[] = [];
 
-  const lines: InvoiceLine[] = parsed.lines.map((line) => {
-    const nameLower = line.vendor_item_name.toLowerCase().trim();
+  for (const parsed of rawParsed.invoices) {
+    // Match vendor
+    let vendorId: number | null = vendorIdOverride ?? null;
+    let vendorName = parsed.vendor_name;
+    const detectedVendorName = parsed.vendor_name;
 
-    // 1. Exact match on vendor_prices.vendor_item_name
-    const exactVpMatch = vendorSpecificPrices.find(
-      (vp) => vp.vendor_item_name && vp.vendor_item_name.toLowerCase().trim() === nameLower
-    );
-    if (exactVpMatch) {
-      const matchedItem = items.find((i) => i.id === exactVpMatch.item_id);
-      return {
-        ...line,
-        matched_item_id: exactVpMatch.item_id,
-        matched_item_name: matchedItem?.name ?? null,
-        match_confidence: 'exact' as const,
-        existing_vendor_price_id: exactVpMatch.id,
-      };
-    }
-
-    // 2. Exact match on items.name
-    const exactItemMatch = items.find((i) => i.name.toLowerCase().trim() === nameLower);
-    if (exactItemMatch) {
-      return {
-        ...line,
-        matched_item_id: exactItemMatch.id,
-        matched_item_name: exactItemMatch.name,
-        match_confidence: 'exact' as const,
-        existing_vendor_price_id: null,
-      };
-    }
-
-    // 3. Fuzzy: substring match on vendor_prices
-    const fuzzyVpMatch = vendorSpecificPrices.find(
-      (vp) => vp.vendor_item_name && (
-        vp.vendor_item_name.toLowerCase().includes(nameLower) ||
-        nameLower.includes(vp.vendor_item_name.toLowerCase())
-      )
-    );
-    if (fuzzyVpMatch) {
-      const matchedItem = items.find((i) => i.id === fuzzyVpMatch.item_id);
-      return {
-        ...line,
-        matched_item_id: fuzzyVpMatch.item_id,
-        matched_item_name: matchedItem?.name ?? null,
-        match_confidence: 'high' as const,
-        existing_vendor_price_id: fuzzyVpMatch.id,
-      };
-    }
-
-    // 4. Fuzzy: substring match on items.name
-    const fuzzyItemMatch = items.find((i) => {
-      const itemLower = i.name.toLowerCase();
-      return itemLower.includes(nameLower) || nameLower.includes(itemLower);
-    });
-    if (fuzzyItemMatch) {
-      return {
-        ...line,
-        matched_item_id: fuzzyItemMatch.id,
-        matched_item_name: fuzzyItemMatch.name,
-        match_confidence: 'high' as const,
-        existing_vendor_price_id: null,
-      };
-    }
-
-    // 5. Word overlap match
-    const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 2);
-    let bestMatch: { item: typeof items[0]; overlap: number } | null = null;
-    for (const item of items) {
-      const itemWords = item.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-      const overlap = nameWords.filter((w) => itemWords.some((iw) => iw.includes(w) || w.includes(iw))).length;
-      if (overlap > 0 && (!bestMatch || overlap > bestMatch.overlap)) {
-        bestMatch = { item, overlap };
+    if (!vendorId && parsed.vendor_name) {
+      const vNameLower = parsed.vendor_name.toLowerCase().trim();
+      const exactMatch = vendors.find((v) => v.name.toLowerCase().trim() === vNameLower);
+      if (exactMatch) {
+        vendorId = exactMatch.id;
+        vendorName = exactMatch.name;
+      } else {
+        const fuzzyMatch = vendors.find((v) => {
+          const vLower = v.name.toLowerCase();
+          return vLower.includes(vNameLower) || vNameLower.includes(vLower);
+        });
+        if (fuzzyMatch) {
+          vendorId = fuzzyMatch.id;
+          vendorName = fuzzyMatch.name;
+        } else {
+          const nameWords = vNameLower.split(/\s+/).filter((w) => w.length > 2);
+          let best: { vendor: typeof vendors[0]; overlap: number } | null = null;
+          for (const v of vendors) {
+            const vWords = v.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+            const overlap = nameWords.filter((w) => vWords.some((vw) => vw.includes(w) || w.includes(vw))).length;
+            if (overlap > 0 && (!best || overlap > best.overlap)) {
+              best = { vendor: v, overlap };
+            }
+          }
+          if (best) {
+            vendorId = best.vendor.id;
+            vendorName = best.vendor.name;
+          }
+        }
       }
     }
-    if (bestMatch && bestMatch.overlap >= Math.max(1, Math.floor(nameWords.length / 2))) {
-      return {
-        ...line,
-        matched_item_id: bestMatch.item.id,
-        matched_item_name: bestMatch.item.name,
-        match_confidence: 'low' as const,
-        existing_vendor_price_id: null,
-      };
+
+    if (vendorId) {
+      const v = vendors.find((v) => v.id === vendorId);
+      if (v) vendorName = v.name;
     }
 
-    // 6. No match
-    return {
-      ...line,
-      matched_item_id: null,
-      matched_item_name: null,
-      match_confidence: 'none' as const,
-      existing_vendor_price_id: null,
-    };
-  });
+    // Filter to this vendor's prices if we know the vendor
+    const vendorSpecificPrices = vendorId
+      ? allVendorPrices.filter((vp) => vp.vendor_id === vendorId)
+      : allVendorPrices;
 
-  const matched = lines.filter((l) => l.match_confidence !== 'none').length;
-  const totalAmount = lines.reduce((sum, l) => sum + l.line_total, 0);
+    const lines: InvoiceLine[] = parsed.lines.map((line) => {
+      const nameLower = line.vendor_item_name.toLowerCase().trim();
 
-  return {
-    vendor_id: vendorId,
-    vendor_name: vendorName,
-    detected_vendor_name: detectedVendorName,
-    invoice_date: parsed.invoice_date,
-    invoice_number: parsed.invoice_number,
-    lines,
-    summary: {
-      total_lines: lines.length,
-      matched,
-      unmatched: lines.length - matched,
-      total_amount: Math.round(totalAmount * 100) / 100,
-    },
-  };
+      // 1. Exact match on vendor_prices.vendor_item_name
+      const exactVpMatch = vendorSpecificPrices.find(
+        (vp) => vp.vendor_item_name && vp.vendor_item_name.toLowerCase().trim() === nameLower
+      );
+      if (exactVpMatch) {
+        const matchedItem = items.find((i) => i.id === exactVpMatch.item_id);
+        return {
+          ...line,
+          matched_item_id: exactVpMatch.item_id,
+          matched_item_name: matchedItem?.name ?? null,
+          match_confidence: 'exact' as const,
+          existing_vendor_price_id: exactVpMatch.id,
+        };
+      }
+
+      // 2. Exact match on items.name
+      const exactItemMatch = items.find((i) => i.name.toLowerCase().trim() === nameLower);
+      if (exactItemMatch) {
+        return {
+          ...line,
+          matched_item_id: exactItemMatch.id,
+          matched_item_name: exactItemMatch.name,
+          match_confidence: 'exact' as const,
+          existing_vendor_price_id: null,
+        };
+      }
+
+      // 3. Fuzzy: substring match on vendor_prices
+      const fuzzyVpMatch = vendorSpecificPrices.find(
+        (vp) => vp.vendor_item_name && (
+          vp.vendor_item_name.toLowerCase().includes(nameLower) ||
+          nameLower.includes(vp.vendor_item_name.toLowerCase())
+        )
+      );
+      if (fuzzyVpMatch) {
+        const matchedItem = items.find((i) => i.id === fuzzyVpMatch.item_id);
+        return {
+          ...line,
+          matched_item_id: fuzzyVpMatch.item_id,
+          matched_item_name: matchedItem?.name ?? null,
+          match_confidence: 'high' as const,
+          existing_vendor_price_id: fuzzyVpMatch.id,
+        };
+      }
+
+      // 4. Fuzzy: substring match on items.name
+      const fuzzyItemMatch = items.find((i) => {
+        const itemLower = i.name.toLowerCase();
+        return itemLower.includes(nameLower) || nameLower.includes(itemLower);
+      });
+      if (fuzzyItemMatch) {
+        return {
+          ...line,
+          matched_item_id: fuzzyItemMatch.id,
+          matched_item_name: fuzzyItemMatch.name,
+          match_confidence: 'high' as const,
+          existing_vendor_price_id: null,
+        };
+      }
+
+      // 5. Word overlap match
+      const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 2);
+      let bestMatch: { item: typeof items[0]; overlap: number } | null = null;
+      for (const item of items) {
+        const itemWords = item.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+        const overlap = nameWords.filter((w) => itemWords.some((iw) => iw.includes(w) || w.includes(iw))).length;
+        if (overlap > 0 && (!bestMatch || overlap > bestMatch.overlap)) {
+          bestMatch = { item, overlap };
+        }
+      }
+      if (bestMatch && bestMatch.overlap >= Math.max(1, Math.floor(nameWords.length / 2))) {
+        return {
+          ...line,
+          matched_item_id: bestMatch.item.id,
+          matched_item_name: bestMatch.item.name,
+          match_confidence: 'low' as const,
+          existing_vendor_price_id: null,
+        };
+      }
+
+      // 6. No match
+      return {
+        ...line,
+        matched_item_id: null,
+        matched_item_name: null,
+        match_confidence: 'none' as const,
+        existing_vendor_price_id: null,
+      };
+    });
+
+    const matched = lines.filter((l) => l.match_confidence !== 'none').length;
+    const totalAmount = lines.reduce((sum, l) => sum + l.line_total, 0);
+
+    results.push({
+      vendor_id: vendorId,
+      vendor_name: vendorName,
+      detected_vendor_name: detectedVendorName,
+      invoice_date: parsed.invoice_date,
+      invoice_number: parsed.invoice_number,
+      lines,
+      summary: {
+        total_lines: lines.length,
+        matched,
+        unmatched: lines.length - matched,
+        total_amount: Math.round(totalAmount * 100) / 100,
+      },
+    });
+  }
+
+  return results;
 }
 
 export function createInvoiceRoutes(store: InventoryStore): Router {
@@ -325,8 +343,8 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
       const results: InvoiceParseResult[] = [];
 
       for (const file of files) {
-        const result = await parseOneFile(client, file, store, vendorIdOverride);
-        results.push(result);
+        const fileResults = await parseOneFile(client, file, store, vendorIdOverride);
+        results.push(...fileResults);
       }
 
       res.json(results);
