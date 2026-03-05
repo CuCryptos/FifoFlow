@@ -245,7 +245,7 @@ export function InvoiceUpload({ onClose }: Props) {
                 <div className="flex gap-3 text-sm">
                   <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded">{activeResult.summary.matched} matched</span>
                   <span className="px-2 py-1 bg-gray-50 text-gray-600 rounded">{activeResult.summary.unmatched} unmatched</span>
-                  <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">Total: ${activeResult.summary.total_amount.toFixed(2)}</span>
+                  <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">Total: ${(activeResult.summary.total_amount ?? 0).toFixed(2)}</span>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -268,8 +268,8 @@ export function InvoiceUpload({ onClose }: Props) {
                           <td className="px-2 py-2 text-text-primary">{line.vendor_item_name}</td>
                           <td className="px-2 py-2 text-text-primary text-right">{line.quantity}</td>
                           <td className="px-2 py-2 text-text-secondary">{line.unit}</td>
-                          <td className="px-2 py-2 text-text-primary text-right">${line.unit_price.toFixed(2)}</td>
-                          <td className="px-2 py-2 text-text-primary text-right">${line.line_total.toFixed(2)}</td>
+                          <td className="px-2 py-2 text-text-primary text-right">${(line.unit_price ?? 0).toFixed(2)}</td>
+                          <td className="px-2 py-2 text-text-primary text-right">${(line.line_total ?? 0).toFixed(2)}</td>
                           <td className="px-2 py-2">{getConfidenceBadge(line.match_confidence)}</td>
                           <td className="px-2 py-2">
                             <select

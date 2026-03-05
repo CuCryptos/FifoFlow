@@ -196,7 +196,18 @@ Rules:
       ? allVendorPrices.filter((vp) => vp.vendor_id === vendorId)
       : allVendorPrices;
 
-    const lines: InvoiceLine[] = parsed.lines.map((line) => {
+    const lines: InvoiceLine[] = parsed.lines.map((rawLine) => {
+      // Coerce numeric fields — Claude sometimes returns strings, nulls, or omits them
+      const line = {
+        vendor_item_name: String(rawLine.vendor_item_name ?? ''),
+        quantity: Number(rawLine.quantity) || 0,
+        unit: String(rawLine.unit ?? 'each'),
+        unit_price: Number(rawLine.unit_price) || 0,
+        line_total: Number(rawLine.line_total) || Number(rawLine.quantity || 0) * Number(rawLine.unit_price || 0),
+      };
+      if (!line.line_total && line.quantity && line.unit_price) {
+        line.line_total = Math.round(line.quantity * line.unit_price * 100) / 100;
+      }
       const nameLower = line.vendor_item_name.toLowerCase().trim();
 
       // 1. Exact match on vendor_prices.vendor_item_name
