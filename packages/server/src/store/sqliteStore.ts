@@ -48,6 +48,8 @@ import type {
   WasteReport,
   WasteRow,
 } from '@fifoflow/shared';
+import { tryConvertQuantity } from '@fifoflow/shared';
+import type { Unit } from '@fifoflow/shared';
 import type {
   InsertTransactionAndAdjustQtyInput,
   InventoryStore,
@@ -58,6 +60,38 @@ import type {
   TransactionListFilters,
 } from './types.js';
 
+
+/**
+ * Calculate cost per recipe-unit using full unit conversion.
+ * E.g. if vendor price is $50/case and 1 case = 12 each, cost per "each" = $4.17
+ */
+function costPerRecipeUnit(
+  recipeUnit: string,
+  price: { order_unit_price: number; order_unit: string | null; qty_per_unit: number | null },
+  item: { unit: string; order_unit: string | null; inner_unit: string | null; qty_per_unit: number | null; item_size_value: number | null; item_size_unit: string | null },
+): number | null {
+  const orderUnit = price.order_unit ?? item.unit;
+
+  // Same unit = direct price
+  if (recipeUnit === orderUnit) return price.order_unit_price;
+
+  // Convert 1 order_unit to recipe_unit to find how many recipe_units per order_unit
+  const packaging = {
+    baseUnit: item.unit as Unit,
+    orderUnit: item.order_unit as Unit | null,
+    innerUnit: item.inner_unit as Unit | null,
+    qtyPerUnit: item.qty_per_unit,
+    itemSizeValue: item.item_size_value,
+    itemSizeUnit: item.item_size_unit as Unit | null,
+  };
+
+  const recipeUnitsPerOrder = tryConvertQuantity(1, orderUnit as Unit, recipeUnit as Unit, packaging);
+  if (recipeUnitsPerOrder != null && recipeUnitsPerOrder > 0) {
+    return Math.round((price.order_unit_price / recipeUnitsPerOrder) * 10000) / 10000;
+  }
+
+  return null;
+}
 
 export class SqliteInventoryStore implements InventoryStore {
   constructor(private readonly db: Database.Database) {}
@@ -1124,10 +1158,17 @@ export class SqliteInventoryStore implements InventoryStore {
     const recipes = this.db.prepare('SELECT * FROM recipes ORDER BY name').all() as Recipe[];
     return recipes.map((r) => {
       const detail = this.db.prepare(`
-        SELECT ri.quantity, ri.unit, ri.item_id
+        SELECT ri.quantity, ri.unit, ri.item_id,
+               i.unit as item_unit, i.order_unit as item_order_unit, i.inner_unit as item_inner_unit,
+               i.qty_per_unit as item_qty_per_unit, i.item_size_value, i.item_size_unit
         FROM recipe_items ri
+        JOIN items i ON ri.item_id = i.id
         WHERE ri.recipe_id = ?
-      `).all(r.id) as Array<{ quantity: number; unit: string; item_id: number }>;
+      `).all(r.id) as Array<{
+        quantity: number; unit: string; item_id: number;
+        item_unit: string; item_order_unit: string | null; item_inner_unit: string | null;
+        item_qty_per_unit: number | null; item_size_value: number | null; item_size_unit: string | null;
+      }>;
 
       let totalCost: number | null = null;
       for (const ri of detail) {
@@ -1140,11 +1181,17 @@ export class SqliteInventoryStore implements InventoryStore {
         `).get(ri.item_id) as { order_unit_price: number; order_unit: string | null; qty_per_unit: number | null } | undefined;
 
         if (price) {
-          let unitCost = price.order_unit_price;
-          if (ri.unit !== price.order_unit && price.order_unit && price.qty_per_unit && price.qty_per_unit > 0) {
-            unitCost = price.order_unit_price / price.qty_per_unit;
+          const unitCost = costPerRecipeUnit(ri.unit, price, {
+            unit: ri.item_unit,
+            order_unit: ri.item_order_unit,
+            inner_unit: ri.item_inner_unit,
+            qty_per_unit: ri.item_qty_per_unit,
+            item_size_value: ri.item_size_value,
+            item_size_unit: ri.item_size_unit,
+          });
+          if (unitCost != null) {
+            totalCost = (totalCost ?? 0) + ri.quantity * unitCost;
           }
-          totalCost = (totalCost ?? 0) + ri.quantity * unitCost;
         }
       }
 
@@ -1161,13 +1208,18 @@ export class SqliteInventoryStore implements InventoryStore {
     if (!recipe) return undefined;
 
     const rawItems = this.db.prepare(`
-      SELECT ri.*, i.name as item_name, i.unit as item_unit
+      SELECT ri.*, i.name as item_name, i.unit as item_unit,
+             i.order_unit as item_order_unit, i.inner_unit as item_inner_unit,
+             i.qty_per_unit as item_qty_per_unit, i.item_size_value, i.item_size_unit
       FROM recipe_items ri
       JOIN items i ON ri.item_id = i.id
       WHERE ri.recipe_id = ?
-    `).all(id) as RecipeItem[];
+    `).all(id) as (RecipeItem & {
+      item_order_unit: string | null; item_inner_unit: string | null;
+      item_qty_per_unit: number | null; item_size_value: number | null; item_size_unit: string | null;
+    })[];
 
-    // Enrich with vendor pricing
+    // Enrich with vendor pricing using full unit conversion
     const items = rawItems.map((ri) => {
       const price = this.db.prepare(`
         SELECT order_unit_price, order_unit, qty_per_unit
@@ -1179,20 +1231,21 @@ export class SqliteInventoryStore implements InventoryStore {
 
       let unitCost: number | null = null;
       if (price) {
-        // If the recipe unit matches the order unit, use price directly
-        if (ri.unit === price.order_unit || !price.order_unit) {
-          unitCost = price.order_unit_price;
-        } else if (price.qty_per_unit && price.qty_per_unit > 0) {
-          // price is per order_unit, convert to per inner unit
-          unitCost = Math.round((price.order_unit_price / price.qty_per_unit) * 100) / 100;
-        } else {
-          unitCost = price.order_unit_price;
-        }
+        unitCost = costPerRecipeUnit(ri.unit, price, {
+          unit: ri.item_unit as string,
+          order_unit: ri.item_order_unit,
+          inner_unit: ri.item_inner_unit,
+          qty_per_unit: ri.item_qty_per_unit,
+          item_size_value: ri.item_size_value,
+          item_size_unit: ri.item_size_unit,
+        });
       }
 
       const lineCost = unitCost != null ? Math.round(ri.quantity * unitCost * 100) / 100 : null;
 
-      return { ...ri, unit_cost: unitCost, line_cost: lineCost };
+      // Strip extra join fields before returning
+      const { item_order_unit, item_inner_unit, item_qty_per_unit, item_size_value, item_size_unit, ...clean } = ri;
+      return { ...clean, unit_cost: unitCost, line_cost: lineCost };
     });
 
     return { ...recipe, items };
