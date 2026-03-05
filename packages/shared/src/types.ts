@@ -305,9 +305,11 @@ export interface CalculatedIngredient {
   item_unit: Unit;
   recipe_unit: string;
   total_needed: number;
+  total_needed_order: number | null;
   current_qty: number;
   converted_stock: number | null;
   shortage: number;
+  shortage_order: number | null;
   vendor_id: number | null;
   vendor_name: string | null;
   order_unit: Unit | null;

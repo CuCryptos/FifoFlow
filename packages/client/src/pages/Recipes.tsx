@@ -709,15 +709,23 @@ function CalculateOrder() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-text-secondary">
-                      {ing.total_needed} {ing.recipe_unit}
+                      {ing.total_needed_order != null && ing.order_unit
+                        ? <>{ing.total_needed_order} {ing.order_unit}<span className="text-text-muted text-[10px] block">{ing.total_needed} {ing.recipe_unit}</span></>
+                        : <>{ing.total_needed} {ing.recipe_unit}</>
+                      }
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-text-secondary">
-                      {ing.converted_stock != null ? ing.converted_stock : ing.current_qty} {ing.recipe_unit}
+                      {ing.current_qty} {ing.item_unit}
                     </td>
                     <td className={`px-4 py-2 text-right font-mono ${
                       ing.shortage > 0 ? 'text-accent-red font-semibold' : 'text-accent-green'
                     }`}>
-                      {ing.shortage > 0 ? ing.shortage : 'OK'}
+                      {ing.shortage > 0
+                        ? ing.shortage_order != null && ing.order_unit
+                          ? <>{ing.shortage_order} {ing.order_unit}<span className="text-text-muted text-[10px] font-normal block">{ing.shortage} {ing.recipe_unit}</span></>
+                          : <>{ing.shortage} {ing.recipe_unit}</>
+                        : 'OK'
+                      }
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-text-secondary">
                       {ing.estimated_cost != null ? `$${ing.estimated_cost.toFixed(2)}` : '\u2014'}

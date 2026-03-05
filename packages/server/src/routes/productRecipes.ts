@@ -108,37 +108,56 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
       let orderUnit: Unit | null = null;
       let orderUnitPrice: number | null = null;
       let estimatedCost: number | null = null;
+      let totalNeededOrder: number | null = null;
+      let shortageOrder: number | null = null;
+
+      const packaging = {
+        baseUnit: item.unit as Unit,
+        orderUnit: item.order_unit,
+        innerUnit: item.inner_unit,
+        qtyPerUnit: item.qty_per_unit,
+        itemSizeValue: item.item_size_value,
+        itemSizeUnit: item.item_size_unit,
+      };
 
       const vendorPrices = await store.listVendorPricesForItem(itemId);
       const price = vendor_id
         ? vendorPrices.find((vp) => vp.vendor_id === vendor_id)
         : vendorPrices.find((vp) => vp.is_default) ?? vendorPrices[0];
 
-      if (price && shortage > 0) {
+      if (price) {
         vendorId = price.vendor_id;
         const vendor = await store.getVendorById(price.vendor_id);
         vendorName = vendor?.name ?? null;
         orderUnit = price.order_unit;
         orderUnitPrice = price.order_unit_price;
 
-        // Calculate cost: convert shortage to order units
-        if (price.order_unit && price.order_unit_price > 0) {
-          const inOrderUnits = tryConvertQuantity(
-            shortage,
+        // Convert total_needed and shortage to order units
+        if (price.order_unit) {
+          const neededInOrder = tryConvertQuantity(
+            Math.round(agg.total_needed * 100) / 100,
             agg.recipe_unit as Unit,
             price.order_unit as Unit,
-            {
-              baseUnit: item.unit as Unit,
-              orderUnit: item.order_unit,
-              innerUnit: item.inner_unit,
-              qtyPerUnit: item.qty_per_unit,
-              itemSizeValue: item.item_size_value,
-              itemSizeUnit: item.item_size_unit,
-            },
+            packaging,
           );
-          if (inOrderUnits !== null) {
-            estimatedCost = Math.round(Math.ceil(inOrderUnits) * price.order_unit_price * 100) / 100;
-            totalEstimatedCost += estimatedCost;
+          if (neededInOrder !== null) {
+            totalNeededOrder = Math.round(neededInOrder * 100) / 100;
+          }
+
+          if (shortage > 0) {
+            const shortageInOrder = tryConvertQuantity(
+              shortage,
+              agg.recipe_unit as Unit,
+              price.order_unit as Unit,
+              packaging,
+            );
+            if (shortageInOrder !== null) {
+              shortageOrder = Math.round(shortageInOrder * 100) / 100;
+              if (price.order_unit_price > 0) {
+                estimatedCost = Math.round(Math.ceil(shortageInOrder) * price.order_unit_price * 100) / 100;
+                totalEstimatedCost += estimatedCost;
+              }
+            }
           }
         }
       }
@@ -149,9 +168,11 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
         item_unit: item.unit as Unit,
         recipe_unit: agg.recipe_unit,
         total_needed: Math.round(agg.total_needed * 100) / 100,
+        total_needed_order: totalNeededOrder,
         current_qty: item.current_qty,
         converted_stock: converted,
         shortage,
+        shortage_order: shortageOrder,
         vendor_id: vendorId,
         vendor_name: vendorName,
         order_unit: orderUnit,
