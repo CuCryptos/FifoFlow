@@ -233,7 +233,7 @@ export const api = {
       }>;
       record_transactions: boolean;
     }) =>
-      fetchJson<{ vendor_prices_created: number; transactions_created: number }>(
+      fetchJson<{ vendor_prices_created: number; transactions_created: number; vendors_assigned: number }>(
         '/invoices/confirm',
         { method: 'POST', body: JSON.stringify(data) }
       ),

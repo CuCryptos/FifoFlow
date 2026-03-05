@@ -89,14 +89,17 @@ export function InvoiceUpload({ onClose }: Props) {
     setIsConfirming(true);
     let totalVpCreated = 0;
     let totalTxCreated = 0;
+    let totalVendorsAssigned = 0;
 
     try {
       for (const payload of payloads) {
         const data = await api.invoices.confirm(payload);
         totalVpCreated += data.vendor_prices_created;
         totalTxCreated += data.transactions_created;
+        totalVendorsAssigned += data.vendors_assigned ?? 0;
       }
       const parts = [];
+      if (totalVendorsAssigned > 0) parts.push(`${totalVendorsAssigned} vendors assigned`);
       if (totalVpCreated > 0) parts.push(`${totalVpCreated} vendor prices created`);
       if (totalTxCreated > 0) parts.push(`${totalTxCreated} transactions recorded`);
       toast(parts.join(', ') || 'No changes made', 'success');

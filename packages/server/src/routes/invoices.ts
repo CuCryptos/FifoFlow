@@ -392,12 +392,19 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
 
     let vendorPricesCreated = 0;
     let transactionsCreated = 0;
+    let vendorsAssigned = 0;
 
     for (const line of lines) {
       if (!line.matched_item_id) continue;
 
       const item = await store.getItemById(line.matched_item_id);
       if (!item) continue;
+
+      // Assign vendor to item if it doesn't have one
+      if (!item.vendor_id) {
+        await store.updateItem(line.matched_item_id, { vendor_id });
+        vendorsAssigned++;
+      }
 
       if (line.create_vendor_price) {
         const existingPrices = await store.listVendorPricesForItem(line.matched_item_id);
@@ -435,6 +442,7 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
     res.json({
       vendor_prices_created: vendorPricesCreated,
       transactions_created: transactionsCreated,
+      vendors_assigned: vendorsAssigned,
     });
   });
 
