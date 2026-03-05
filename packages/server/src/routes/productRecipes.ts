@@ -129,25 +129,20 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
         vendorId = price.vendor_id;
         const vendor = await store.getVendorById(price.vendor_id);
         vendorName = vendor?.name ?? null;
-        orderUnit = price.order_unit;
         orderUnitPrice = price.order_unit_price;
 
-        // Build packaging that uses vendor price's order_unit/qty_per_unit
-        // so tryConvertQuantity can resolve e.g. "each" → "bag"
-        const vendorPackaging = {
-          ...packaging,
-          orderUnit: price.order_unit ?? packaging.orderUnit,
-          innerUnit: packaging.innerUnit ?? packaging.baseUnit,
-          qtyPerUnit: price.qty_per_unit ?? packaging.qtyPerUnit,
-        };
+        // Use item's order_unit for display (what we actually order in),
+        // fall back to vendor price's order_unit
+        const displayOrderUnit = item.order_unit ?? price.order_unit;
+        orderUnit = displayOrderUnit;
 
-        // Convert total_needed and shortage to order units
-        if (price.order_unit) {
+        // Convert total_needed and shortage to the display order unit
+        if (displayOrderUnit && displayOrderUnit !== agg.recipe_unit) {
           const neededInOrder = tryConvertQuantity(
             Math.round(agg.total_needed * 100) / 100,
             agg.recipe_unit as Unit,
-            price.order_unit as Unit,
-            vendorPackaging,
+            displayOrderUnit as Unit,
+            packaging,
           );
           if (neededInOrder !== null) {
             totalNeededOrder = Math.round(neededInOrder * 100) / 100;
@@ -157,16 +152,24 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
             const shortageInOrder = tryConvertQuantity(
               shortage,
               agg.recipe_unit as Unit,
-              price.order_unit as Unit,
-              vendorPackaging,
+              displayOrderUnit as Unit,
+              packaging,
             );
             if (shortageInOrder !== null) {
               shortageOrder = Math.round(shortageInOrder * 100) / 100;
-              if (price.order_unit_price > 0) {
-                estimatedCost = Math.round(Math.ceil(shortageInOrder) * price.order_unit_price * 100) / 100;
-                totalEstimatedCost += estimatedCost;
-              }
             }
+          }
+        }
+
+        // Calculate cost using vendor price's unit
+        if (shortage > 0 && price.order_unit_price > 0) {
+          const priceUnit = price.order_unit ?? agg.recipe_unit;
+          const shortageForCost = priceUnit === agg.recipe_unit
+            ? shortage
+            : tryConvertQuantity(shortage, agg.recipe_unit as Unit, priceUnit as Unit, packaging);
+          if (shortageForCost !== null) {
+            estimatedCost = Math.round(Math.ceil(shortageForCost) * price.order_unit_price * 100) / 100;
+            totalEstimatedCost += estimatedCost;
           }
         }
       }
