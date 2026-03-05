@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecipe } from '../hooks/useRecipes';
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
 import { useItems } from '../hooks/useItems';
@@ -41,6 +41,82 @@ export function Recipes() {
       {activeTab === 'recipes' && <RecipeList />}
       {activeTab === 'menus' && <ProductMenus />}
       {activeTab === 'calculate' && <CalculateOrder />}
+    </div>
+  );
+}
+
+// ── Item Search Combobox ──────────────────────────────────────
+
+function ItemSearchInput({
+  items,
+  selectedId,
+  onSelect,
+}: {
+  items: { id: number; name: string; unit: string }[];
+  selectedId: number;
+  onSelect: (id: number, unit: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selectedItem = items.find((i) => i.id === selectedId);
+  const displayValue = open ? query : (selectedItem?.name ?? '');
+
+  const filtered = query.trim()
+    ? items.filter((i) => i.name.toLowerCase().includes(query.toLowerCase())).slice(0, 20)
+    : items.slice(0, 20);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} className="flex-1 relative">
+      <input
+        type="text"
+        value={displayValue}
+        placeholder="Search items..."
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          setOpen(true);
+          setQuery(selectedItem?.name ?? '');
+        }}
+        className="w-full bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+      />
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-border rounded-lg shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-text-secondary">No items found</div>
+          ) : (
+            filtered.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  onSelect(item.id, item.unit);
+                  setQuery(item.name);
+                  setOpen(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-bg-hover transition-colors ${
+                  item.id === selectedId ? 'bg-accent-indigo/10 text-accent-indigo font-medium' : 'text-text-primary'
+                }`}
+              >
+                {item.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -272,22 +348,14 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
               const existingItem = existing?.items.find((ei) => ei.item_id === ing.item_id);
               return (
                 <div key={idx} className="flex items-center gap-2">
-                  <select
-                    value={ing.item_id}
-                    onChange={(e) => {
-                      const itemId = Number(e.target.value);
-                      updateIngredient(idx, 'item_id', itemId);
-                      // Auto-set unit from item
-                      const item = items?.find((i) => i.id === itemId);
-                      if (item) updateIngredient(idx, 'unit', item.unit);
+                  <ItemSearchInput
+                    items={items ?? []}
+                    selectedId={ing.item_id}
+                    onSelect={(id, unit) => {
+                      updateIngredient(idx, 'item_id', id);
+                      updateIngredient(idx, 'unit', unit);
                     }}
-                    className="flex-1 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                  >
-                    <option value={0}>Select item...</option>
-                    {(items ?? []).map((item) => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
+                  />
                   <input
                     type="number"
                     step="any"
