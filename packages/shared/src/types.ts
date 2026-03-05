@@ -269,6 +269,13 @@ export interface RecipeItem {
   item_unit: Unit;
   quantity: number;
   unit: string;
+  unit_cost: number | null;
+  line_cost: number | null;
+}
+
+export interface RecipeWithCost extends Recipe {
+  total_cost: number | null;
+  item_count: number;
 }
 
 export interface RecipeDetail extends Recipe {

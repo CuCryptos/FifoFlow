@@ -23,6 +23,7 @@ import type {
   ProductRecipe,
   Recipe,
   RecipeDetail,
+  RecipeWithCost,
   ReconciliationResult,
   SetProductRecipeInput,
   StorageArea,
@@ -177,7 +178,7 @@ export interface InventoryStore {
   countItemsForVenue(venueId: number): Promise<number>;
 
   // Recipes
-  listRecipes(): Promise<Recipe[]>;
+  listRecipes(): Promise<RecipeWithCost[]>;
   getRecipeById(id: number): Promise<RecipeDetail | undefined>;
   createRecipe(input: CreateRecipeInput): Promise<RecipeDetail>;
   updateRecipe(id: number, input: UpdateRecipeInput): Promise<RecipeDetail>;

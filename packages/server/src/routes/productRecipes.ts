@@ -21,32 +21,7 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
     res.json(productRecipes);
   });
 
-  router.post('/:venueId', async (req, res) => {
-    const venueId = Number(req.params.venueId);
-    const venue = await store.getVenueById(venueId);
-    if (!venue) {
-      res.status(404).json({ error: 'Venue not found' });
-      return;
-    }
-    const parsed = setProductRecipeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.flatten() });
-      return;
-    }
-    const recipe = await store.getRecipeById(parsed.data.recipe_id);
-    if (!recipe) {
-      res.status(400).json({ error: 'Recipe not found' });
-      return;
-    }
-    const result = await store.setProductRecipe(venueId, parsed.data);
-    res.status(201).json(result);
-  });
-
-  router.delete('/:id', async (req, res) => {
-    await store.deleteProductRecipe(Number(req.params.id));
-    res.status(204).send();
-  });
-
+  // IMPORTANT: /calculate must be defined before /:venueId to avoid matching "calculate" as a param
   router.post('/calculate', async (req, res) => {
     const parsed = calculateOrderSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -192,6 +167,33 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
     };
 
     res.json(result);
+  });
+
+  // Parameterized routes after static routes
+  router.post('/:venueId', async (req, res) => {
+    const venueId = Number(req.params.venueId);
+    const venue = await store.getVenueById(venueId);
+    if (!venue) {
+      res.status(404).json({ error: 'Venue not found' });
+      return;
+    }
+    const parsed = setProductRecipeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const recipe = await store.getRecipeById(parsed.data.recipe_id);
+    if (!recipe) {
+      res.status(400).json({ error: 'Recipe not found' });
+      return;
+    }
+    const result = await store.setProductRecipe(venueId, parsed.data);
+    res.status(201).json(result);
+  });
+
+  router.delete('/:id', async (req, res) => {
+    await store.deleteProductRecipe(Number(req.params.id));
+    res.status(204).send();
   });
 
   return router;

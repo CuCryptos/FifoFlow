@@ -7,7 +7,7 @@ import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
 import { useToast } from '../contexts/ToastContext';
 import { UNITS } from '@fifoflow/shared';
-import type { CalculatedIngredient, OrderCalculationResult } from '@fifoflow/shared';
+import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost } from '@fifoflow/shared';
 
 type RecipeTab = 'recipes' | 'menus' | 'calculate';
 
@@ -82,12 +82,14 @@ function RecipeList() {
               <tr className="bg-bg-table-header text-text-secondary text-left">
                 <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Name</th>
                 <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Type</th>
+                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Ingredients</th>
+                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Cost/Portion</th>
                 <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {recipes.map((r) => (
-                <RecipeRow key={r.id} recipe={r} onEdit={() => setEditingId(r.id)} />
+                <RecipeRow key={r.id} recipe={r} onEdit={() => setEditingId(r.id)} onView={() => setEditingId(r.id)} />
               ))}
             </tbody>
           </table>
@@ -97,7 +99,7 @@ function RecipeList() {
   );
 }
 
-function RecipeRow({ recipe, onEdit }: { recipe: { id: number; name: string; type: string }; onEdit: () => void }) {
+function RecipeRow({ recipe, onEdit }: { recipe: RecipeWithCost; onEdit: () => void; onView: () => void }) {
   const deleteRecipe = useDeleteRecipe();
   const { toast } = useToast();
 
@@ -112,6 +114,10 @@ function RecipeRow({ recipe, onEdit }: { recipe: { id: number; name: string; typ
         }`}>
           {recipe.type}
         </span>
+      </td>
+      <td className="px-4 py-2 text-right font-mono text-text-secondary">{recipe.item_count}</td>
+      <td className="px-4 py-2 text-right font-mono text-text-secondary">
+        {recipe.total_cost != null ? `$${recipe.total_cost.toFixed(2)}` : '\u2014'}
       </td>
       <td className="px-4 py-2 text-right">
         <button onClick={onEdit} className="text-accent-indigo hover:underline text-xs mr-3">Edit</button>
@@ -261,50 +267,66 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
           <div className="text-text-secondary text-xs">No ingredients added yet.</div>
         ) : (
           <div className="space-y-2">
-            {ingredients.map((ing, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <select
-                  value={ing.item_id}
-                  onChange={(e) => {
-                    const itemId = Number(e.target.value);
-                    updateIngredient(idx, 'item_id', itemId);
-                    // Auto-set unit from item
-                    const item = items?.find((i) => i.id === itemId);
-                    if (item) updateIngredient(idx, 'unit', item.unit);
-                  }}
-                  className="flex-1 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                >
-                  <option value={0}>Select item...</option>
-                  {(items ?? []).map((item) => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  step="any"
-                  min="0"
-                  placeholder="Qty"
-                  value={ing.quantity}
-                  onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)}
-                  className="w-20 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-right text-text-primary"
-                />
-                <select
-                  value={ing.unit}
-                  onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
-                  className="w-20 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
-                >
-                  {UNITS.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => removeIngredient(idx)}
-                  className="text-accent-red text-xs hover:underline"
-                >
-                  Remove
-                </button>
+            {ingredients.map((ing, idx) => {
+              // Find matching existing item for cost display
+              const existingItem = existing?.items.find((ei) => ei.item_id === ing.item_id);
+              return (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    value={ing.item_id}
+                    onChange={(e) => {
+                      const itemId = Number(e.target.value);
+                      updateIngredient(idx, 'item_id', itemId);
+                      // Auto-set unit from item
+                      const item = items?.find((i) => i.id === itemId);
+                      if (item) updateIngredient(idx, 'unit', item.unit);
+                    }}
+                    className="flex-1 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                  >
+                    <option value={0}>Select item...</option>
+                    {(items ?? []).map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="Qty"
+                    value={ing.quantity}
+                    onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)}
+                    className="w-20 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-right text-text-primary"
+                  />
+                  <select
+                    value={ing.unit}
+                    onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
+                    className="w-20 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  <span className="w-20 text-right text-xs font-mono text-text-secondary">
+                    {existingItem?.line_cost != null ? `$${existingItem.line_cost.toFixed(2)}` : ''}
+                  </span>
+                  <button
+                    onClick={() => removeIngredient(idx)}
+                    className="text-accent-red text-xs hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
+            {/* Total cost */}
+            {existing && existing.items.some((i) => i.line_cost != null) && (
+              <div className="flex items-center justify-end gap-2 pt-1 border-t border-border">
+                <span className="text-xs font-medium text-text-secondary">Total Cost/Portion:</span>
+                <span className="text-xs font-mono font-semibold text-text-primary">
+                  ${existing.items.reduce((sum, i) => sum + (i.line_cost ?? 0), 0).toFixed(2)}
+                </span>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

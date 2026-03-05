@@ -26,6 +26,7 @@ import type {
   Recipe,
   RecipeDetail,
   RecipeItem,
+  RecipeWithCost,
   SetProductRecipeInput,
   StorageArea,
   Transaction,
@@ -1119,20 +1120,80 @@ export class SqliteInventoryStore implements InventoryStore {
 
   // ── Recipes ──────────────────────────────────────────────────
 
-  async listRecipes(): Promise<Recipe[]> {
-    return this.db.prepare('SELECT * FROM recipes ORDER BY name').all() as Recipe[];
+  async listRecipes(): Promise<RecipeWithCost[]> {
+    const recipes = this.db.prepare('SELECT * FROM recipes ORDER BY name').all() as Recipe[];
+    return recipes.map((r) => {
+      const detail = this.db.prepare(`
+        SELECT ri.quantity, ri.unit, ri.item_id
+        FROM recipe_items ri
+        WHERE ri.recipe_id = ?
+      `).all(r.id) as Array<{ quantity: number; unit: string; item_id: number }>;
+
+      let totalCost: number | null = null;
+      for (const ri of detail) {
+        const price = this.db.prepare(`
+          SELECT order_unit_price, order_unit, qty_per_unit
+          FROM vendor_prices
+          WHERE item_id = ?
+          ORDER BY is_default DESC, id ASC
+          LIMIT 1
+        `).get(ri.item_id) as { order_unit_price: number; order_unit: string | null; qty_per_unit: number | null } | undefined;
+
+        if (price) {
+          let unitCost = price.order_unit_price;
+          if (ri.unit !== price.order_unit && price.order_unit && price.qty_per_unit && price.qty_per_unit > 0) {
+            unitCost = price.order_unit_price / price.qty_per_unit;
+          }
+          totalCost = (totalCost ?? 0) + ri.quantity * unitCost;
+        }
+      }
+
+      return {
+        ...r,
+        total_cost: totalCost != null ? Math.round(totalCost * 100) / 100 : null,
+        item_count: detail.length,
+      };
+    });
   }
 
   async getRecipeById(id: number): Promise<RecipeDetail | undefined> {
     const recipe = this.db.prepare('SELECT * FROM recipes WHERE id = ?').get(id) as Recipe | undefined;
     if (!recipe) return undefined;
 
-    const items = this.db.prepare(`
+    const rawItems = this.db.prepare(`
       SELECT ri.*, i.name as item_name, i.unit as item_unit
       FROM recipe_items ri
       JOIN items i ON ri.item_id = i.id
       WHERE ri.recipe_id = ?
     `).all(id) as RecipeItem[];
+
+    // Enrich with vendor pricing
+    const items = rawItems.map((ri) => {
+      const price = this.db.prepare(`
+        SELECT order_unit_price, order_unit, qty_per_unit
+        FROM vendor_prices
+        WHERE item_id = ?
+        ORDER BY is_default DESC, id ASC
+        LIMIT 1
+      `).get(ri.item_id) as { order_unit_price: number; order_unit: string | null; qty_per_unit: number | null } | undefined;
+
+      let unitCost: number | null = null;
+      if (price) {
+        // If the recipe unit matches the order unit, use price directly
+        if (ri.unit === price.order_unit || !price.order_unit) {
+          unitCost = price.order_unit_price;
+        } else if (price.qty_per_unit && price.qty_per_unit > 0) {
+          // price is per order_unit, convert to per inner unit
+          unitCost = Math.round((price.order_unit_price / price.qty_per_unit) * 100) / 100;
+        } else {
+          unitCost = price.order_unit_price;
+        }
+      }
+
+      const lineCost = unitCost != null ? Math.round(ri.quantity * unitCost * 100) / 100 : null;
+
+      return { ...ri, unit_cost: unitCost, line_cost: lineCost };
+    });
 
     return { ...recipe, items };
   }

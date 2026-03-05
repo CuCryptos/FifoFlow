@@ -17,7 +17,7 @@ import type {
   Order,
   OrderWithVendor,
   OrderDetail,
-  Recipe,
+  RecipeWithCost,
   RecipeDetail,
   ProductRecipe,
   OrderCalculationResult,
@@ -209,7 +209,7 @@ export const api = {
     },
   },
   recipes: {
-    list: () => fetchJson<Recipe[]>('/recipes'),
+    list: () => fetchJson<RecipeWithCost[]>('/recipes'),
     get: (id: number) => fetchJson<RecipeDetail>(`/recipes/${id}`),
     create: (data: CreateRecipeInput) =>
       fetchJson<RecipeDetail>('/recipes', { method: 'POST', body: JSON.stringify(data) }),
