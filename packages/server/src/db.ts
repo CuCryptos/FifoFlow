@@ -174,6 +174,43 @@ export function initializeDb(db: Database.Database): void {
     BEGIN
       UPDATE vendor_prices SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
+
+    CREATE TABLE IF NOT EXISTS recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL CHECK(type IN ('dish', 'prep')),
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS recipe_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      quantity REAL NOT NULL CHECK(quantity > 0),
+      unit TEXT NOT NULL,
+      UNIQUE(recipe_id, item_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS product_recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      portions_per_guest REAL NOT NULL DEFAULT 1.0 CHECK(portions_per_guest > 0),
+      UNIQUE(venue_id, recipe_id)
+    );
+
+    CREATE TRIGGER IF NOT EXISTS update_recipe_timestamp
+    AFTER UPDATE ON recipes
+    BEGIN
+      UPDATE recipes SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe_id ON recipe_items(recipe_id);
+    CREATE INDEX IF NOT EXISTS idx_recipe_items_item_id ON recipe_items(item_id);
+    CREATE INDEX IF NOT EXISTS idx_product_recipes_venue_id ON product_recipes(venue_id);
+    CREATE INDEX IF NOT EXISTS idx_product_recipes_recipe_id ON product_recipes(recipe_id);
   `);
 
   // Migrations — add inventory fields incrementally

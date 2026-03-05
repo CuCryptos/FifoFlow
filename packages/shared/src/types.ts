@@ -250,6 +250,70 @@ export interface MergeItemsResult {
   storage_consolidated: number;
 }
 
+export type RecipeType = 'dish' | 'prep';
+
+export interface Recipe {
+  id: number;
+  name: string;
+  type: RecipeType;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecipeItem {
+  id: number;
+  recipe_id: number;
+  item_id: number;
+  item_name: string;
+  item_unit: Unit;
+  quantity: number;
+  unit: string;
+}
+
+export interface RecipeDetail extends Recipe {
+  items: RecipeItem[];
+}
+
+export interface ProductRecipe {
+  id: number;
+  venue_id: number;
+  venue_name: string;
+  recipe_id: number;
+  recipe_name: string;
+  recipe_type: RecipeType;
+  portions_per_guest: number;
+}
+
+export interface IngredientSource {
+  recipe_name: string;
+  quantity_per_guest: number;
+  guest_count: number;
+  subtotal: number;
+}
+
+export interface CalculatedIngredient {
+  item_id: number;
+  item_name: string;
+  item_unit: Unit;
+  recipe_unit: string;
+  total_needed: number;
+  current_qty: number;
+  converted_stock: number | null;
+  shortage: number;
+  vendor_id: number | null;
+  vendor_name: string | null;
+  order_unit: Unit | null;
+  order_unit_price: number | null;
+  estimated_cost: number | null;
+  sources: IngredientSource[];
+}
+
+export interface OrderCalculationResult {
+  ingredients: CalculatedIngredient[];
+  total_estimated_cost: number;
+}
+
 export interface InvoiceLine {
   vendor_item_name: string;
   quantity: number;

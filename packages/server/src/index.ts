@@ -12,6 +12,8 @@ import { createOrderRoutes } from './routes/orders.js';
 import { createReportRoutes } from './routes/reports.js';
 import { createVenueRoutes } from './routes/venues.js';
 import { createInvoiceRoutes } from './routes/invoices.js';
+import { createRecipeRoutes } from './routes/recipes.js';
+import { createProductRecipeRoutes } from './routes/productRecipes.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
 import path from 'node:path';
@@ -39,6 +41,8 @@ app.use('/api/orders', createOrderRoutes(store));
 app.use('/api/reports', createReportRoutes(store));
 app.use('/api/venues', createVenueRoutes(store));
 app.use('/api/invoices', createInvoiceRoutes(store));
+app.use('/api/recipes', createRecipeRoutes(store));
+app.use('/api/product-recipes', createProductRecipeRoutes(store));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', store: storeDriver });

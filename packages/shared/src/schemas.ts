@@ -183,6 +183,46 @@ export const mergeItemsSchema = z.object({
 });
 
 export type MergeItemsInput = z.infer<typeof mergeItemsSchema>;
+
+export const createRecipeSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  type: z.enum(['dish', 'prep'] as const),
+  notes: z.string().max(500).nullable().optional(),
+  items: z.array(z.object({
+    item_id: z.number().int().positive(),
+    quantity: z.number().positive(),
+    unit: z.string().min(1),
+  })).optional(),
+});
+
+export const updateRecipeSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200).optional(),
+  type: z.enum(['dish', 'prep'] as const).optional(),
+  notes: z.string().max(500).nullable().optional(),
+  items: z.array(z.object({
+    item_id: z.number().int().positive(),
+    quantity: z.number().positive(),
+    unit: z.string().min(1),
+  })).optional(),
+});
+
+export const setProductRecipeSchema = z.object({
+  recipe_id: z.number().int().positive(),
+  portions_per_guest: z.number().positive().default(1.0),
+});
+
+export const calculateOrderSchema = z.object({
+  guest_counts: z.array(z.object({
+    venue_id: z.number().int().positive(),
+    guest_count: z.number().int().min(0),
+  })).min(1),
+  vendor_id: z.number().int().positive().optional(),
+});
+
+export type CreateRecipeInput = z.infer<typeof createRecipeSchema>;
+export type UpdateRecipeInput = z.infer<typeof updateRecipeSchema>;
+export type SetProductRecipeInput = z.infer<typeof setProductRecipeSchema>;
+export type CalculateOrderInput = z.infer<typeof calculateOrderSchema>;
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
 export type CreateVendorPriceInput = z.infer<typeof createVendorPriceSchema>;

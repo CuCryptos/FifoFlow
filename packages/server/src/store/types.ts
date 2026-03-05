@@ -8,6 +8,7 @@ import type {
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
+  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
@@ -19,7 +20,11 @@ import type {
   OrderDetail,
   OrderItem,
   OrderWithVendor,
+  ProductRecipe,
+  Recipe,
+  RecipeDetail,
   ReconciliationResult,
+  SetProductRecipeInput,
   StorageArea,
   Transaction,
   TransactionType,
@@ -27,6 +32,7 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateOrderInput,
+  UpdateRecipeInput,
   UpdateStorageAreaInput,
   UpdateVendorPriceInput,
   UsageReport,
@@ -169,6 +175,18 @@ export interface InventoryStore {
   updateVenue(id: number, input: UpdateVenueInput): Promise<Venue>;
   deleteVenue(id: number): Promise<void>;
   countItemsForVenue(venueId: number): Promise<number>;
+
+  // Recipes
+  listRecipes(): Promise<Recipe[]>;
+  getRecipeById(id: number): Promise<RecipeDetail | undefined>;
+  createRecipe(input: CreateRecipeInput): Promise<RecipeDetail>;
+  updateRecipe(id: number, input: UpdateRecipeInput): Promise<RecipeDetail>;
+  deleteRecipe(id: number): Promise<void>;
+
+  // Product Recipes
+  listProductRecipes(venueId?: number): Promise<ProductRecipe[]>;
+  setProductRecipe(venueId: number, input: SetProductRecipeInput): Promise<ProductRecipe>;
+  deleteProductRecipe(id: number): Promise<void>;
 
   // Reports
   getUsageReport(filters: ReportFilters): Promise<UsageReport>;

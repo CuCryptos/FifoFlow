@@ -8,6 +8,7 @@ import type {
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
+  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
@@ -18,12 +19,17 @@ import type {
   Order,
   OrderDetail,
   OrderWithVendor,
+  ProductRecipe,
+  Recipe,
+  RecipeDetail,
   ReconciliationResult,
+  SetProductRecipeInput,
   StorageArea,
   Transaction,
   TransactionWithItem,
   UpdateItemInput,
   UpdateOrderInput,
+  UpdateRecipeInput,
   UpdateStorageAreaInput,
   UpdateVendorPriceInput,
   UsageReport,
@@ -581,6 +587,20 @@ export class SupabaseInventoryStore implements InventoryStore {
   async updateOrder(_id: number, _input: UpdateOrderInput): Promise<OrderDetail> { return this.notImplemented('updateOrder'); }
   async updateOrderStatus(_id: number, _status: 'sent'): Promise<Order> { return this.notImplemented('updateOrderStatus'); }
   async deleteOrder(_id: number): Promise<void> { return this.notImplemented('deleteOrder'); }
+
+  // Recipes — stubs (not yet implemented for Supabase)
+
+  async listRecipes(): Promise<Recipe[]> { return []; }
+  async getRecipeById(_id: number): Promise<RecipeDetail | undefined> { return undefined; }
+  async createRecipe(_input: CreateRecipeInput): Promise<RecipeDetail> { return this.notImplemented('createRecipe'); }
+  async updateRecipe(_id: number, _input: UpdateRecipeInput): Promise<RecipeDetail> { return this.notImplemented('updateRecipe'); }
+  async deleteRecipe(_id: number): Promise<void> { return this.notImplemented('deleteRecipe'); }
+
+  // Product Recipes — stubs
+
+  async listProductRecipes(_venueId?: number): Promise<ProductRecipe[]> { return []; }
+  async setProductRecipe(_venueId: number, _input: SetProductRecipeInput): Promise<ProductRecipe> { return this.notImplemented('setProductRecipe'); }
+  async deleteProductRecipe(_id: number): Promise<void> { return this.notImplemented('deleteProductRecipe'); }
 
   // Reports — stubs (not yet implemented for Supabase)
 

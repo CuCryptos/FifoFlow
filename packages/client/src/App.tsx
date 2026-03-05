@@ -9,6 +9,7 @@ import { ItemDetail } from './pages/ItemDetail';
 import { Activity } from './pages/Activity';
 import { Counts } from './pages/Counts';
 import { Orders } from './pages/Orders';
+import { Recipes } from './pages/Recipes';
 import { Reports } from './pages/Reports';
 
 const queryClient = new QueryClient({
@@ -29,6 +30,7 @@ export default function App() {
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/inventory/:id" element={<ItemDetail />} />
                 <Route path="/orders" element={<Orders />} />
+                <Route path="/recipes" element={<Recipes />} />
                 <Route path="/activity" element={<Activity />} />
                 <Route path="/counts" element={<Counts />} />
                 <Route path="/reports" element={<Reports />} />

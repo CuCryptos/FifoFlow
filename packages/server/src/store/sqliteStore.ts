@@ -10,6 +10,7 @@ import type {
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
+  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
@@ -21,11 +22,17 @@ import type {
   OrderDetail,
   OrderItem,
   OrderWithVendor,
+  ProductRecipe,
+  Recipe,
+  RecipeDetail,
+  RecipeItem,
+  SetProductRecipeInput,
   StorageArea,
   Transaction,
   TransactionWithItem,
   UpdateItemInput,
   UpdateOrderInput,
+  UpdateRecipeInput,
   UpdateStorageAreaInput,
   UpdateVendorPriceInput,
   UsageReport,
@@ -1108,6 +1115,122 @@ export class SqliteInventoryStore implements InventoryStore {
 
   async deleteOrder(id: number): Promise<void> {
     this.db.prepare('DELETE FROM orders WHERE id = ?').run(id);
+  }
+
+  // ── Recipes ──────────────────────────────────────────────────
+
+  async listRecipes(): Promise<Recipe[]> {
+    return this.db.prepare('SELECT * FROM recipes ORDER BY name').all() as Recipe[];
+  }
+
+  async getRecipeById(id: number): Promise<RecipeDetail | undefined> {
+    const recipe = this.db.prepare('SELECT * FROM recipes WHERE id = ?').get(id) as Recipe | undefined;
+    if (!recipe) return undefined;
+
+    const items = this.db.prepare(`
+      SELECT ri.*, i.name as item_name, i.unit as item_unit
+      FROM recipe_items ri
+      JOIN items i ON ri.item_id = i.id
+      WHERE ri.recipe_id = ?
+    `).all(id) as RecipeItem[];
+
+    return { ...recipe, items };
+  }
+
+  async createRecipe(input: CreateRecipeInput): Promise<RecipeDetail> {
+    const result = this.db.prepare(
+      'INSERT INTO recipes (name, type, notes) VALUES (?, ?, ?)'
+    ).run(input.name, input.type, input.notes ?? null);
+
+    const recipeId = Number(result.lastInsertRowid);
+
+    if (input.items && input.items.length > 0) {
+      const insertItem = this.db.prepare(
+        'INSERT INTO recipe_items (recipe_id, item_id, quantity, unit) VALUES (?, ?, ?, ?)'
+      );
+      for (const item of input.items) {
+        insertItem.run(recipeId, item.item_id, item.quantity, item.unit);
+      }
+    }
+
+    return (await this.getRecipeById(recipeId))!;
+  }
+
+  async updateRecipe(id: number, input: UpdateRecipeInput): Promise<RecipeDetail> {
+    const fields: Array<[string, unknown]> = [];
+    if (input.name !== undefined) fields.push(['name', input.name]);
+    if (input.type !== undefined) fields.push(['type', input.type]);
+    if (input.notes !== undefined) fields.push(['notes', input.notes]);
+
+    if (fields.length > 0) {
+      const setClauses = fields.map(([col]) => `${col} = ?`).join(', ');
+      const values = fields.map(([, val]) => val);
+      this.db.prepare(`UPDATE recipes SET ${setClauses} WHERE id = ?`).run(...values, id);
+    }
+
+    if (input.items !== undefined) {
+      this.db.prepare('DELETE FROM recipe_items WHERE recipe_id = ?').run(id);
+      const insertItem = this.db.prepare(
+        'INSERT INTO recipe_items (recipe_id, item_id, quantity, unit) VALUES (?, ?, ?, ?)'
+      );
+      for (const item of input.items) {
+        insertItem.run(id, item.item_id, item.quantity, item.unit);
+      }
+    }
+
+    return (await this.getRecipeById(id))!;
+  }
+
+  async deleteRecipe(id: number): Promise<void> {
+    const used = this.db.prepare(
+      'SELECT COUNT(*) as count FROM product_recipes WHERE recipe_id = ?'
+    ).get(id) as { count: number };
+    if (used.count > 0) {
+      const err = new Error('Cannot delete recipe that is assigned to a product menu');
+      (err as any).status = 409;
+      throw err;
+    }
+    this.db.prepare('DELETE FROM recipes WHERE id = ?').run(id);
+  }
+
+  // ── Product Recipes ─────────────────────────────────────────
+
+  async listProductRecipes(venueId?: number): Promise<ProductRecipe[]> {
+    let sql = `
+      SELECT pr.*, v.name as venue_name, r.name as recipe_name, r.type as recipe_type
+      FROM product_recipes pr
+      JOIN venues v ON pr.venue_id = v.id
+      JOIN recipes r ON pr.recipe_id = r.id
+    `;
+    const params: unknown[] = [];
+    if (venueId !== undefined) {
+      sql += ' WHERE pr.venue_id = ?';
+      params.push(venueId);
+    }
+    sql += ' ORDER BY v.name, r.name';
+    return this.db.prepare(sql).all(...params) as ProductRecipe[];
+  }
+
+  async setProductRecipe(venueId: number, input: SetProductRecipeInput): Promise<ProductRecipe> {
+    this.db.prepare(`
+      INSERT INTO product_recipes (venue_id, recipe_id, portions_per_guest)
+      VALUES (?, ?, ?)
+      ON CONFLICT(venue_id, recipe_id) DO UPDATE SET portions_per_guest = excluded.portions_per_guest
+    `).run(venueId, input.recipe_id, input.portions_per_guest);
+
+    const row = this.db.prepare(`
+      SELECT pr.*, v.name as venue_name, r.name as recipe_name, r.type as recipe_type
+      FROM product_recipes pr
+      JOIN venues v ON pr.venue_id = v.id
+      JOIN recipes r ON pr.recipe_id = r.id
+      WHERE pr.venue_id = ? AND pr.recipe_id = ?
+    `).get(venueId, input.recipe_id) as ProductRecipe;
+
+    return row;
+  }
+
+  async deleteProductRecipe(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM product_recipes WHERE id = ?').run(id);
   }
 
   // ── Reports ──────────────────────────────────────────────────

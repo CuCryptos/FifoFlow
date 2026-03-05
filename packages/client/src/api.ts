@@ -17,19 +17,27 @@ import type {
   Order,
   OrderWithVendor,
   OrderDetail,
+  Recipe,
+  RecipeDetail,
+  ProductRecipe,
+  OrderCalculationResult,
   UsageReport,
   WasteReport,
   CostReport,
   CloseCountSessionInput,
   CreateItemInput,
   CreateCountSessionInput,
+  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorInput,
   CreateVendorPriceInput,
   CreateVenueInput,
   CreateOrderInput,
   UpdateOrderInput,
+  UpdateRecipeInput,
   UpdateVendorPriceInput,
+  SetProductRecipeInput,
+  CalculateOrderInput,
   RecordCountEntryInput,
   SetItemCountInput,
   UpdateItemInput,
@@ -199,6 +207,28 @@ export const api = {
       if (params.venue_id) qs.set('venue_id', String(params.venue_id));
       return fetchJson<CostReport>(`/reports/cost?${qs}`);
     },
+  },
+  recipes: {
+    list: () => fetchJson<Recipe[]>('/recipes'),
+    get: (id: number) => fetchJson<RecipeDetail>(`/recipes/${id}`),
+    create: (data: CreateRecipeInput) =>
+      fetchJson<RecipeDetail>('/recipes', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: UpdateRecipeInput) =>
+      fetchJson<RecipeDetail>(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/recipes/${id}`, { method: 'DELETE' }),
+  },
+  productRecipes: {
+    list: (venueId?: number) => {
+      const qs = venueId ? `?venue_id=${venueId}` : '';
+      return fetchJson<ProductRecipe[]>(`/product-recipes${qs}`);
+    },
+    set: (venueId: number, data: SetProductRecipeInput) =>
+      fetchJson<ProductRecipe>(`/product-recipes/${venueId}`, { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/product-recipes/${id}`, { method: 'DELETE' }),
+    calculate: (data: CalculateOrderInput) =>
+      fetchJson<OrderCalculationResult>('/product-recipes/calculate', { method: 'POST', body: JSON.stringify(data) }),
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
   invoices: {
