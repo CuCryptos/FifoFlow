@@ -12,6 +12,10 @@ import type {
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
+  Forecast,
+  ForecastEntry,
+  ForecastProductMapping,
+  ForecastWithEntries,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
@@ -25,6 +29,7 @@ import type {
   RecipeDetail,
   RecipeWithCost,
   ReconciliationResult,
+  SaveForecastInput,
   SetProductRecipeInput,
   StorageArea,
   Transaction,
@@ -188,6 +193,16 @@ export interface InventoryStore {
   listProductRecipes(venueId?: number): Promise<ProductRecipe[]>;
   setProductRecipe(venueId: number, input: SetProductRecipeInput): Promise<ProductRecipe>;
   deleteProductRecipe(id: number): Promise<void>;
+
+  // Forecasts
+  listForecasts(): Promise<Forecast[]>;
+  getForecastById(id: number): Promise<ForecastWithEntries | undefined>;
+  saveForecast(input: SaveForecastInput): Promise<Forecast>;
+  deleteForecast(id: number): Promise<void>;
+  listForecastMappings(): Promise<ForecastProductMapping[]>;
+  saveForecastMapping(input: { product_name: string; venue_id: number }): Promise<ForecastProductMapping>;
+  saveForecastMappingsBulk(inputs: Array<{ product_name: string; venue_id: number }>): Promise<ForecastProductMapping[]>;
+  deleteForecastMapping(id: number): Promise<void>;
 
   // Reports
   getUsageReport(filters: ReportFilters): Promise<UsageReport>;

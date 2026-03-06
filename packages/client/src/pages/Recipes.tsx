@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecipe } from '../hooks/useRecipes';
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
+import { useParseForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
 import { useItems } from '../hooks/useItems';
 import { useVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
 import { useToast } from '../contexts/ToastContext';
 import { UNITS } from '@fifoflow/shared';
-import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost } from '@fifoflow/shared';
+import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult } from '@fifoflow/shared';
 
 type RecipeTab = 'recipes' | 'menus' | 'calculate';
 
@@ -552,6 +553,8 @@ function ProductMenus() {
 
 // ── Calculate Order Tab ───────────────────────────────────────
 
+type ForecastStep = 'idle' | 'parsing' | 'mapping' | 'date-select';
+
 function CalculateOrder() {
   const { data: venues } = useVenues();
   const { data: vendors } = useVendors();
@@ -563,6 +566,75 @@ function CalculateOrder() {
   const [vendorFilter, setVendorFilter] = useState<number | undefined>(undefined);
   const [result, setResult] = useState<OrderCalculationResult | null>(null);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
+
+  // Forecast state
+  const [forecastStep, setForecastStep] = useState<ForecastStep>('idle');
+  const [forecastParseResult, setForecastParseResult] = useState<ForecastParseResult | null>(null);
+  const [productMappings, setProductMappings] = useState<Record<string, number>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const parseForecast = useParseForecast();
+  const { data: existingMappings } = useForecastMappings();
+  const saveMappings = useSaveForecastMappings();
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setForecastStep('parsing');
+    parseForecast.mutate(file, {
+      onSuccess: (data) => {
+        setForecastParseResult(data);
+        const prefilled: Record<string, number> = {};
+        for (const product of data.products) {
+          const existing = existingMappings?.find((m) => m.product_name === product.product_name);
+          if (existing) {
+            prefilled[product.product_name] = existing.venue_id;
+          }
+        }
+        setProductMappings(prefilled);
+        setForecastStep('mapping');
+      },
+      onError: (err) => {
+        toast(err.message, 'error');
+        setForecastStep('idle');
+      },
+    });
+    // Reset file input so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleSaveMappingsAndContinue = () => {
+    const mappingsToSave = Object.entries(productMappings)
+      .filter(([, venueId]) => venueId > 0)
+      .map(([product_name, venue_id]) => ({ product_name, venue_id }));
+
+    if (mappingsToSave.length === 0) {
+      toast('Map at least one product to a venue', 'error');
+      return;
+    }
+
+    saveMappings.mutate(mappingsToSave, {
+      onSuccess: () => {
+        setForecastStep('date-select');
+      },
+      onError: (err) => toast(err.message, 'error'),
+    });
+  };
+
+  const handleDateSelect = (date: string) => {
+    if (!forecastParseResult) return;
+    const newCounts: Record<number, string> = {};
+    for (const product of forecastParseResult.products) {
+      const venueId = productMappings[product.product_name];
+      if (!venueId) continue;
+      const count = product.counts[date] ?? 0;
+      const existing = Number(newCounts[venueId] || 0);
+      newCounts[venueId] = String(existing + count);
+    }
+    setGuestCounts(newCounts);
+    setForecastStep('idle');
+    const d = new Date(date + 'T12:00:00');
+    toast(`Loaded forecast for ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`, 'success');
+  };
 
   const handleCalculate = () => {
     const guest_counts = (venues ?? [])
@@ -586,7 +658,6 @@ function CalculateOrder() {
   const handleCreateDraftOrder = () => {
     if (!result) return;
 
-    // Group shortages by vendor
     const byVendor = new Map<number, CalculatedIngredient[]>();
     for (const ing of result.ingredients) {
       if (ing.shortage <= 0 || !ing.vendor_id) continue;
@@ -600,7 +671,6 @@ function CalculateOrder() {
       return;
     }
 
-    // Create one order per vendor
     let created = 0;
     for (const [vid, ings] of byVendor) {
       const items = ings.map((ing) => ({
@@ -627,13 +697,109 @@ function CalculateOrder() {
 
   return (
     <div className="space-y-4">
+      {/* Forecast upload */}
+      {forecastStep === 'idle' && (
+        <div className="flex items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={parseForecast.isPending}
+            className="bg-accent-amber text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-amber/80 disabled:opacity-40 transition-colors"
+          >
+            Upload Forecast PDF
+          </button>
+          <span className="text-xs text-text-secondary">or enter guest counts manually below</span>
+        </div>
+      )}
+
+      {forecastStep === 'parsing' && (
+        <div className="bg-bg-card rounded-xl shadow-sm p-4 flex items-center gap-3">
+          <div className="animate-spin w-5 h-5 border-2 border-accent-indigo border-t-transparent rounded-full" />
+          <span className="text-sm text-text-secondary">Parsing forecast PDF...</span>
+        </div>
+      )}
+
+      {forecastStep === 'mapping' && forecastParseResult && (
+        <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-primary">Map Forecast Products to Venues</h3>
+            <button onClick={() => setForecastStep('idle')} className="text-text-secondary text-xs hover:text-text-primary">Cancel</button>
+          </div>
+          <p className="text-xs text-text-secondary">
+            Assign each forecast product to a venue. Mappings are saved for future uploads.
+          </p>
+          <div className="space-y-2">
+            {forecastParseResult.products.map((product) => (
+              <div key={product.product_name} className="flex items-center gap-3">
+                <span className="text-xs text-text-muted w-10 shrink-0">{product.group}</span>
+                <span className="text-xs text-text-primary w-56 truncate font-medium" title={product.product_name}>
+                  {product.product_name}
+                </span>
+                <select
+                  value={productMappings[product.product_name] ?? ''}
+                  onChange={(e) => setProductMappings((prev) => ({
+                    ...prev,
+                    [product.product_name]: Number(e.target.value),
+                  }))}
+                  className="flex-1 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                >
+                  <option value="">-- Skip --</option>
+                  {(venues ?? []).map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={handleSaveMappingsAndContinue}
+              disabled={saveMappings.isPending}
+              className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
+            >
+              {saveMappings.isPending ? 'Saving...' : 'Save Mappings & Select Date'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {forecastStep === 'date-select' && forecastParseResult && (
+        <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-primary">Select Forecast Date</h3>
+            <button onClick={() => setForecastStep('idle')} className="text-text-secondary text-xs hover:text-text-primary">Cancel</button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {forecastParseResult.dates.map((date) => {
+              const d = new Date(date + 'T12:00:00');
+              const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+              return (
+                <button
+                  key={date}
+                  onClick={() => handleDateSelect(date)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border bg-white text-text-primary border-border hover:border-accent-indigo hover:bg-accent-indigo/5 transition-colors"
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Guest count inputs */}
       <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
         <h3 className="text-sm font-semibold text-text-primary">Guest Counts</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="space-y-2">
           {(venues ?? []).map((v) => (
-            <div key={v.id} className="flex items-center gap-2">
-              <label className="text-xs text-text-secondary flex-1">{v.name}</label>
+            <div key={v.id} className="flex items-center gap-3">
+              <label className="text-xs text-text-secondary w-48 truncate" title={v.name}>{v.name}</label>
               <input
                 type="number"
                 min="0"
@@ -642,6 +808,7 @@ function CalculateOrder() {
                 placeholder="0"
                 className="w-24 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-right text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
               />
+              <span className="text-xs text-text-muted">guests</span>
             </div>
           ))}
         </div>

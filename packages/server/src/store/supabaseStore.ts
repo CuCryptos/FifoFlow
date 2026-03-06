@@ -13,6 +13,9 @@ import type {
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
+  Forecast,
+  ForecastProductMapping,
+  ForecastWithEntries,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
@@ -24,6 +27,7 @@ import type {
   Recipe,
   RecipeDetail,
   ReconciliationResult,
+  SaveForecastInput,
   SetProductRecipeInput,
   StorageArea,
   Transaction,
@@ -602,6 +606,17 @@ export class SupabaseInventoryStore implements InventoryStore {
   async listProductRecipes(_venueId?: number): Promise<ProductRecipe[]> { return []; }
   async setProductRecipe(_venueId: number, _input: SetProductRecipeInput): Promise<ProductRecipe> { return this.notImplemented('setProductRecipe'); }
   async deleteProductRecipe(_id: number): Promise<void> { return this.notImplemented('deleteProductRecipe'); }
+
+  // Forecasts — stubs
+
+  async listForecasts(): Promise<Forecast[]> { return []; }
+  async getForecastById(_id: number): Promise<ForecastWithEntries | undefined> { return undefined; }
+  async saveForecast(_input: SaveForecastInput): Promise<Forecast> { return this.notImplemented('saveForecast'); }
+  async deleteForecast(_id: number): Promise<void> { return this.notImplemented('deleteForecast'); }
+  async listForecastMappings(): Promise<ForecastProductMapping[]> { return []; }
+  async saveForecastMapping(_input: { product_name: string; venue_id: number }): Promise<ForecastProductMapping> { return this.notImplemented('saveForecastMapping'); }
+  async saveForecastMappingsBulk(_inputs: Array<{ product_name: string; venue_id: number }>): Promise<ForecastProductMapping[]> { return this.notImplemented('saveForecastMappingsBulk'); }
+  async deleteForecastMapping(_id: number): Promise<void> { return this.notImplemented('deleteForecastMapping'); }
 
   // Reports — stubs (not yet implemented for Supabase)
 

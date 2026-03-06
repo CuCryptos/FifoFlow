@@ -48,6 +48,11 @@ import type {
   MergeItemsResult,
   MergeItemsInput,
   InvoiceParseResult,
+  Forecast,
+  ForecastWithEntries,
+  ForecastParseResult,
+  ForecastProductMapping,
+  SaveForecastInput,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -267,5 +272,33 @@ export const api = {
         '/invoices/confirm',
         { method: 'POST', body: JSON.stringify(data) }
       ),
+  },
+  forecasts: {
+    parse: async (file: File): Promise<ForecastParseResult> => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${BASE}/forecasts/parse`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        const msg = typeof error.error === 'string' ? error.error : res.statusText;
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    save: (data: SaveForecastInput) =>
+      fetchJson<Forecast>('/forecasts/save', { method: 'POST', body: JSON.stringify(data) }),
+    list: () => fetchJson<Forecast[]>('/forecasts'),
+    get: (id: number) => fetchJson<ForecastWithEntries>(`/forecasts/${id}`),
+    delete: (id: number) => fetchJson<void>(`/forecasts/${id}`, { method: 'DELETE' }),
+    listMappings: () => fetchJson<ForecastProductMapping[]>('/forecasts/mappings'),
+    saveMappings: (mappings: Array<{ product_name: string; venue_id: number }>) =>
+      fetchJson<ForecastProductMapping[]>('/forecasts/mappings', {
+        method: 'POST',
+        body: JSON.stringify({ mappings }),
+      }),
+    deleteMapping: (id: number) => fetchJson<void>(`/forecasts/mappings/${id}`, { method: 'DELETE' }),
   },
 };

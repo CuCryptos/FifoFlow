@@ -349,3 +349,47 @@ export interface InvoiceParseResult {
     total_amount: number;
   };
 }
+
+// ── Forecast Types ──────────────────────────────────────────
+
+export interface ForecastProduct {
+  product_name: string;
+  group: string;
+  counts: Record<string, number>;
+}
+
+export interface ForecastParseResult {
+  date_range_label: string;
+  dates: string[];
+  products: ForecastProduct[];
+}
+
+export interface ForecastProductMapping {
+  id: number;
+  product_name: string;
+  venue_id: number;
+  venue_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Forecast {
+  id: number;
+  filename: string;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  raw_dates: string[];
+  created_at: string;
+}
+
+export interface ForecastEntry {
+  id: number;
+  forecast_id: number;
+  product_name: string;
+  forecast_date: string;
+  guest_count: number;
+}
+
+export interface ForecastWithEntries extends Forecast {
+  entries: ForecastEntry[];
+}

@@ -230,3 +230,23 @@ export type UpdateVendorPriceInput = z.infer<typeof updateVendorPriceSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+
+export const saveForecastSchema = z.object({
+  filename: z.string().min(1),
+  dates: z.array(z.string()).min(1),
+  products: z.array(z.object({
+    product_name: z.string().min(1),
+    group: z.string().min(1),
+    counts: z.record(z.string(), z.number().int().min(0)),
+  })).min(1),
+});
+
+export const saveForecastMappingsBulkSchema = z.object({
+  mappings: z.array(z.object({
+    product_name: z.string().min(1),
+    venue_id: z.number().int().positive(),
+  })).min(1),
+});
+
+export type SaveForecastInput = z.infer<typeof saveForecastSchema>;
+export type SaveForecastMappingsBulkInput = z.infer<typeof saveForecastMappingsBulkSchema>;

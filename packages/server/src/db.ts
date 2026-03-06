@@ -211,6 +211,39 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_recipe_items_item_id ON recipe_items(item_id);
     CREATE INDEX IF NOT EXISTS idx_product_recipes_venue_id ON product_recipes(venue_id);
     CREATE INDEX IF NOT EXISTS idx_product_recipes_recipe_id ON product_recipes(recipe_id);
+
+    CREATE TABLE IF NOT EXISTS forecasts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL,
+      date_range_start TEXT,
+      date_range_end TEXT,
+      raw_dates TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS forecast_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      forecast_id INTEGER NOT NULL REFERENCES forecasts(id) ON DELETE CASCADE,
+      product_name TEXT NOT NULL,
+      forecast_date TEXT NOT NULL,
+      guest_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_forecast_entries_fid ON forecast_entries(forecast_id);
+
+    CREATE TABLE IF NOT EXISTS forecast_product_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_name TEXT NOT NULL UNIQUE,
+      venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TRIGGER IF NOT EXISTS update_forecast_mapping_timestamp
+    AFTER UPDATE ON forecast_product_mappings
+    BEGIN
+      UPDATE forecast_product_mappings SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
   `);
 
   // Migrations — add inventory fields incrementally

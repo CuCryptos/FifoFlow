@@ -17,6 +17,10 @@ import type {
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  Forecast,
+  ForecastEntry,
+  ForecastProductMapping,
+  ForecastWithEntries,
   MergeItemsResult,
   Order,
   OrderDetail,
@@ -27,6 +31,7 @@ import type {
   RecipeDetail,
   RecipeItem,
   RecipeWithCost,
+  SaveForecastInput,
   SetProductRecipeInput,
   StorageArea,
   Transaction,
@@ -1345,6 +1350,88 @@ export class SqliteInventoryStore implements InventoryStore {
 
   async deleteProductRecipe(id: number): Promise<void> {
     this.db.prepare('DELETE FROM product_recipes WHERE id = ?').run(id);
+  }
+
+  // ── Forecasts ─────────────────────────────────────────────────
+
+  async listForecasts(): Promise<Forecast[]> {
+    const rows = this.db.prepare(
+      'SELECT * FROM forecasts ORDER BY created_at DESC'
+    ).all() as any[];
+    return rows.map((r) => ({ ...r, raw_dates: JSON.parse(r.raw_dates) }));
+  }
+
+  async getForecastById(id: number): Promise<ForecastWithEntries | undefined> {
+    const row = this.db.prepare('SELECT * FROM forecasts WHERE id = ?').get(id) as any;
+    if (!row) return undefined;
+    const entries = this.db.prepare(
+      'SELECT * FROM forecast_entries WHERE forecast_id = ? ORDER BY forecast_date, product_name'
+    ).all(id) as ForecastEntry[];
+    return { ...row, raw_dates: JSON.parse(row.raw_dates), entries };
+  }
+
+  async saveForecast(input: SaveForecastInput): Promise<Forecast> {
+    const dates = input.dates;
+    const start = dates[0] ?? null;
+    const end = dates[dates.length - 1] ?? null;
+
+    const result = this.db.prepare(
+      'INSERT INTO forecasts (filename, date_range_start, date_range_end, raw_dates) VALUES (?, ?, ?, ?)'
+    ).run(input.filename, start, end, JSON.stringify(dates));
+
+    const forecastId = Number(result.lastInsertRowid);
+    const insertEntry = this.db.prepare(
+      'INSERT INTO forecast_entries (forecast_id, product_name, forecast_date, guest_count) VALUES (?, ?, ?, ?)'
+    );
+    for (const product of input.products) {
+      for (const [date, count] of Object.entries(product.counts)) {
+        if (count > 0) {
+          insertEntry.run(forecastId, product.product_name, date, count);
+        }
+      }
+    }
+
+    return this.db.prepare('SELECT * FROM forecasts WHERE id = ?').get(forecastId) as any;
+  }
+
+  async deleteForecast(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM forecasts WHERE id = ?').run(id);
+  }
+
+  async listForecastMappings(): Promise<ForecastProductMapping[]> {
+    return this.db.prepare(`
+      SELECT fm.*, v.name as venue_name
+      FROM forecast_product_mappings fm
+      JOIN venues v ON v.id = fm.venue_id
+      ORDER BY fm.product_name
+    `).all() as ForecastProductMapping[];
+  }
+
+  async saveForecastMapping(input: { product_name: string; venue_id: number }): Promise<ForecastProductMapping> {
+    this.db.prepare(`
+      INSERT INTO forecast_product_mappings (product_name, venue_id)
+      VALUES (?, ?)
+      ON CONFLICT(product_name) DO UPDATE SET venue_id = excluded.venue_id
+    `).run(input.product_name, input.venue_id);
+
+    return this.db.prepare(`
+      SELECT fm.*, v.name as venue_name
+      FROM forecast_product_mappings fm
+      JOIN venues v ON v.id = fm.venue_id
+      WHERE fm.product_name = ?
+    `).get(input.product_name) as ForecastProductMapping;
+  }
+
+  async saveForecastMappingsBulk(inputs: Array<{ product_name: string; venue_id: number }>): Promise<ForecastProductMapping[]> {
+    const results: ForecastProductMapping[] = [];
+    for (const input of inputs) {
+      results.push(await this.saveForecastMapping(input));
+    }
+    return results;
+  }
+
+  async deleteForecastMapping(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM forecast_product_mappings WHERE id = ?').run(id);
   }
 
   // ── Reports ──────────────────────────────────────────────────
