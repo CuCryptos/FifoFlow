@@ -1143,8 +1143,8 @@ function CalculateOrder() {
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide">Item</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Needed</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">In Stock</th>
-                <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">End. Inv.</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Order</th>
+                <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">End. Inv.</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Est. Cost</th>
               </tr>
             </thead>
@@ -1152,12 +1152,27 @@ function CalculateOrder() {
               {effectiveIngredients.map((ing) => {
                 const isStockOverridden = stockOverrides[ing.item_id] !== undefined;
                 const isOrderOverridden = orderOverrides[ing.item_id] !== undefined;
-                // Ending inventory = stock - needed (positive = surplus, negative = deficit)
-                const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
-                const endingInventory = Math.round((stockInRecipeUnit - ing.total_needed) * 100) / 100;
                 const defaultOrderQty = ing.shortage_order ?? ing.shortage;
                 const orderQty = getOrderQty(ing);
                 const orderUnit = ing.order_unit ?? ing.recipe_unit;
+
+                // Compute ending inventory in order units: (stock + order) - needed
+                const hasOrderUnit = ing.total_needed_order != null && ing.order_unit;
+                let endingInventory: number;
+                let endUnit: string;
+                if (hasOrderUnit) {
+                  // Convert stock to order units using the ratio
+                  const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
+                  const ratio = ing.total_needed / ing.total_needed_order!;
+                  const stockInOrderUnits = ratio > 0 ? stockInRecipeUnit / ratio : ing.current_qty;
+                  endingInventory = Math.round((stockInOrderUnits + orderQty - ing.total_needed_order!) * 100) / 100;
+                  endUnit = ing.order_unit!;
+                } else {
+                  const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
+                  endingInventory = Math.round((stockInRecipeUnit + orderQty - ing.total_needed) * 100) / 100;
+                  endUnit = ing.recipe_unit;
+                }
+
                 return (
                 <>
                   <tr
@@ -1204,11 +1219,6 @@ function CalculateOrder() {
                         <span className="text-xs text-text-muted">{ing.item_unit}</span>
                       </div>
                     </td>
-                    <td className={`px-4 py-2 text-right font-mono ${
-                      endingInventory < 0 ? 'text-accent-red font-semibold' : 'text-accent-green'
-                    }`}>
-                      {endingInventory} {ing.recipe_unit}
-                    </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <input
@@ -1238,8 +1248,13 @@ function CalculateOrder() {
                         <span className="text-xs text-text-muted">{orderUnit}</span>
                       </div>
                     </td>
+                    <td className={`px-4 py-2 text-right font-mono ${
+                      endingInventory < 0 ? 'text-accent-red font-semibold' : 'text-accent-green'
+                    }`}>
+                      {endingInventory} {endUnit}
+                    </td>
                     <td className="px-4 py-2 text-right font-mono text-text-secondary">
-                      {ing.estimated_cost != null && orderQty > 0 && ing.order_unit_price
+                      {orderQty > 0 && ing.order_unit_price
                         ? `$${(Math.round(Math.ceil(orderQty) * ing.order_unit_price * 100) / 100).toFixed(2)}`
                         : '\u2014'}
                     </td>
