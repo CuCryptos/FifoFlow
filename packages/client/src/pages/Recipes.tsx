@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecipe } from '../hooks/useRecipes';
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
 import { useParseForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
-import { useItems } from '../hooks/useItems';
+import { useItems, useSetItemCount } from '../hooks/useItems';
 import { useVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
@@ -562,10 +562,13 @@ function CalculateOrder() {
   const createOrder = useCreateOrder();
   const { toast } = useToast();
 
+  const setItemCount = useSetItemCount();
   const [guestCounts, setGuestCounts] = useState<Record<number, string>>({});
   const [vendorFilter, setVendorFilter] = useState<number | undefined>(undefined);
   const [result, setResult] = useState<OrderCalculationResult | null>(null);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
+  const [stockOverrides, setStockOverrides] = useState<Record<number, string>>({});
+  const [savingCounts, setSavingCounts] = useState(false);
 
   // Forecast state
   const [forecastStep, setForecastStep] = useState<ForecastStep>('idle');
@@ -636,6 +639,86 @@ function CalculateOrder() {
     toast(`Loaded forecast for ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`, 'success');
   };
 
+  // Compute effective ingredient values with stock overrides applied
+  const getEffectiveIngredient = (ing: CalculatedIngredient) => {
+    const overrideStr = stockOverrides[ing.item_id];
+    if (overrideStr === undefined) return ing;
+
+    const newQty = Number(overrideStr) || 0;
+    // Derive conversion factor from original data
+    let newConvertedStock: number | null = null;
+    if (ing.converted_stock != null && ing.current_qty > 0) {
+      const factor = ing.converted_stock / ing.current_qty;
+      newConvertedStock = newQty * factor;
+    }
+    const stockInRecipeUnit = newConvertedStock ?? newQty;
+    const newShortage = Math.max(0, Math.round((ing.total_needed - stockInRecipeUnit) * 100) / 100);
+
+    // Recalculate shortage_order and estimated_cost
+    let newShortageOrder = ing.shortage_order;
+    let newEstimatedCost = ing.estimated_cost;
+    if (ing.shortage > 0 && ing.shortage_order != null) {
+      const orderFactor = ing.shortage_order / ing.shortage;
+      newShortageOrder = Math.round(newShortage * orderFactor * 100) / 100;
+      if (ing.estimated_cost != null && ing.shortage_order > 0) {
+        const costPerOrderUnit = ing.estimated_cost / Math.ceil(ing.shortage_order);
+        newEstimatedCost = Math.round(Math.ceil(newShortageOrder) * costPerOrderUnit * 100) / 100;
+      }
+    } else if (newShortage === 0) {
+      newShortageOrder = 0;
+      newEstimatedCost = 0;
+    }
+
+    return {
+      ...ing,
+      current_qty: newQty,
+      converted_stock: newConvertedStock,
+      shortage: newShortage,
+      shortage_order: newShortageOrder,
+      estimated_cost: newEstimatedCost,
+    };
+  };
+
+  const hasStockOverrides = Object.keys(stockOverrides).length > 0;
+
+  const handleSaveCountsAndRecalculate = async () => {
+    if (!hasStockOverrides) return;
+    setSavingCounts(true);
+
+    try {
+      // Save each stock override as a count adjustment
+      for (const [itemIdStr, qtyStr] of Object.entries(stockOverrides)) {
+        const itemId = Number(itemIdStr);
+        const qty = Number(qtyStr) || 0;
+        await setItemCount.mutateAsync({
+          id: itemId,
+          data: { counted_qty: qty, notes: 'Adjusted from order calculator' },
+        });
+      }
+      setStockOverrides({});
+      toast('Stock counts saved', 'success');
+
+      // Re-run calculation with updated stock
+      const guest_counts = (venues ?? [])
+        .filter((v) => Number(guestCounts[v.id] || 0) > 0)
+        .map((v) => ({ venue_id: v.id, guest_count: Number(guestCounts[v.id]) }));
+
+      if (guest_counts.length > 0) {
+        calculateOrder.mutate(
+          { guest_counts, vendor_id: vendorFilter },
+          {
+            onSuccess: (data) => setResult(data),
+            onError: (err) => toast(err.message, 'error'),
+          },
+        );
+      }
+    } catch (err: any) {
+      toast(`Failed to save counts: ${err.message}`, 'error');
+    } finally {
+      setSavingCounts(false);
+    }
+  };
+
   const handleCalculate = () => {
     const guest_counts = (venues ?? [])
       .filter((v) => Number(guestCounts[v.id] || 0) > 0)
@@ -646,6 +729,7 @@ function CalculateOrder() {
       return;
     }
 
+    setStockOverrides({});
     calculateOrder.mutate(
       { guest_counts, vendor_id: vendorFilter },
       {
@@ -658,8 +742,9 @@ function CalculateOrder() {
   const handleCreateDraftOrder = () => {
     if (!result) return;
 
+    const effective = result.ingredients.map(getEffectiveIngredient);
     const byVendor = new Map<number, CalculatedIngredient[]>();
-    for (const ing of result.ingredients) {
+    for (const ing of effective) {
       if (ing.shortage <= 0 || !ing.vendor_id) continue;
       const arr = byVendor.get(ing.vendor_id) ?? [];
       arr.push(ing);
@@ -838,14 +923,18 @@ function CalculateOrder() {
       </div>
 
       {/* Results */}
-      {result && (
+      {result && (() => {
+        const effectiveIngredients = result.ingredients.map(getEffectiveIngredient);
+        const effectiveTotal = effectiveIngredients.reduce((sum, i) => sum + (i.estimated_cost ?? 0), 0);
+
+        return (
         <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-semibold text-text-primary">
               Ingredient Requirements
             </h3>
             <span className="text-sm text-text-secondary font-mono">
-              Est. Total: ${result.total_estimated_cost.toFixed(2)}
+              Est. Total: ${(Math.round(effectiveTotal * 100) / 100).toFixed(2)}
             </span>
           </div>
 
@@ -860,16 +949,17 @@ function CalculateOrder() {
               </tr>
             </thead>
             <tbody>
-              {result.ingredients.map((ing) => (
+              {effectiveIngredients.map((ing) => {
+                const isOverridden = stockOverrides[ing.item_id] !== undefined;
+                return (
                 <>
                   <tr
                     key={ing.item_id}
-                    className={`border-b border-border hover:bg-bg-hover cursor-pointer ${
+                    className={`border-b border-border hover:bg-bg-hover ${
                       ing.shortage > 0 ? '' : 'opacity-60'
                     }`}
-                    onClick={() => setExpandedItem(expandedItem === ing.item_id ? null : ing.item_id)}
                   >
-                    <td className="px-4 py-2 text-text-primary">
+                    <td className="px-4 py-2 text-text-primary cursor-pointer" onClick={() => setExpandedItem(expandedItem === ing.item_id ? null : ing.item_id)}>
                       <span className="font-medium">{ing.item_name}</span>
                       {ing.vendor_name && (
                         <span className="text-text-secondary text-xs ml-2">({ing.vendor_name})</span>
@@ -881,8 +971,33 @@ function CalculateOrder() {
                         : <>{ing.total_needed} {ing.recipe_unit}</>
                       }
                     </td>
-                    <td className="px-4 py-2 text-right font-mono text-text-secondary">
-                      {ing.current_qty} {ing.item_unit}
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={stockOverrides[ing.item_id] ?? ing.current_qty}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === String(result.ingredients.find((i) => i.item_id === ing.item_id)?.current_qty ?? '')) {
+                              setStockOverrides((prev) => {
+                                const next = { ...prev };
+                                delete next[ing.item_id];
+                                return next;
+                              });
+                            } else {
+                              setStockOverrides((prev) => ({ ...prev, [ing.item_id]: val }));
+                            }
+                          }}
+                          className={`w-16 text-right font-mono text-xs px-1.5 py-1 rounded border focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 ${
+                            isOverridden
+                              ? 'border-accent-amber bg-accent-amber/10 text-text-primary'
+                              : 'border-border bg-white text-text-secondary'
+                          }`}
+                        />
+                        <span className="text-xs text-text-muted">{ing.item_unit}</span>
+                      </div>
                     </td>
                     <td className={`px-4 py-2 text-right font-mono ${
                       ing.shortage > 0 ? 'text-accent-red font-semibold' : 'text-accent-green'
@@ -915,21 +1030,34 @@ function CalculateOrder() {
                     </tr>
                   )}
                 </>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 
-          <div className="px-4 py-3 border-t border-border flex justify-end">
+          <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+            <div>
+              {hasStockOverrides && (
+                <button
+                  onClick={handleSaveCountsAndRecalculate}
+                  disabled={savingCounts}
+                  className="bg-accent-amber text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-amber/80 disabled:opacity-40 transition-colors"
+                >
+                  {savingCounts ? 'Saving...' : 'Save Counts & Recalculate'}
+                </button>
+              )}
+            </div>
             <button
               onClick={handleCreateDraftOrder}
-              disabled={createOrder.isPending || !result.ingredients.some((i) => i.shortage > 0 && i.vendor_id)}
+              disabled={createOrder.isPending || !effectiveIngredients.some((i) => i.shortage > 0 && i.vendor_id)}
               className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
             >
               Create Draft Order
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
