@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecipe } from '../hooks/useRecipes';
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
-import { useParseForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
+import { useParseForecast, useSaveForecast, useForecasts, useForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
 import { useItems, useSetItemCount } from '../hooks/useItems';
 import { useVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
@@ -553,7 +553,7 @@ function ProductMenus() {
 
 // ── Calculate Order Tab ───────────────────────────────────────
 
-type ForecastStep = 'idle' | 'parsing' | 'mapping' | 'date-select';
+type ForecastStep = 'idle' | 'parsing' | 'mapping';
 
 function CalculateOrder() {
   const { data: venues } = useVenues();
@@ -569,6 +569,7 @@ function CalculateOrder() {
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [stockOverrides, setStockOverrides] = useState<Record<number, string>>({});
   const [savingCounts, setSavingCounts] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   // Forecast state
   const [forecastStep, setForecastStep] = useState<ForecastStep>('idle');
@@ -576,8 +577,30 @@ function CalculateOrder() {
   const [productMappings, setProductMappings] = useState<Record<string, number>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const parseForecast = useParseForecast();
+  const saveForecastMut = useSaveForecast();
+  const { data: forecasts } = useForecasts();
   const { data: existingMappings } = useForecastMappings();
   const saveMappings = useSaveForecastMappings();
+
+  // Load the latest saved forecast with entries
+  const latestForecastId = forecasts && forecasts.length > 0 ? forecasts[0].id : 0;
+  const { data: savedForecast } = useForecast(latestForecastId);
+
+  // Compute guest counts per venue per date from saved forecast + mappings
+  const forecastByDate = (() => {
+    if (!savedForecast?.entries || !existingMappings) return null;
+    const mappingMap = new Map(existingMappings.map((m) => [m.product_name, m.venue_id]));
+    const byDate: Record<string, Record<number, number>> = {};
+    for (const entry of savedForecast.entries) {
+      const venueId = mappingMap.get(entry.product_name);
+      if (!venueId) continue;
+      if (!byDate[entry.forecast_date]) byDate[entry.forecast_date] = {};
+      byDate[entry.forecast_date][venueId] = (byDate[entry.forecast_date][venueId] || 0) + entry.guest_count;
+    }
+    return byDate;
+  })();
+
+  const forecastDates = savedForecast?.raw_dates ?? [];
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -601,11 +624,10 @@ function CalculateOrder() {
         setForecastStep('idle');
       },
     });
-    // Reset file input so same file can be re-selected
     e.target.value = '';
   };
 
-  const handleSaveMappingsAndContinue = () => {
+  const handleSaveMappingsAndForecast = () => {
     const mappingsToSave = Object.entries(productMappings)
       .filter(([, venueId]) => venueId > 0)
       .map(([product_name, venue_id]) => ({ product_name, venue_id }));
@@ -615,26 +637,61 @@ function CalculateOrder() {
       return;
     }
 
+    // Save mappings, then save the forecast to DB
     saveMappings.mutate(mappingsToSave, {
       onSuccess: () => {
-        setForecastStep('date-select');
+        if (!forecastParseResult) return;
+        saveForecastMut.mutate(
+          {
+            filename: 'forecast.pdf',
+            dates: forecastParseResult.dates,
+            products: forecastParseResult.products.map((p) => ({
+              product_name: p.product_name,
+              group: p.group,
+              counts: p.counts,
+            })),
+          },
+          {
+            onSuccess: () => {
+              setForecastStep('idle');
+              setForecastParseResult(null);
+              toast('Forecast saved', 'success');
+            },
+            onError: (err) => toast(err.message, 'error'),
+          },
+        );
       },
       onError: (err) => toast(err.message, 'error'),
     });
   };
 
   const handleDateSelect = (date: string) => {
-    if (!forecastParseResult) return;
+    if (!forecastByDate) return;
+    const countsForDate = forecastByDate[date] ?? {};
     const newCounts: Record<number, string> = {};
-    for (const product of forecastParseResult.products) {
-      const venueId = productMappings[product.product_name];
-      if (!venueId) continue;
-      const count = product.counts[date] ?? 0;
-      const existing = Number(newCounts[venueId] || 0);
-      newCounts[venueId] = String(existing + count);
+    for (const [venueId, count] of Object.entries(countsForDate)) {
+      newCounts[Number(venueId)] = String(count);
     }
     setGuestCounts(newCounts);
-    setForecastStep('idle');
+    setSelectedDate(date);
+    setResult(null);
+
+    // Auto-calculate
+    const guest_counts = Object.entries(newCounts)
+      .filter(([, v]) => Number(v) > 0)
+      .map(([venue_id, guest_count]) => ({ venue_id: Number(venue_id), guest_count: Number(guest_count) }));
+
+    if (guest_counts.length > 0) {
+      setStockOverrides({});
+      calculateOrder.mutate(
+        { guest_counts, vendor_id: vendorFilter },
+        {
+          onSuccess: (data) => setResult(data),
+          onError: (err) => toast(err.message, 'error'),
+        },
+      );
+    }
+
     const d = new Date(date + 'T12:00:00');
     toast(`Loaded forecast for ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`, 'success');
   };
@@ -782,27 +839,7 @@ function CalculateOrder() {
 
   return (
     <div className="space-y-4">
-      {/* Forecast upload */}
-      {forecastStep === 'idle' && (
-        <div className="flex items-center gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={parseForecast.isPending}
-            className="bg-accent-amber text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-amber/80 disabled:opacity-40 transition-colors"
-          >
-            Upload Forecast PDF
-          </button>
-          <span className="text-xs text-text-secondary">or enter guest counts manually below</span>
-        </div>
-      )}
-
+      {/* Forecast upload / parsing */}
       {forecastStep === 'parsing' && (
         <div className="bg-bg-card rounded-xl shadow-sm p-4 flex items-center gap-3">
           <div className="animate-spin w-5 h-5 border-2 border-accent-indigo border-t-transparent rounded-full" />
@@ -844,43 +881,102 @@ function CalculateOrder() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button
-              onClick={handleSaveMappingsAndContinue}
-              disabled={saveMappings.isPending}
+              onClick={handleSaveMappingsAndForecast}
+              disabled={saveMappings.isPending || saveForecastMut.isPending}
               className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
             >
-              {saveMappings.isPending ? 'Saving...' : 'Save Mappings & Select Date'}
+              {saveMappings.isPending || saveForecastMut.isPending ? 'Saving...' : 'Save & Continue'}
             </button>
           </div>
         </div>
       )}
 
-      {forecastStep === 'date-select' && forecastParseResult && (
+      {/* Persistent forecast date grid */}
+      {forecastStep === 'idle' && forecastDates.length > 0 && forecastByDate && (
         <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text-primary">Select Forecast Date</h3>
-            <button onClick={() => setForecastStep('idle')} className="text-text-secondary text-xs hover:text-text-primary">Cancel</button>
+            <h3 className="text-sm font-semibold text-text-primary">Forecast — Select a Date to Calculate</h3>
+            <div className="flex items-center gap-2">
+              <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleFileSelect} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={parseForecast.isPending}
+                className="text-text-secondary text-xs hover:text-text-primary"
+              >
+                Upload New
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {forecastParseResult.dates.map((date) => {
-              const d = new Date(date + 'T12:00:00');
-              const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-              return (
-                <button
-                  key={date}
-                  onClick={() => handleDateSelect(date)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium border bg-white text-text-primary border-border hover:border-accent-indigo hover:bg-accent-indigo/5 transition-colors"
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-text-secondary">
+                  <th className="text-left py-1 pr-3 font-medium">Date</th>
+                  {(venues ?? []).map((v) => (
+                    <th key={v.id} className="text-right py-1 px-2 font-medium whitespace-nowrap">{v.name}</th>
+                  ))}
+                  <th className="text-right py-1 pl-2 font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forecastDates.map((date) => {
+                  const d = new Date(date + 'T12:00:00');
+                  const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                  const dateCounts = forecastByDate[date] ?? {};
+                  const total = Object.values(dateCounts).reduce((s, c) => s + c, 0);
+                  const isSelected = selectedDate === date;
+                  return (
+                    <tr
+                      key={date}
+                      onClick={() => handleDateSelect(date)}
+                      className={`cursor-pointer border-t border-border transition-colors ${
+                        isSelected
+                          ? 'bg-accent-indigo/10 font-semibold'
+                          : 'hover:bg-bg-hover'
+                      }`}
+                    >
+                      <td className="py-1.5 pr-3 text-text-primary whitespace-nowrap">{label}</td>
+                      {(venues ?? []).map((v) => (
+                        <td key={v.id} className="text-right py-1.5 px-2 font-mono text-text-secondary">
+                          {dateCounts[v.id] || '—'}
+                        </td>
+                      ))}
+                      <td className="text-right py-1.5 pl-2 font-mono text-text-primary font-semibold">
+                        {total || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Guest count inputs */}
+      {/* No forecast — show upload button */}
+      {forecastStep === 'idle' && forecastDates.length === 0 && (
+        <div className="flex items-center gap-3">
+          <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleFileSelect} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={parseForecast.isPending}
+            className="bg-accent-amber text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-amber/80 disabled:opacity-40 transition-colors"
+          >
+            Upload Forecast PDF
+          </button>
+          <span className="text-xs text-text-secondary">or enter guest counts manually below</span>
+        </div>
+      )}
+
+      {/* Guest count inputs + calculate */}
       <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-text-primary">Guest Counts</h3>
+        <h3 className="text-sm font-semibold text-text-primary">
+          Guest Counts
+          {selectedDate && (() => {
+            const d = new Date(selectedDate + 'T12:00:00');
+            return <span className="text-text-secondary font-normal ml-2">— {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>;
+          })()}
+        </h3>
         <div className="space-y-2">
           {(venues ?? []).map((v) => (
             <div key={v.id} className="flex items-center gap-3">
