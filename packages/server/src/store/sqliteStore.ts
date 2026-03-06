@@ -1062,7 +1062,14 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async updateVenue(id: number, input: UpdateVenueInput): Promise<Venue> {
-    this.db.prepare('UPDATE venues SET name = ? WHERE id = ?').run(input.name, id);
+    const sets: string[] = ['name = ?'];
+    const params: unknown[] = [input.name];
+    if (input.show_in_menus !== undefined) {
+      sets.push('show_in_menus = ?');
+      params.push(input.show_in_menus);
+    }
+    params.push(id);
+    this.db.prepare(`UPDATE venues SET ${sets.join(', ')} WHERE id = ?`).run(...params);
     return this.db.prepare('SELECT * FROM venues WHERE id = ?').get(id) as Venue;
   }
 

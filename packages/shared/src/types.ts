@@ -145,6 +145,7 @@ export interface Venue {
   id: number;
   name: string;
   sort_order: number;
+  show_in_menus: number;
   created_at: string;
   updated_at: string;
 }

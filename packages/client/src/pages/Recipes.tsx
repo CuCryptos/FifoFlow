@@ -3,7 +3,7 @@ import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecip
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
 import { useParseForecast, useSaveForecast, useForecasts, useForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
 import { useItems, useSetItemCount } from '../hooks/useItems';
-import { useVenues, useReorderVenues } from '../hooks/useVenues';
+import { useVenues, useUpdateVenue, useReorderVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
 import { useToast } from '../contexts/ToastContext';
@@ -427,15 +427,30 @@ function ProductMenus() {
   const { data: productRecipes, isLoading: prLoading } = useProductRecipes();
   const setProductRecipe = useSetProductRecipe();
   const deleteProductRecipe = useDeleteProductRecipe();
+  const updateVenue = useUpdateVenue();
   const reorderVenues = useReorderVenues();
   const { toast } = useToast();
 
   const [addingFor, setAddingFor] = useState<number | null>(null);
   const [selectedRecipeId, setSelectedRecipeId] = useState(0);
   const [portionsPerGuest, setPortionsPerGuest] = useState('1');
+  const [showHidden, setShowHidden] = useState(false);
 
   if (venuesLoading || prLoading) return <div className="text-text-secondary text-sm">Loading...</div>;
   if (!venues?.length) return <div className="text-text-secondary text-sm">No venues configured. Add venues first.</div>;
+
+  const visibleVenues = venues.filter((v) => v.show_in_menus);
+  const hiddenVenues = venues.filter((v) => !v.show_in_menus);
+
+  const toggleVenueVisibility = (venueId: number, name: string, show: number) => {
+    updateVenue.mutate(
+      { id: venueId, data: { name, show_in_menus: show } },
+      {
+        onSuccess: () => toast(show ? 'Venue shown in menus' : 'Venue hidden from menus', 'success'),
+        onError: (err) => toast(err.message, 'error'),
+      },
+    );
+  };
 
   const recipesByVenue = new Map<number, typeof productRecipes>();
   for (const pr of productRecipes ?? []) {
@@ -456,17 +471,18 @@ function ProductMenus() {
   };
 
   const handleMove = (index: number, direction: 'up' | 'down') => {
-    if (!venues) return;
-    const ids = venues.map((v) => v.id);
+    const ids = visibleVenues.map((v) => v.id);
     const swapIdx = direction === 'up' ? index - 1 : index + 1;
     if (swapIdx < 0 || swapIdx >= ids.length) return;
     [ids[index], ids[swapIdx]] = [ids[swapIdx], ids[index]];
-    reorderVenues.mutate(ids);
+    // Append hidden venue IDs at the end to preserve full ordering
+    const hiddenIds = hiddenVenues.map((v) => v.id);
+    reorderVenues.mutate([...ids, ...hiddenIds]);
   };
 
   return (
     <div className="space-y-4">
-      {venues.map((venue, venueIndex) => {
+      {visibleVenues.map((venue, venueIndex) => {
         const assigned = recipesByVenue.get(venue.id) ?? [];
         return (
           <div key={venue.id} className="bg-bg-card rounded-xl shadow-sm">
@@ -483,7 +499,7 @@ function ProductMenus() {
                   </button>
                   <button
                     onClick={() => handleMove(venueIndex, 'down')}
-                    disabled={venueIndex === venues.length - 1 || reorderVenues.isPending}
+                    disabled={venueIndex === visibleVenues.length - 1 || reorderVenues.isPending}
                     className="text-text-secondary hover:text-text-primary disabled:opacity-20 text-xs leading-none"
                     title="Move down"
                   >
@@ -492,12 +508,21 @@ function ProductMenus() {
                 </div>
                 <h3 className="text-base font-semibold text-text-primary">{venue.name}</h3>
               </div>
-              <button
-                onClick={() => setAddingFor(addingFor === venue.id ? null : venue.id)}
-                className="text-accent-indigo text-xs hover:underline"
-              >
-                {addingFor === venue.id ? 'Cancel' : '+ Add Recipe'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => toggleVenueVisibility(venue.id, venue.name, 0)}
+                  className="text-text-muted text-xs hover:text-accent-red"
+                  title="Hide from menus"
+                >
+                  Hide
+                </button>
+                <button
+                  onClick={() => setAddingFor(addingFor === venue.id ? null : venue.id)}
+                  className="text-accent-indigo text-xs hover:underline"
+                >
+                  {addingFor === venue.id ? 'Cancel' : '+ Add Recipe'}
+                </button>
+              </div>
             </div>
 
             {addingFor === venue.id && (
@@ -577,6 +602,35 @@ function ProductMenus() {
           </div>
         );
       })}
+
+      {/* Hidden venues */}
+      {hiddenVenues.length > 0 && (
+        <div className="pt-2">
+          <button
+            onClick={() => setShowHidden(!showHidden)}
+            className="text-text-secondary text-xs hover:text-text-primary"
+          >
+            {showHidden ? 'Hide' : 'Show'} {hiddenVenues.length} hidden venue{hiddenVenues.length > 1 ? 's' : ''}
+          </button>
+          {showHidden && (
+            <div className="mt-2 space-y-2">
+              {hiddenVenues.map((venue) => (
+                <div key={venue.id} className="bg-bg-card rounded-xl shadow-sm opacity-60">
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-sm text-text-secondary">{venue.name}</span>
+                    <button
+                      onClick={() => toggleVenueVisibility(venue.id, venue.name, 1)}
+                      className="text-accent-indigo text-xs hover:underline"
+                    >
+                      Show in Menus
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -586,7 +640,8 @@ function ProductMenus() {
 type ForecastStep = 'idle' | 'parsing' | 'mapping';
 
 function CalculateOrder() {
-  const { data: venues } = useVenues();
+  const { data: allVenues } = useVenues();
+  const venues = allVenues?.filter((v) => v.show_in_menus);
   const { data: vendors } = useVendors();
   const calculateOrder = useCalculateOrder();
   const createOrder = useCreateOrder();

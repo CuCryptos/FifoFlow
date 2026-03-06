@@ -335,6 +335,12 @@ export function initializeDb(db: Database.Database): void {
     }
   }
 
+  // Migration: add show_in_menus to venues
+  const venueColumns2 = db.pragma('table_info(venues)') as Array<{ name: string }>;
+  if (!venueColumns2.some((c) => c.name === 'show_in_menus')) {
+    db.exec('ALTER TABLE venues ADD COLUMN show_in_menus INTEGER NOT NULL DEFAULT 1;');
+  }
+
   // Backfill vendor_prices from existing item vendor+pricing data
   db.exec(`
     INSERT OR IGNORE INTO vendor_prices (item_id, vendor_id, order_unit, order_unit_price, qty_per_unit, is_default)

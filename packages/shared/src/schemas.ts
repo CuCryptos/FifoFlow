@@ -115,6 +115,7 @@ export const createVenueSchema = z.object({
 
 export const updateVenueSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
+  show_in_menus: z.number().int().min(0).max(1).optional(),
 });
 
 export type CreateVenueInput = z.infer<typeof createVenueSchema>;
