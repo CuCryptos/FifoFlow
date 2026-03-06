@@ -884,12 +884,16 @@ function CalculateOrder() {
     );
   };
 
+  // Round up to nearest 0.5
+  const ceilHalf = (n: number) => Math.ceil(n * 2) / 2;
+
   // Get the order quantity for an ingredient (from override or default shortage)
   const getOrderQty = (ing: CalculatedIngredient) => {
     const override = orderOverrides[ing.item_id];
     if (override !== undefined) return Number(override) || 0;
-    // Default: shortage in order units if available, else recipe units
-    return ing.shortage_order ?? ing.shortage;
+    // Default: shortage rounded up to nearest 0.5
+    const raw = ing.shortage_order ?? ing.shortage;
+    return raw > 0 ? ceilHalf(raw) : 0;
   };
 
   const handleCreateDraftOrder = () => {
@@ -1152,24 +1156,28 @@ function CalculateOrder() {
               {effectiveIngredients.map((ing) => {
                 const isStockOverridden = stockOverrides[ing.item_id] !== undefined;
                 const isOrderOverridden = orderOverrides[ing.item_id] !== undefined;
-                const defaultOrderQty = ing.shortage_order ?? ing.shortage;
                 const orderQty = getOrderQty(ing);
+                const rawShortage = ing.shortage_order ?? ing.shortage;
+                const defaultOrderQty = rawShortage > 0 ? ceilHalf(rawShortage) : 0;
                 const orderUnit = ing.order_unit ?? ing.recipe_unit;
 
+                // Round needed up to nearest 0.5
+                const neededOrder = ing.total_needed_order != null ? ceilHalf(ing.total_needed_order) : null;
+                const neededRecipe = ceilHalf(ing.total_needed);
+
                 // Compute ending inventory in order units: (stock + order) - needed
-                const hasOrderUnit = ing.total_needed_order != null && ing.order_unit;
+                const hasOrderUnit = neededOrder != null && ing.order_unit;
                 let endingInventory: number;
                 let endUnit: string;
                 if (hasOrderUnit) {
-                  // Convert stock to order units using the ratio
                   const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
-                  const ratio = ing.total_needed / ing.total_needed_order!;
+                  const ratio = ing.total_needed > 0 && ing.total_needed_order! > 0 ? ing.total_needed / ing.total_needed_order! : 1;
                   const stockInOrderUnits = ratio > 0 ? stockInRecipeUnit / ratio : ing.current_qty;
-                  endingInventory = Math.round((stockInOrderUnits + orderQty - ing.total_needed_order!) * 100) / 100;
+                  endingInventory = Math.round((stockInOrderUnits + orderQty - neededOrder!) * 100) / 100;
                   endUnit = ing.order_unit!;
                 } else {
                   const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
-                  endingInventory = Math.round((stockInRecipeUnit + orderQty - ing.total_needed) * 100) / 100;
+                  endingInventory = Math.round((stockInRecipeUnit + orderQty - neededRecipe) * 100) / 100;
                   endUnit = ing.recipe_unit;
                 }
 
@@ -1186,9 +1194,9 @@ function CalculateOrder() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-text-secondary">
-                      {ing.total_needed_order != null && ing.order_unit
-                        ? <>{ing.total_needed_order} {ing.order_unit}<span className="text-text-muted text-[10px] block">{ing.total_needed} {ing.recipe_unit}</span></>
-                        : <>{ing.total_needed} {ing.recipe_unit}</>
+                      {neededOrder != null && ing.order_unit
+                        ? <>{neededOrder} {ing.order_unit}<span className="text-text-muted text-[10px] block">{neededRecipe} {ing.recipe_unit}</span></>
+                        : <>{neededRecipe} {ing.recipe_unit}</>
                       }
                     </td>
                     <td className="px-4 py-2 text-right">
