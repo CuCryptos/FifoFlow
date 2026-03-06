@@ -653,6 +653,7 @@ function CalculateOrder() {
   const [result, setResult] = useState<OrderCalculationResult | null>(null);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [stockOverrides, setStockOverrides] = useState<Record<number, string>>({});
+  const [orderOverrides, setOrderOverrides] = useState<Record<number, string>>({});
   const [savingCounts, setSavingCounts] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -768,6 +769,7 @@ function CalculateOrder() {
 
     if (guest_counts.length > 0) {
       setStockOverrides({});
+      setOrderOverrides({});
       calculateOrder.mutate(
         { guest_counts, vendor_id: vendorFilter },
         {
@@ -838,6 +840,7 @@ function CalculateOrder() {
         });
       }
       setStockOverrides({});
+      setOrderOverrides({});
       toast('Stock counts saved', 'success');
 
       // Re-run calculation with updated stock
@@ -881,28 +884,37 @@ function CalculateOrder() {
     );
   };
 
+  // Get the order quantity for an ingredient (from override or default shortage)
+  const getOrderQty = (ing: CalculatedIngredient) => {
+    const override = orderOverrides[ing.item_id];
+    if (override !== undefined) return Number(override) || 0;
+    // Default: shortage in order units if available, else recipe units
+    return ing.shortage_order ?? ing.shortage;
+  };
+
   const handleCreateDraftOrder = () => {
     if (!result) return;
 
     const effective = result.ingredients.map(getEffectiveIngredient);
-    const byVendor = new Map<number, CalculatedIngredient[]>();
+    const byVendor = new Map<number, { ing: CalculatedIngredient; orderQty: number }[]>();
     for (const ing of effective) {
-      if (ing.shortage <= 0 || !ing.vendor_id) continue;
+      const orderQty = getOrderQty(ing);
+      if (orderQty <= 0 || !ing.vendor_id) continue;
       const arr = byVendor.get(ing.vendor_id) ?? [];
-      arr.push(ing);
+      arr.push({ ing, orderQty });
       byVendor.set(ing.vendor_id, arr);
     }
 
     if (byVendor.size === 0) {
-      toast('No shortages to order', 'error');
+      toast('Nothing to order', 'error');
       return;
     }
 
     let created = 0;
-    for (const [vid, ings] of byVendor) {
-      const items = ings.map((ing) => ({
+    for (const [vid, entries] of byVendor) {
+      const items = entries.map(({ ing, orderQty }) => ({
         item_id: ing.item_id,
-        quantity: ing.shortage,
+        quantity: orderQty,
         unit: ing.order_unit ?? ing.recipe_unit,
         unit_price: ing.order_unit_price ?? 0,
       }));
@@ -1106,7 +1118,13 @@ function CalculateOrder() {
       {/* Results */}
       {result && (() => {
         const effectiveIngredients = result.ingredients.map(getEffectiveIngredient);
-        const effectiveTotal = effectiveIngredients.reduce((sum, i) => sum + (i.estimated_cost ?? 0), 0);
+        const effectiveTotal = effectiveIngredients.reduce((sum, i) => {
+          const qty = getOrderQty(i);
+          if (qty > 0 && i.order_unit_price) {
+            return sum + Math.round(Math.ceil(qty) * i.order_unit_price * 100) / 100;
+          }
+          return sum;
+        }, 0);
 
         return (
         <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
@@ -1125,20 +1143,26 @@ function CalculateOrder() {
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide">Item</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Needed</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">In Stock</th>
-                <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Shortage</th>
+                <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">End. Inv.</th>
+                <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Order</th>
                 <th className="px-4 py-2 font-medium text-xs uppercase tracking-wide text-right">Est. Cost</th>
               </tr>
             </thead>
             <tbody>
               {effectiveIngredients.map((ing) => {
-                const isOverridden = stockOverrides[ing.item_id] !== undefined;
+                const isStockOverridden = stockOverrides[ing.item_id] !== undefined;
+                const isOrderOverridden = orderOverrides[ing.item_id] !== undefined;
+                // Ending inventory = stock - needed (positive = surplus, negative = deficit)
+                const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
+                const endingInventory = Math.round((stockInRecipeUnit - ing.total_needed) * 100) / 100;
+                const defaultOrderQty = ing.shortage_order ?? ing.shortage;
+                const orderQty = getOrderQty(ing);
+                const orderUnit = ing.order_unit ?? ing.recipe_unit;
                 return (
                 <>
                   <tr
                     key={ing.item_id}
-                    className={`border-b border-border hover:bg-bg-hover ${
-                      ing.shortage > 0 ? '' : 'opacity-60'
-                    }`}
+                    className="border-b border-border hover:bg-bg-hover"
                   >
                     <td className="px-4 py-2 text-text-primary cursor-pointer" onClick={() => setExpandedItem(expandedItem === ing.item_id ? null : ing.item_id)}>
                       <span className="font-medium">{ing.item_name}</span>
@@ -1172,7 +1196,7 @@ function CalculateOrder() {
                             }
                           }}
                           className={`w-16 text-right font-mono text-xs px-1.5 py-1 rounded border focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 ${
-                            isOverridden
+                            isStockOverridden
                               ? 'border-accent-amber bg-accent-amber/10 text-text-primary'
                               : 'border-border bg-white text-text-secondary'
                           }`}
@@ -1181,22 +1205,48 @@ function CalculateOrder() {
                       </div>
                     </td>
                     <td className={`px-4 py-2 text-right font-mono ${
-                      ing.shortage > 0 ? 'text-accent-red font-semibold' : 'text-accent-green'
+                      endingInventory < 0 ? 'text-accent-red font-semibold' : 'text-accent-green'
                     }`}>
-                      {ing.shortage > 0
-                        ? ing.shortage_order != null && ing.order_unit
-                          ? <>{ing.shortage_order} {ing.order_unit}<span className="text-text-muted text-[10px] font-normal block">{ing.shortage} {ing.recipe_unit}</span></>
-                          : <>{ing.shortage} {ing.recipe_unit}</>
-                        : 'OK'
-                      }
+                      {endingInventory} {ing.recipe_unit}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={orderOverrides[ing.item_id] ?? (defaultOrderQty > 0 ? defaultOrderQty : 0)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const def = defaultOrderQty > 0 ? defaultOrderQty : 0;
+                            if (val === String(def)) {
+                              setOrderOverrides((prev) => {
+                                const next = { ...prev };
+                                delete next[ing.item_id];
+                                return next;
+                              });
+                            } else {
+                              setOrderOverrides((prev) => ({ ...prev, [ing.item_id]: val }));
+                            }
+                          }}
+                          className={`w-16 text-right font-mono text-xs px-1.5 py-1 rounded border focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 ${
+                            isOrderOverridden
+                              ? 'border-accent-amber bg-accent-amber/10 text-text-primary'
+                              : 'border-border bg-white text-text-secondary'
+                          }`}
+                        />
+                        <span className="text-xs text-text-muted">{orderUnit}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-text-secondary">
-                      {ing.estimated_cost != null ? `$${ing.estimated_cost.toFixed(2)}` : '\u2014'}
+                      {ing.estimated_cost != null && orderQty > 0 && ing.order_unit_price
+                        ? `$${(Math.round(Math.ceil(orderQty) * ing.order_unit_price * 100) / 100).toFixed(2)}`
+                        : '\u2014'}
                     </td>
                   </tr>
                   {expandedItem === ing.item_id && (
                     <tr key={`${ing.item_id}-sources`} className="bg-bg-hover">
-                      <td colSpan={5} className="px-8 py-2">
+                      <td colSpan={6} className="px-8 py-2">
                         <div className="text-xs text-text-secondary space-y-1">
                           {ing.sources.map((s, i) => (
                             <div key={i} className="flex justify-between">
@@ -1230,7 +1280,7 @@ function CalculateOrder() {
             </div>
             <button
               onClick={handleCreateDraftOrder}
-              disabled={createOrder.isPending || !effectiveIngredients.some((i) => i.shortage > 0 && i.vendor_id)}
+              disabled={createOrder.isPending || !effectiveIngredients.some((i) => getOrderQty(i) > 0 && i.vendor_id)}
               className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
             >
               Create Draft Order
