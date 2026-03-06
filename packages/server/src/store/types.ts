@@ -203,6 +203,7 @@ export interface InventoryStore {
   listForecastMappings(): Promise<ForecastProductMapping[]>;
   saveForecastMapping(input: { product_name: string; venue_id: number }): Promise<ForecastProductMapping>;
   saveForecastMappingsBulk(inputs: Array<{ product_name: string; venue_id: number }>): Promise<ForecastProductMapping[]>;
+  updateForecastEntry(id: number, guest_count: number): Promise<ForecastEntry>;
   deleteForecastMapping(id: number): Promise<void>;
 
   // Reports

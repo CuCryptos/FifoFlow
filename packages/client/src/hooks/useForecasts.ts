@@ -50,3 +50,14 @@ export function useSaveForecastMappings() {
     },
   });
 }
+
+export function useUpdateForecastEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entryId, guest_count }: { entryId: number; guest_count: number }) =>
+      api.forecasts.updateEntry(entryId, guest_count),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['forecasts'] });
+    },
+  });
+}

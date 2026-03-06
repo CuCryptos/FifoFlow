@@ -249,5 +249,10 @@ export const saveForecastMappingsBulkSchema = z.object({
   })).min(1),
 });
 
+export const updateForecastEntrySchema = z.object({
+  guest_count: z.number().int().min(0),
+});
+
 export type SaveForecastInput = z.infer<typeof saveForecastSchema>;
 export type SaveForecastMappingsBulkInput = z.infer<typeof saveForecastMappingsBulkSchema>;
+export type UpdateForecastEntryInput = z.infer<typeof updateForecastEntrySchema>;

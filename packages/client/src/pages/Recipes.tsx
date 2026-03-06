@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
 import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecipe } from '../hooks/useRecipes';
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
-import { useParseForecast, useSaveForecast, useForecasts, useForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
+import { useParseForecast, useSaveForecast, useForecasts, useForecast, useForecastMappings, useSaveForecastMappings, useUpdateForecastEntry } from '../hooks/useForecasts';
 import { useItems, useSetItemCount } from '../hooks/useItems';
 import { useVenues, useUpdateVenue, useReorderVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
@@ -10,7 +10,7 @@ import { useToast } from '../contexts/ToastContext';
 import { UNITS } from '@fifoflow/shared';
 import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult } from '@fifoflow/shared';
 
-type RecipeTab = 'recipes' | 'menus' | 'calculate';
+type RecipeTab = 'recipes' | 'menus' | 'calculate' | 'weekly';
 
 export function Recipes() {
   const [activeTab, setActiveTab] = useState<RecipeTab>('recipes');
@@ -24,6 +24,7 @@ export function Recipes() {
           ['recipes', 'Recipes'],
           ['menus', 'Product Menus'],
           ['calculate', 'Calculate Order'],
+          ['weekly', 'Weekly Order'],
         ] as const).map(([tab, label]) => (
           <button
             key={tab}
@@ -42,6 +43,7 @@ export function Recipes() {
       {activeTab === 'recipes' && <RecipeList />}
       {activeTab === 'menus' && <ProductMenus />}
       {activeTab === 'calculate' && <CalculateOrder />}
+      {activeTab === 'weekly' && <WeeklyOrder />}
     </div>
   );
 }
@@ -643,6 +645,7 @@ function CalculateOrder() {
   const { data: allVenues } = useVenues();
   const venues = allVenues?.filter((v) => v.show_in_menus);
   const { data: vendors } = useVendors();
+  const { data: allItems } = useItems();
   const calculateOrder = useCalculateOrder();
   const createOrder = useCreateOrder();
   const { toast } = useToast();
@@ -656,6 +659,12 @@ function CalculateOrder() {
   const [orderOverrides, setOrderOverrides] = useState<Record<number, string>>({});
   const [savingCounts, setSavingCounts] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [manualItems, setManualItems] = useState<Array<{
+    item_id: number; item_name: string; quantity: string;
+    vendor_id: number | null; vendor_name: string | null;
+    order_unit: string | null; order_unit_price: number | null; item_unit: string;
+  }>>([]);
+  const [showAddItem, setShowAddItem] = useState(false);
 
   // Forecast state
   const [forecastStep, setForecastStep] = useState<ForecastStep>('idle');
@@ -667,6 +676,7 @@ function CalculateOrder() {
   const { data: forecasts } = useForecasts();
   const { data: existingMappings } = useForecastMappings();
   const saveMappings = useSaveForecastMappings();
+  const updateForecastEntry = useUpdateForecastEntry();
 
   // Load the latest saved forecast with entries
   const latestForecastId = forecasts && forecasts.length > 0 ? forecasts[0].id : 0;
@@ -686,7 +696,24 @@ function CalculateOrder() {
     return byDate;
   })();
 
-  const forecastDates = savedForecast?.raw_dates ?? [];
+  // Lookup: "date|venueId" → array of forecast_entries rows for that cell
+  const forecastEntryLookup = (() => {
+    if (!savedForecast?.entries || !existingMappings) return new Map<string, Array<{ id: number; guest_count: number }>>();
+    const mappingMap = new Map(existingMappings.map((m) => [m.product_name, m.venue_id]));
+    const lookup = new Map<string, Array<{ id: number; guest_count: number }>>();
+    for (const entry of savedForecast.entries) {
+      const venueId = mappingMap.get(entry.product_name);
+      if (!venueId) continue;
+      const key = `${entry.forecast_date}|${venueId}`;
+      const arr = lookup.get(key) ?? [];
+      arr.push({ id: entry.id, guest_count: entry.guest_count });
+      lookup.set(key, arr);
+    }
+    return lookup;
+  })();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const forecastDates = (savedForecast?.raw_dates ?? []).filter(d => d >= today);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -770,6 +797,8 @@ function CalculateOrder() {
     if (guest_counts.length > 0) {
       setStockOverrides({});
       setOrderOverrides({});
+      setManualItems([]);
+      setShowAddItem(false);
       calculateOrder.mutate(
         { guest_counts, vendor_id: vendorFilter },
         {
@@ -875,6 +904,8 @@ function CalculateOrder() {
     }
 
     setStockOverrides({});
+    setManualItems([]);
+    setShowAddItem(false);
     calculateOrder.mutate(
       { guest_counts, vendor_id: vendorFilter },
       {
@@ -907,6 +938,18 @@ function CalculateOrder() {
       const arr = byVendor.get(ing.vendor_id) ?? [];
       arr.push({ ing, orderQty });
       byVendor.set(ing.vendor_id, arr);
+    }
+
+    // Include manually added items
+    for (const mi of manualItems) {
+      const qty = Number(mi.quantity) || 0;
+      if (qty <= 0 || !mi.vendor_id) continue;
+      const arr = byVendor.get(mi.vendor_id) ?? [];
+      arr.push({
+        ing: { item_id: mi.item_id, item_name: mi.item_name, order_unit: mi.order_unit, recipe_unit: mi.item_unit, order_unit_price: mi.order_unit_price, vendor_id: mi.vendor_id } as CalculatedIngredient,
+        orderQty: qty,
+      });
+      byVendor.set(mi.vendor_id, arr);
     }
 
     if (byVendor.size === 0) {
@@ -1037,11 +1080,35 @@ function CalculateOrder() {
                       }`}
                     >
                       <td className="py-1.5 pr-3 text-text-primary whitespace-nowrap">{label}</td>
-                      {(venues ?? []).map((v) => (
-                        <td key={v.id} className="text-right py-1.5 px-2 font-mono text-text-secondary">
-                          {dateCounts[v.id] || '—'}
-                        </td>
-                      ))}
+                      {(venues ?? []).map((v) => {
+                        const cellVal = dateCounts[v.id] || 0;
+                        const entries = forecastEntryLookup.get(`${date}|${v.id}`) ?? [];
+                        return (
+                          <td key={v.id} className="text-right py-1.5 px-1">
+                            <input
+                              type="number"
+                              min="0"
+                              defaultValue={cellVal}
+                              key={`${date}-${v.id}-${cellVal}`}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => {
+                                const newVal = Number(e.target.value) || 0;
+                                if (newVal === cellVal) return;
+                                if (entries.length === 1) {
+                                  updateForecastEntry.mutate({ entryId: entries[0].id, guest_count: newVal });
+                                } else if (entries.length > 1) {
+                                  const ratio = cellVal > 0 ? newVal / cellVal : 0;
+                                  for (const entry of entries) {
+                                    updateForecastEntry.mutate({ entryId: entry.id, guest_count: Math.round(entry.guest_count * ratio) });
+                                  }
+                                }
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              className="w-14 text-right font-mono text-xs px-1 py-0.5 rounded border border-transparent hover:border-border focus:border-accent-indigo bg-transparent text-text-secondary focus:bg-white focus:text-text-primary focus:outline-none"
+                            />
+                          </td>
+                        );
+                      })}
                       <td className="text-right py-1.5 pl-2 font-mono text-text-primary font-semibold">
                         {total || '—'}
                       </td>
@@ -1286,7 +1353,84 @@ function CalculateOrder() {
                 </>
                 );
               })}
+              {/* Manually added items */}
+              {manualItems.map((mi) => {
+                const miQty = Number(mi.quantity) || 0;
+                const miCost = miQty > 0 && mi.order_unit_price ? Math.round(Math.ceil(miQty) * mi.order_unit_price * 100) / 100 : null;
+                return (
+                  <tr key={`manual-${mi.item_id}`} className="border-b border-border hover:bg-bg-hover bg-accent-indigo/5">
+                    <td className="px-4 py-2 text-text-primary">
+                      <span className="font-medium">{mi.item_name}</span>
+                      {mi.vendor_name && <span className="text-text-muted text-[10px] ml-1">({mi.vendor_name})</span>}
+                      <span className="text-accent-indigo text-[10px] ml-1">(manual)</span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-text-muted">—</td>
+                    <td className="px-4 py-2 text-right font-mono text-text-muted">—</td>
+                    <td className="px-4 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={mi.quantity}
+                          onChange={(e) => setManualItems((prev) => prev.map((item) =>
+                            item.item_id === mi.item_id ? { ...item, quantity: e.target.value } : item
+                          ))}
+                          className="w-16 text-right font-mono text-xs px-1.5 py-1 rounded border border-accent-indigo/30 bg-white text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+                        />
+                        <span className="text-xs text-text-muted">{mi.order_unit ?? mi.item_unit}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-text-muted">—</td>
+                    <td className="px-4 py-2 text-right flex items-center justify-end gap-2">
+                      {miCost != null ? <span className="text-text-secondary font-mono text-xs">${miCost.toFixed(2)}</span> : <span className="text-text-muted">—</span>}
+                      <button
+                        onClick={() => setManualItems((prev) => prev.filter((item) => item.item_id !== mi.item_id))}
+                        className="text-accent-red text-xs hover:underline"
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
+            {/* Add Item row */}
+            <tfoot>
+              <tr className="border-t border-border">
+                <td colSpan={6} className="px-4 py-2">
+                  {!showAddItem ? (
+                    <button
+                      onClick={() => setShowAddItem(true)}
+                      className="text-accent-indigo text-xs hover:underline"
+                    >
+                      + Add Item
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <ItemSearchInput
+                        items={(allItems ?? []).filter((i) => !effectiveIngredients.some((e) => e.item_id === i.id) && !manualItems.some((m) => m.item_id === i.id))}
+                        selectedId={0}
+                        onSelect={(id) => {
+                          const item = (allItems ?? []).find((i) => i.id === id);
+                          if (!item) return;
+                          const vendorName = item.vendor_id ? vendors?.find((v) => v.id === item.vendor_id)?.name ?? null : null;
+                          setManualItems((prev) => [...prev, {
+                            item_id: item.id, item_name: item.name, quantity: '1',
+                            vendor_id: item.vendor_id, vendor_name: vendorName,
+                            order_unit: item.order_unit, order_unit_price: item.order_unit_price, item_unit: item.unit,
+                          }]);
+                          setShowAddItem(false);
+                        }}
+                      />
+                      <button onClick={() => setShowAddItem(false)} className="text-text-secondary text-xs hover:text-text-primary">
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tfoot>
           </table>
 
           <div className="px-4 py-3 border-t border-border flex items-center justify-between">
@@ -1303,7 +1447,7 @@ function CalculateOrder() {
             </div>
             <button
               onClick={handleCreateDraftOrder}
-              disabled={createOrder.isPending || !effectiveIngredients.some((i) => getOrderQty(i) > 0 && i.vendor_id)}
+              disabled={createOrder.isPending || !(effectiveIngredients.some((i) => getOrderQty(i) > 0 && i.vendor_id) || manualItems.some((m) => Number(m.quantity) > 0 && m.vendor_id))}
               className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
             >
               Create Draft Order
@@ -1312,6 +1456,363 @@ function CalculateOrder() {
         </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ── Weekly Order Tab ──────────────────────────────────────────
+
+interface WeeklyIngredientRow {
+  item_id: number;
+  item_name: string;
+  vendor_id: number | null;
+  vendor_name: string | null;
+  order_unit: string | null;
+  recipe_unit: string;
+  order_unit_price: number | null;
+  item_unit: string;
+  dailyNeeded: Record<string, number>;
+  totalNeeded: number;
+  currentStock: number;
+  shortage: number;
+}
+
+const ceilHalfW = (n: number) => Math.ceil(n * 2) / 2;
+
+function WeeklyOrder() {
+  const calculateOrder = useCalculateOrder();
+  const createOrder = useCreateOrder();
+  const { toast } = useToast();
+
+  const { data: forecasts } = useForecasts();
+  const { data: existingMappings } = useForecastMappings();
+  const latestForecastId = forecasts && forecasts.length > 0 ? forecasts[0].id : 0;
+  const { data: savedForecast } = useForecast(latestForecastId);
+
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [weeklyResults, setWeeklyResults] = useState<Map<string, OrderCalculationResult>>(new Map());
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [orderOverrides, setOrderOverrides] = useState<Record<number, string>>({});
+
+  // Recompute forecastByDate (same logic as CalculateOrder)
+  const forecastByDate = (() => {
+    if (!savedForecast?.entries || !existingMappings) return null;
+    const mappingMap = new Map(existingMappings.map((m) => [m.product_name, m.venue_id]));
+    const byDate: Record<string, Record<number, number>> = {};
+    for (const entry of savedForecast.entries) {
+      const venueId = mappingMap.get(entry.product_name);
+      if (!venueId) continue;
+      if (!byDate[entry.forecast_date]) byDate[entry.forecast_date] = {};
+      byDate[entry.forecast_date][venueId] = (byDate[entry.forecast_date][venueId] || 0) + entry.guest_count;
+    }
+    return byDate;
+  })();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const forecastDates = (savedForecast?.raw_dates ?? []).filter((d) => d >= today);
+
+  const toggleDate = (date: string) => {
+    if (selectedDates.includes(date)) {
+      setSelectedDates((prev) => prev.filter((d) => d !== date));
+    } else if (selectedDates.length < 7) {
+      setSelectedDates((prev) => [...prev, date].sort());
+    }
+  };
+
+  const handleCalculateWeek = async () => {
+    if (selectedDates.length === 0) {
+      toast('Select at least one date', 'error');
+      return;
+    }
+    setIsCalculating(true);
+    setOrderOverrides({});
+    const results = new Map<string, OrderCalculationResult>();
+
+    const promises = selectedDates.map(async (date) => {
+      const countsForDate = forecastByDate?.[date] ?? {};
+      const guest_counts = Object.entries(countsForDate)
+        .filter(([, count]) => count > 0)
+        .map(([venue_id, guest_count]) => ({
+          venue_id: Number(venue_id),
+          guest_count: Number(guest_count),
+        }));
+      if (guest_counts.length > 0) {
+        try {
+          const data = await calculateOrder.mutateAsync({ guest_counts });
+          results.set(date, data);
+        } catch (err: unknown) {
+          toast(`Failed for ${date}: ${(err as Error).message}`, 'error');
+        }
+      }
+    });
+
+    await Promise.all(promises);
+    setWeeklyResults(results);
+    setIsCalculating(false);
+  };
+
+  // Aggregate results across all dates
+  const aggregated = (() => {
+    if (weeklyResults.size === 0) return [];
+    const map = new Map<number, WeeklyIngredientRow>();
+    for (const [date, result] of weeklyResults) {
+      for (const ing of result.ingredients) {
+        const needed = ing.total_needed_order ?? ing.total_needed;
+        const existing = map.get(ing.item_id);
+        if (existing) {
+          existing.dailyNeeded[date] = (existing.dailyNeeded[date] || 0) + needed;
+          existing.totalNeeded += needed;
+        } else {
+          map.set(ing.item_id, {
+            item_id: ing.item_id,
+            item_name: ing.item_name,
+            vendor_id: ing.vendor_id,
+            vendor_name: ing.vendor_name,
+            order_unit: ing.order_unit,
+            recipe_unit: ing.recipe_unit,
+            order_unit_price: ing.order_unit_price,
+            item_unit: ing.item_unit,
+            dailyNeeded: { [date]: needed },
+            totalNeeded: needed,
+            currentStock: ing.current_qty,
+            shortage: 0,
+          });
+        }
+      }
+    }
+    // Convert stock to order units
+    for (const row of map.values()) {
+      let convStock = row.currentStock;
+      for (const result of weeklyResults.values()) {
+        const ing = result.ingredients.find((i) => i.item_id === row.item_id);
+        if (ing && ing.total_needed > 0 && ing.total_needed_order != null && ing.total_needed_order > 0) {
+          const ratio = ing.total_needed / ing.total_needed_order;
+          const stockInRecipeUnit = ing.converted_stock ?? ing.current_qty;
+          convStock = ratio > 0 ? stockInRecipeUnit / ratio : ing.current_qty;
+          break;
+        }
+      }
+      row.shortage = Math.max(0, row.totalNeeded - convStock);
+      row.currentStock = Math.round(convStock * 100) / 100;
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.vendor_name && b.vendor_name) return a.vendor_name.localeCompare(b.vendor_name) || a.item_name.localeCompare(b.item_name);
+      if (a.vendor_name) return -1;
+      if (b.vendor_name) return 1;
+      return a.item_name.localeCompare(b.item_name);
+    });
+  })();
+
+  const getWeeklyOrderQty = (row: WeeklyIngredientRow) => {
+    const override = orderOverrides[row.item_id];
+    if (override !== undefined) return Number(override) || 0;
+    return row.shortage > 0 ? ceilHalfW(row.shortage) : 0;
+  };
+
+  const handleCreateWeeklyOrders = () => {
+    const byVendor = new Map<number, { item_id: number; quantity: number; unit: string; unit_price: number }[]>();
+    for (const row of aggregated) {
+      const orderQty = getWeeklyOrderQty(row);
+      if (orderQty <= 0 || !row.vendor_id) continue;
+      const arr = byVendor.get(row.vendor_id) ?? [];
+      arr.push({
+        item_id: row.item_id,
+        quantity: orderQty,
+        unit: row.order_unit ?? row.recipe_unit,
+        unit_price: row.order_unit_price ?? 0,
+      });
+      byVendor.set(row.vendor_id, arr);
+    }
+
+    if (byVendor.size === 0) {
+      toast('Nothing to order', 'error');
+      return;
+    }
+
+    let created = 0;
+    const dateRange = `${selectedDates[0]} to ${selectedDates[selectedDates.length - 1]}`;
+    for (const [vid, items] of byVendor) {
+      createOrder.mutate(
+        { vendor_id: vid, notes: `Weekly order for ${dateRange}`, items },
+        {
+          onSuccess: () => {
+            created++;
+            if (created === byVendor.size) {
+              toast(`${created} weekly draft order(s) created`, 'success');
+            }
+          },
+          onError: (err) => toast(`Failed: ${err.message}`, 'error'),
+        },
+      );
+    }
+  };
+
+  // Group aggregated rows by vendor for display
+  const vendorGroups = (() => {
+    const groups = new Map<string, WeeklyIngredientRow[]>();
+    for (const row of aggregated) {
+      const key = row.vendor_name ?? 'No Vendor';
+      const arr = groups.get(key) ?? [];
+      arr.push(row);
+      groups.set(key, arr);
+    }
+    return groups;
+  })();
+
+  return (
+    <div className="space-y-4">
+      {/* Date selection */}
+      <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-text-primary">Select Dates (up to 7)</h3>
+        {forecastDates.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {forecastDates.map((date) => {
+              const d = new Date(date + 'T12:00:00');
+              const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+              const isSelected = selectedDates.includes(date);
+              const counts = forecastByDate?.[date] ?? {};
+              const total = Object.values(counts).reduce((s, c) => s + c, 0);
+              return (
+                <button
+                  key={date}
+                  onClick={() => toggleDate(date)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    isSelected
+                      ? 'bg-accent-indigo text-white'
+                      : 'bg-bg-hover text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {label} {total > 0 && <span className="opacity-70">({total})</span>}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-text-muted">No forecast uploaded. Upload one in Calculate Order first.</p>
+        )}
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-text-muted">{selectedDates.length}/7 dates selected</span>
+          <button
+            onClick={handleCalculateWeek}
+            disabled={isCalculating || selectedDates.length === 0}
+            className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
+          >
+            {isCalculating ? 'Calculating...' : 'Calculate Weekly Order'}
+          </button>
+          {selectedDates.length > 0 && (
+            <button
+              onClick={() => { setSelectedDates([]); setWeeklyResults(new Map()); setOrderOverrides({}); }}
+              className="text-text-secondary text-xs hover:text-text-primary"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Results */}
+      {aggregated.length > 0 && (
+        <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-primary">
+              Weekly Ingredient Requirements
+            </h3>
+            <span className="text-xs text-text-secondary font-mono">
+              {selectedDates.length} day(s), {aggregated.length} items
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-bg-hover text-text-secondary">
+                <tr>
+                  <th className="text-left px-4 py-2 font-medium">Item</th>
+                  {selectedDates.map((date) => {
+                    const d = new Date(date + 'T12:00:00');
+                    return (
+                      <th key={date} className="text-right px-2 py-2 font-medium whitespace-nowrap">
+                        {d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}
+                      </th>
+                    );
+                  })}
+                  <th className="text-right px-3 py-2 font-medium">Total</th>
+                  <th className="text-right px-3 py-2 font-medium">In Stock</th>
+                  <th className="text-right px-3 py-2 font-medium">Order</th>
+                  <th className="text-right px-3 py-2 font-medium">Est. Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from(vendorGroups.entries()).map(([vendorName, rows]) => (
+                  <Fragment key={`vg-${vendorName}`}>
+                    <tr className="bg-bg-hover/50">
+                      <td colSpan={selectedDates.length + 5} className="px-4 py-1.5 text-text-secondary font-semibold text-xs">
+                        {vendorName}
+                      </td>
+                    </tr>
+                    {rows.map((row) => {
+                      const orderQty = getWeeklyOrderQty(row);
+                      const isOverridden = orderOverrides[row.item_id] !== undefined;
+                      const unit = row.order_unit ?? row.recipe_unit;
+                      const cost = orderQty > 0 && row.order_unit_price
+                        ? Math.round(Math.ceil(orderQty) * row.order_unit_price * 100) / 100
+                        : null;
+                      return (
+                        <tr key={row.item_id} className="border-b border-border hover:bg-bg-hover">
+                          <td className="px-4 py-2 text-text-primary font-medium whitespace-nowrap">{row.item_name}</td>
+                          {selectedDates.map((date) => (
+                            <td key={date} className="text-right px-2 py-2 font-mono text-text-secondary">
+                              {row.dailyNeeded[date] != null ? ceilHalfW(row.dailyNeeded[date]).toFixed(1) : '—'}
+                            </td>
+                          ))}
+                          <td className="text-right px-3 py-2 font-mono text-text-primary font-semibold">
+                            {ceilHalfW(row.totalNeeded).toFixed(1)} <span className="text-text-muted">{unit}</span>
+                          </td>
+                          <td className="text-right px-3 py-2 font-mono text-text-secondary">
+                            {row.currentStock.toFixed(1)} <span className="text-text-muted">{unit}</span>
+                          </td>
+                          <td className="text-right px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={orderOverrides[row.item_id] ?? (orderQty > 0 ? orderQty : 0)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const def = row.shortage > 0 ? ceilHalfW(row.shortage) : 0;
+                                if (val === String(def)) {
+                                  setOrderOverrides((prev) => { const next = { ...prev }; delete next[row.item_id]; return next; });
+                                } else {
+                                  setOrderOverrides((prev) => ({ ...prev, [row.item_id]: val }));
+                                }
+                              }}
+                              className={`w-16 text-right font-mono text-xs px-1.5 py-1 rounded border focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 ${
+                                isOverridden
+                                  ? 'border-accent-amber bg-accent-amber/10 text-text-primary'
+                                  : 'border-border bg-white text-text-secondary'
+                              }`}
+                            />
+                          </td>
+                          <td className="text-right px-3 py-2 font-mono text-text-secondary">
+                            {cost != null ? `$${cost.toFixed(2)}` : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-3 border-t border-border flex justify-end">
+            <button
+              onClick={handleCreateWeeklyOrders}
+              disabled={createOrder.isPending || !aggregated.some((r) => getWeeklyOrderQty(r) > 0 && r.vendor_id)}
+              className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
+            >
+              Create Draft Orders
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

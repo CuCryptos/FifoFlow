@@ -49,6 +49,7 @@ import type {
   MergeItemsInput,
   InvoiceParseResult,
   Forecast,
+  ForecastEntry,
   ForecastWithEntries,
   ForecastParseResult,
   ForecastProductMapping,
@@ -302,5 +303,10 @@ export const api = {
         body: JSON.stringify({ mappings }),
       }),
     deleteMapping: (id: number) => fetchJson<void>(`/forecasts/mappings/${id}`, { method: 'DELETE' }),
+    updateEntry: (entryId: number, guest_count: number) =>
+      fetchJson<ForecastEntry>(`/forecasts/entries/${entryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ guest_count }),
+      }),
   },
 };

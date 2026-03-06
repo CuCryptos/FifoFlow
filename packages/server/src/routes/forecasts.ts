@@ -3,7 +3,7 @@ import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import type { InventoryStore } from '../store/types.js';
 import type { ForecastParseResult } from '@fifoflow/shared';
-import { saveForecastSchema, saveForecastMappingsBulkSchema } from '@fifoflow/shared';
+import { saveForecastSchema, saveForecastMappingsBulkSchema, updateForecastEntrySchema } from '@fifoflow/shared';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -141,6 +141,21 @@ Rules:
   router.delete('/mappings/:id', async (req, res) => {
     await store.deleteForecastMapping(Number(req.params.id));
     res.status(204).send();
+  });
+
+  // Update a single forecast entry
+  router.patch('/entries/:entryId', async (req, res) => {
+    const parsed = updateForecastEntrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    try {
+      const entry = await store.updateForecastEntry(Number(req.params.entryId), parsed.data.guest_count);
+      res.json(entry);
+    } catch {
+      res.status(404).json({ error: 'Forecast entry not found' });
+    }
   });
 
   // Parameterized routes after static routes

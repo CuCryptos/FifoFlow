@@ -1412,6 +1412,13 @@ export class SqliteInventoryStore implements InventoryStore {
     return this.db.prepare('SELECT * FROM forecasts WHERE id = ?').get(forecastId) as any;
   }
 
+  async updateForecastEntry(id: number, guest_count: number): Promise<ForecastEntry> {
+    this.db.prepare('UPDATE forecast_entries SET guest_count = ? WHERE id = ?').run(guest_count, id);
+    const row = this.db.prepare('SELECT * FROM forecast_entries WHERE id = ?').get(id) as ForecastEntry | undefined;
+    if (!row) throw new Error('Forecast entry not found');
+    return row;
+  }
+
   async deleteForecast(id: number): Promise<void> {
     this.db.prepare('DELETE FROM forecasts WHERE id = ?').run(id);
   }

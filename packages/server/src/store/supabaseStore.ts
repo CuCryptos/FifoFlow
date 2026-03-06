@@ -14,6 +14,7 @@ import type {
   CreateVendorPriceInput,
   DashboardStats,
   Forecast,
+  ForecastEntry,
   ForecastProductMapping,
   ForecastWithEntries,
   ItemCountAdjustmentResult,
@@ -613,6 +614,7 @@ export class SupabaseInventoryStore implements InventoryStore {
   async listForecasts(): Promise<Forecast[]> { return []; }
   async getForecastById(_id: number): Promise<ForecastWithEntries | undefined> { return undefined; }
   async saveForecast(_input: SaveForecastInput): Promise<Forecast> { return this.notImplemented('saveForecast'); }
+  async updateForecastEntry(_id: number, _guest_count: number): Promise<ForecastEntry> { return this.notImplemented('updateForecastEntry'); }
   async deleteForecast(_id: number): Promise<void> { return this.notImplemented('deleteForecast'); }
   async listForecastMappings(): Promise<ForecastProductMapping[]> { return []; }
   async saveForecastMapping(_input: { product_name: string; venue_id: number }): Promise<ForecastProductMapping> { return this.notImplemented('saveForecastMapping'); }
