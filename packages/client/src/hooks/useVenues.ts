@@ -33,3 +33,11 @@ export function useDeleteVenue() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['venues'] }); },
   });
 }
+
+export function useReorderVenues() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderedIds: number[]) => api.venues.reorder(orderedIds),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['venues'] }); },
+  });
+}

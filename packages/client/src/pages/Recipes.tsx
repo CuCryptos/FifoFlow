@@ -3,7 +3,7 @@ import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecip
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
 import { useParseForecast, useSaveForecast, useForecasts, useForecast, useForecastMappings, useSaveForecastMappings } from '../hooks/useForecasts';
 import { useItems, useSetItemCount } from '../hooks/useItems';
-import { useVenues } from '../hooks/useVenues';
+import { useVenues, useReorderVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
 import { useToast } from '../contexts/ToastContext';
@@ -427,6 +427,7 @@ function ProductMenus() {
   const { data: productRecipes, isLoading: prLoading } = useProductRecipes();
   const setProductRecipe = useSetProductRecipe();
   const deleteProductRecipe = useDeleteProductRecipe();
+  const reorderVenues = useReorderVenues();
   const { toast } = useToast();
 
   const [addingFor, setAddingFor] = useState<number | null>(null);
@@ -454,14 +455,43 @@ function ProductMenus() {
     );
   };
 
+  const handleMove = (index: number, direction: 'up' | 'down') => {
+    if (!venues) return;
+    const ids = venues.map((v) => v.id);
+    const swapIdx = direction === 'up' ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= ids.length) return;
+    [ids[index], ids[swapIdx]] = [ids[swapIdx], ids[index]];
+    reorderVenues.mutate(ids);
+  };
+
   return (
     <div className="space-y-4">
-      {venues.map((venue) => {
+      {venues.map((venue, venueIndex) => {
         const assigned = recipesByVenue.get(venue.id) ?? [];
         return (
           <div key={venue.id} className="bg-bg-card rounded-xl shadow-sm">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <h3 className="text-base font-semibold text-text-primary">{venue.name}</h3>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => handleMove(venueIndex, 'up')}
+                    disabled={venueIndex === 0 || reorderVenues.isPending}
+                    className="text-text-secondary hover:text-text-primary disabled:opacity-20 text-xs leading-none"
+                    title="Move up"
+                  >
+                    &#9650;
+                  </button>
+                  <button
+                    onClick={() => handleMove(venueIndex, 'down')}
+                    disabled={venueIndex === venues.length - 1 || reorderVenues.isPending}
+                    className="text-text-secondary hover:text-text-primary disabled:opacity-20 text-xs leading-none"
+                    title="Move down"
+                  >
+                    &#9660;
+                  </button>
+                </div>
+                <h3 className="text-base font-semibold text-text-primary">{venue.name}</h3>
+              </div>
               <button
                 onClick={() => setAddingFor(addingFor === venue.id ? null : venue.id)}
                 className="text-accent-indigo text-xs hover:underline"

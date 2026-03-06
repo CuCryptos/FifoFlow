@@ -583,6 +583,7 @@ export class SupabaseInventoryStore implements InventoryStore {
   async updateVenue(_id: number, _input: UpdateVenueInput): Promise<Venue> { return this.notImplemented('updateVenue'); }
   async deleteVenue(_id: number): Promise<void> { return this.notImplemented('deleteVenue'); }
   async countItemsForVenue(_venueId: number): Promise<number> { return 0; }
+  async reorderVenues(_orderedIds: number[]): Promise<void> { return this.notImplemented('reorderVenues'); }
 
   // Orders — stubs (not yet implemented for Supabase)
 

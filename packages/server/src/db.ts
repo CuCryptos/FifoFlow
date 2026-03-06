@@ -323,6 +323,18 @@ export function initializeDb(db: Database.Database): void {
     db.exec('ALTER TABLE transactions ADD COLUMN vendor_price_id INTEGER REFERENCES vendor_prices(id) ON DELETE SET NULL;');
   }
 
+  // Migration: add sort_order to venues
+  const venueColumns = db.pragma('table_info(venues)') as Array<{ name: string }>;
+  if (!venueColumns.some((c) => c.name === 'sort_order')) {
+    db.exec('ALTER TABLE venues ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;');
+    // Initialize sort_order from current alphabetical order
+    const venueRows = db.prepare('SELECT id FROM venues ORDER BY name ASC').all() as Array<{ id: number }>;
+    const updateStmt = db.prepare('UPDATE venues SET sort_order = ? WHERE id = ?');
+    for (let i = 0; i < venueRows.length; i++) {
+      updateStmt.run(i, venueRows[i].id);
+    }
+  }
+
   // Backfill vendor_prices from existing item vendor+pricing data
   db.exec(`
     INSERT OR IGNORE INTO vendor_prices (item_id, vendor_id, order_unit, order_unit_price, qty_per_unit, is_default)

@@ -64,6 +64,18 @@ export function createVenueRoutes(store: InventoryStore): Router {
     }
   });
 
+  // PATCH /api/venues/reorder
+  router.patch('/reorder', async (req, res) => {
+    const { ordered_ids } = req.body;
+    if (!Array.isArray(ordered_ids) || !ordered_ids.every((id: unknown) => typeof id === 'number')) {
+      res.status(400).json({ error: 'ordered_ids must be an array of numbers' });
+      return;
+    }
+    await store.reorderVenues(ordered_ids);
+    const venues = await store.listVenues();
+    res.json(venues);
+  });
+
   // DELETE /api/venues/:id
   router.delete('/:id', async (req, res) => {
     const venue = await store.getVenueById(Number(req.params.id));

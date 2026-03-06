@@ -134,6 +134,8 @@ export const api = {
       fetchJson<Venue>(`/venues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/venues/${id}`, { method: 'DELETE' }),
+    reorder: (orderedIds: number[]) =>
+      fetchJson<Venue[]>('/venues/reorder', { method: 'PATCH', body: JSON.stringify({ ordered_ids: orderedIds }) }),
   },
   vendorPrices: {
     list: (itemId: number) =>

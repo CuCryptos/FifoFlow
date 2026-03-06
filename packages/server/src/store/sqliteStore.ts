@@ -1048,7 +1048,7 @@ export class SqliteInventoryStore implements InventoryStore {
   // ── Venues ──────────────────────────────────────────────────
 
   async listVenues(): Promise<Venue[]> {
-    return this.db.prepare('SELECT * FROM venues ORDER BY name ASC').all() as Venue[];
+    return this.db.prepare('SELECT * FROM venues ORDER BY sort_order ASC, name ASC').all() as Venue[];
   }
 
   async getVenueById(id: number): Promise<Venue | undefined> {
@@ -1056,7 +1056,8 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async createVenue(input: CreateVenueInput): Promise<Venue> {
-    const result = this.db.prepare('INSERT INTO venues (name) VALUES (?)').run(input.name);
+    const maxOrder = (this.db.prepare('SELECT COALESCE(MAX(sort_order), -1) as m FROM venues').get() as { m: number }).m;
+    const result = this.db.prepare('INSERT INTO venues (name, sort_order) VALUES (?, ?)').run(input.name, maxOrder + 1);
     return this.db.prepare('SELECT * FROM venues WHERE id = ?').get(result.lastInsertRowid) as Venue;
   }
 
@@ -1074,6 +1075,16 @@ export class SqliteInventoryStore implements InventoryStore {
       'SELECT COUNT(*) as count FROM items WHERE venue_id = ?'
     ).get(venueId) as { count: number };
     return row.count;
+  }
+
+  async reorderVenues(orderedIds: number[]): Promise<void> {
+    const stmt = this.db.prepare('UPDATE venues SET sort_order = ? WHERE id = ?');
+    const txn = this.db.transaction(() => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        stmt.run(i, orderedIds[i]);
+      }
+    });
+    txn();
   }
 
   // ── Orders ──────────────────────────────────────────────────

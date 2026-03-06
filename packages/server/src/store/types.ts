@@ -181,6 +181,7 @@ export interface InventoryStore {
   updateVenue(id: number, input: UpdateVenueInput): Promise<Venue>;
   deleteVenue(id: number): Promise<void>;
   countItemsForVenue(venueId: number): Promise<number>;
+  reorderVenues(orderedIds: number[]): Promise<void>;
 
   // Recipes
   listRecipes(): Promise<RecipeWithCost[]>;
