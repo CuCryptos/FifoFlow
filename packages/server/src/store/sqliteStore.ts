@@ -1571,18 +1571,19 @@ export class SqliteInventoryStore implements InventoryStore {
 
   // ── Snack Bar Sales ─────────────────────────────────────────
 
-  async createSale(input: { itemId: number; quantity: number; fromAreaId: number }): Promise<SaleWithItem> {
+  async createSale(input: { itemId: number; quantity: number; unitQty?: number; fromAreaId: number }): Promise<SaleWithItem> {
     const item = this.db.prepare('SELECT * FROM items WHERE id = ?').get(input.itemId) as Item | undefined;
     if (!item) throw new Error('Item not found');
     if (!item.sale_price) throw new Error('Item has no sale price set');
 
-    const total = input.quantity * item.sale_price;
+    const unitQty = input.unitQty ?? 1;
+    const total = unitQty * item.sale_price;
 
     const execute = this.db.transaction(() => {
       // 1. Insert sale record
       const result = this.db.prepare(
-        'INSERT INTO sales (item_id, quantity, sale_price, total) VALUES (?, ?, ?, ?)'
-      ).run(input.itemId, input.quantity, item.sale_price, total);
+        'INSERT INTO sales (item_id, quantity, unit_qty, sale_price, total) VALUES (?, ?, ?, ?, ?)'
+      ).run(input.itemId, input.quantity, unitQty, item.sale_price, total);
 
       // 2. Decrement inventory from snack bar area
       this.db.prepare(
@@ -1653,7 +1654,7 @@ export class SqliteInventoryStore implements InventoryStore {
 
     const totals = this.db.prepare(`
       SELECT COALESCE(SUM(total), 0) as total_revenue,
-             COALESCE(SUM(quantity), 0) as total_items_sold,
+             COALESCE(SUM(unit_qty), 0) as total_items_sold,
              COUNT(*) as sale_count
       FROM sales s WHERE ${whereClause}
     `).get(...params) as { total_revenue: number; total_items_sold: number; sale_count: number };
@@ -1661,7 +1662,7 @@ export class SqliteInventoryStore implements InventoryStore {
     const daily = this.db.prepare(`
       SELECT date(s.created_at) as date,
              SUM(s.total) as revenue,
-             SUM(s.quantity) as items_sold,
+             SUM(s.unit_qty) as items_sold,
              COUNT(*) as sale_count
       FROM sales s WHERE ${whereClause}
       GROUP BY date(s.created_at)
@@ -1670,7 +1671,7 @@ export class SqliteInventoryStore implements InventoryStore {
 
     const top_sellers = this.db.prepare(`
       SELECT s.item_id, i.name as item_name,
-             SUM(s.quantity) as quantity_sold,
+             SUM(s.unit_qty) as quantity_sold,
              SUM(s.total) as revenue
       FROM sales s JOIN items i ON s.item_id = i.id
       WHERE ${whereClause}

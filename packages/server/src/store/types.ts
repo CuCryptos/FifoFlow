@@ -215,7 +215,7 @@ export interface InventoryStore {
   getCostReport(filters: ReportFilters): Promise<CostReport>;
 
   // Snack Bar Sales
-  createSale(input: { itemId: number; quantity: number; fromAreaId: number }): Promise<SaleWithItem>;
+  createSale(input: { itemId: number; quantity: number; unitQty?: number; fromAreaId: number }): Promise<SaleWithItem>;
   listSales(filters?: SalesFilters): Promise<SaleWithItem[]>;
   getSalesSummary(filters?: { start_date?: string; end_date?: string }): Promise<SalesSummary>;
 }

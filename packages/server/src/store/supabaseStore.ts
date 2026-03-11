@@ -640,7 +640,7 @@ export class SupabaseInventoryStore implements InventoryStore {
 
   // Snack Bar Sales — stubs
 
-  async createSale(_input: { itemId: number; quantity: number; fromAreaId: number }): Promise<SaleWithItem> {
+  async createSale(_input: { itemId: number; quantity: number; unitQty?: number; fromAreaId: number }): Promise<SaleWithItem> {
     this.notImplemented('createSale');
   }
 

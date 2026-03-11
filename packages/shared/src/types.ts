@@ -402,6 +402,7 @@ export interface Sale {
   id: number;
   item_id: number;
   quantity: number;
+  unit_qty: number;
   sale_price: number;
   total: number;
   created_at: string;

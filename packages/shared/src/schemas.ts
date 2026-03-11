@@ -263,6 +263,7 @@ export type UpdateForecastEntryInput = z.infer<typeof updateForecastEntrySchema>
 export const createSaleSchema = z.object({
   item_id: z.number().int().positive(),
   quantity: z.number().positive('Quantity must be positive'),
+  unit_qty: z.number().int().positive().optional(),
 });
 
 export type CreateSaleInput = z.infer<typeof createSaleSchema>;

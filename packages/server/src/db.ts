@@ -249,6 +249,7 @@ export function initializeDb(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL REFERENCES items(id),
       quantity REAL NOT NULL CHECK(quantity > 0),
+      unit_qty INTEGER NOT NULL DEFAULT 1,
       sale_price REAL NOT NULL,
       total REAL NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -353,6 +354,12 @@ export function initializeDb(db: Database.Database): void {
   const venueColumns2 = db.pragma('table_info(venues)') as Array<{ name: string }>;
   if (!venueColumns2.some((c) => c.name === 'show_in_menus')) {
     db.exec('ALTER TABLE venues ADD COLUMN show_in_menus INTEGER NOT NULL DEFAULT 1;');
+  }
+
+  // Migration: add unit_qty to sales
+  const salesColumns = db.pragma('table_info(sales)') as Array<{ name: string }>;
+  if (salesColumns.length > 0 && !salesColumns.some((c) => c.name === 'unit_qty')) {
+    db.exec('ALTER TABLE sales ADD COLUMN unit_qty INTEGER NOT NULL DEFAULT 1;');
   }
 
   // Backfill vendor_prices from existing item vendor+pricing data

@@ -56,6 +56,7 @@ export function createSalesRoutes(store: InventoryStore): Router {
       const sale = await store.createSale({
         itemId: parsed.data.item_id,
         quantity: parsed.data.quantity,
+        unitQty: parsed.data.unit_qty,
         fromAreaId: snackBarArea.id,
       });
       res.status(201).json(sale);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingBag, List, BarChart3, Minus, Plus, DollarSign } from 'lucide-react';
+import { ShoppingBag, List, BarChart3, Minus, Plus } from 'lucide-react';
 import { useAllItemStorage, useStorageAreas } from '../hooks/useStorageAreas';
 import { useItems, useUpdateItem } from '../hooks/useItems';
 import { useCreateSale, useSales, useSalesSummary } from '../hooks/useSales';
@@ -55,7 +55,7 @@ function QuickSellTab() {
   const { data: areas } = useStorageAreas();
   const createSale = useCreateSale();
   const updateItem = useUpdateItem();
-  const [sellModal, setSellModal] = useState<{ item: Item; maxQty: number } | null>(null);
+  const [sellModal, setSellModal] = useState<{ item: Item; maxQty: number; perUnit: number; costPerUnit: number | null } | null>(null);
   const [sellQty, setSellQty] = useState(1);
   const [editingPrice, setEditingPrice] = useState<number | null>(null);
   const [priceValue, setPriceValue] = useState('');
@@ -74,14 +74,22 @@ function QuickSellTab() {
     .filter(s => s.area_id === snackBarArea.id && s.quantity > 0)
     .map(s => {
       const item = items?.find(i => i.id === s.item_id);
-      return item ? { item, qty: s.quantity } : null;
+      if (!item) return null;
+      const perUnit = item.qty_per_unit ?? 1;
+      const unitQty = Math.floor(s.quantity * perUnit);
+      const costPerUnit = item.order_unit_price && perUnit > 0
+        ? item.order_unit_price / perUnit
+        : null;
+      return { item, qty: s.quantity, unitQty, perUnit, costPerUnit };
     })
-    .filter(Boolean) as Array<{ item: Item; qty: number }>;
+    .filter(Boolean) as Array<{ item: Item; qty: number; unitQty: number; perUnit: number; costPerUnit: number | null }>;
 
   const handleSell = () => {
     if (!sellModal) return;
+    // Convert individual units back to case fraction for inventory
+    const caseQty = sellQty / sellModal.perUnit;
     createSale.mutate(
-      { item_id: sellModal.item.id, quantity: sellQty },
+      { item_id: sellModal.item.id, quantity: caseQty, unit_qty: sellQty },
       {
         onSuccess: () => {
           setSellModal(null);
@@ -108,7 +116,7 @@ function QuickSellTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {snackBarItems.map(({ item, qty }) => (
+          {snackBarItems.map(({ item, unitQty, perUnit, costPerUnit }) => (
             <div key={item.id} className="bg-bg-card rounded-xl border border-border-primary p-4 flex flex-col gap-3">
               <div className="flex justify-between items-start">
                 <div>
@@ -116,53 +124,57 @@ function QuickSellTab() {
                   <p className="text-sm text-text-muted">{item.category}</p>
                 </div>
                 <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
-                  qty <= 2 ? 'bg-red-500/20 text-red-400' : 'bg-accent-green/20 text-accent-green'
+                  unitQty <= 5 ? 'bg-red-500/20 text-red-400' : 'bg-accent-green/20 text-accent-green'
                 }`}>
-                  {qty} {item.unit}
+                  {unitQty} units
                 </span>
               </div>
 
-              <div className="flex items-center justify-between">
-                {editingPrice === item.id ? (
-                  <div className="flex items-center gap-1">
-                    <span className="text-text-muted">$</span>
-                    <input
-                      type="number"
-                      value={priceValue}
-                      onChange={e => setPriceValue(e.target.value)}
-                      onBlur={() => handleSavePrice(item.id)}
-                      onKeyDown={e => e.key === 'Enter' && handleSavePrice(item.id)}
-                      className="w-20 bg-bg-primary border border-border-primary rounded px-2 py-1 text-sm text-text-primary"
-                      autoFocus
-                      step="0.01"
-                      min="0"
-                    />
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setEditingPrice(item.id);
-                      setPriceValue(String(item.sale_price ?? ''));
-                    }}
-                    className="flex items-center gap-1 text-sm text-text-secondary hover:text-text-primary transition-colors"
-                    title="Click to edit price"
-                  >
-                    <DollarSign size={14} />
-                    {item.sale_price ? `$${item.sale_price.toFixed(2)}` : 'Set price'}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => {
-                    setSellModal({ item, maxQty: qty });
-                    setSellQty(1);
-                  }}
-                  disabled={!item.sale_price}
-                  className="px-4 py-1.5 bg-accent-green text-white rounded-lg text-sm font-medium hover:bg-accent-green/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Sell
-                </button>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-text-muted">
+                  Cost: {costPerUnit != null ? <span className="text-text-secondary">${costPerUnit.toFixed(2)}</span> : <span className="text-text-muted">{'\u2014'}</span>}
+                </span>
+                <span className="text-text-muted">
+                  Sell:{' '}
+                  {editingPrice === item.id ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      $<input
+                        type="number"
+                        value={priceValue}
+                        onChange={e => setPriceValue(e.target.value)}
+                        onBlur={() => handleSavePrice(item.id)}
+                        onKeyDown={e => e.key === 'Enter' && handleSavePrice(item.id)}
+                        className="w-16 bg-bg-primary border border-border-primary rounded px-1.5 py-0.5 text-sm text-text-primary"
+                        autoFocus
+                        step="0.01"
+                        min="0"
+                      />
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditingPrice(item.id);
+                        setPriceValue(String(item.sale_price ?? ''));
+                      }}
+                      className="text-text-secondary hover:text-text-primary transition-colors"
+                      title="Click to edit sell price"
+                    >
+                      {item.sale_price ? `$${item.sale_price.toFixed(2)}` : 'Set price'}
+                    </button>
+                  )}
+                </span>
               </div>
+
+              <button
+                onClick={() => {
+                  setSellModal({ item, maxQty: unitQty, perUnit, costPerUnit });
+                  setSellQty(1);
+                }}
+                disabled={!item.sale_price}
+                className="w-full px-4 py-2 bg-accent-green text-white rounded-lg text-sm font-medium hover:bg-accent-green/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Sell
+              </button>
             </div>
           ))}
         </div>
@@ -173,7 +185,10 @@ function QuickSellTab() {
           <div className="bg-bg-card rounded-xl border border-border-primary p-6 w-80 space-y-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-text-primary">Sell {sellModal.item.name}</h3>
             <p className="text-sm text-text-muted">
-              Price: ${sellModal.item.sale_price?.toFixed(2)} per {sellModal.item.unit}
+              ${sellModal.item.sale_price?.toFixed(2)} per unit
+              {sellModal.costPerUnit != null && (
+                <span className="ml-2 text-text-muted">(cost: ${sellModal.costPerUnit.toFixed(2)})</span>
+              )}
             </p>
 
             <div className="flex items-center justify-center gap-4">
@@ -196,7 +211,7 @@ function QuickSellTab() {
               Total: <span className="font-bold text-accent-green">${((sellModal.item.sale_price ?? 0) * sellQty).toFixed(2)}</span>
             </p>
             <p className="text-center text-xs text-text-muted">
-              Available: {sellModal.maxQty} {sellModal.item.unit}
+              Available: {sellModal.maxQty} units
             </p>
 
             <div className="flex gap-2">
@@ -322,7 +337,7 @@ function SalesLogTab() {
                   </td>
                   <td className="px-4 py-3 text-sm text-text-primary font-medium">{sale.item_name}</td>
                   <td className="px-4 py-3 text-sm text-text-secondary text-right">
-                    {sale.quantity} {sale.item_unit}
+                    {sale.unit_qty}
                   </td>
                   <td className="px-4 py-3 text-sm text-text-secondary text-right">${sale.sale_price.toFixed(2)}</td>
                   <td className="px-4 py-3 text-sm text-accent-green font-medium text-right">${sale.total.toFixed(2)}</td>
