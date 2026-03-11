@@ -188,7 +188,7 @@ export function ItemDetail() {
 
   return (
     <div className="space-y-6">
-      <button onClick={() => navigate('/inventory')} className="text-sm text-text-secondary hover:text-accent-indigo transition-colors">
+      <button onClick={() => navigate(-1)} className="text-sm text-text-secondary hover:text-accent-indigo transition-colors">
         &larr; Back to Inventory
       </button>
 
