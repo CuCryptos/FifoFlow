@@ -24,6 +24,7 @@ export interface Item {
   vendor_id: number | null;
   venue_id: number | null;
   storage_area_id: number | null;
+  sale_price: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -394,4 +395,34 @@ export interface ForecastEntry {
 
 export interface ForecastWithEntries extends Forecast {
   entries: ForecastEntry[];
+}
+
+// Snack Bar Sales
+export interface Sale {
+  id: number;
+  item_id: number;
+  quantity: number;
+  sale_price: number;
+  total: number;
+  created_at: string;
+}
+
+export interface SaleWithItem extends Sale {
+  item_name: string;
+  item_unit: string;
+}
+
+export interface SalesSummary {
+  total_revenue: number;
+  total_items_sold: number;
+  sale_count: number;
+  daily: Array<{ date: string; revenue: number; items_sold: number; sale_count: number }>;
+  top_sellers: Array<{ item_id: number; item_name: string; quantity_sold: number; revenue: number }>;
+  profit_margins: Array<{ item_id: number; item_name: string; sale_price: number; cost_price: number | null; margin: number | null }>;
+}
+
+export interface SalesFilters {
+  start_date?: string;
+  end_date?: string;
+  item_id?: number;
 }

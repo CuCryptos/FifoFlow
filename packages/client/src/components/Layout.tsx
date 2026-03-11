@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Activity,
   BarChart3,
+  Coffee,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/counts', label: 'Counts', icon: ClipboardCheck },
   { to: '/activity', label: 'Activity', icon: Activity },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/snack-bar', label: 'Snack Bar', icon: Coffee },
 ];
 
 export function Layout() {

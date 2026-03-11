@@ -17,6 +17,7 @@ export const createItemSchema = z.object({
   vendor_id: z.number().int().positive().nullable().optional(),
   venue_id: z.number().int().positive().nullable().optional(),
   storage_area_id: z.number().int().positive().nullable().optional(),
+  sale_price: z.number().min(0).nullable().optional(),
 });
 
 export const updateItemSchema = z.object({
@@ -36,6 +37,7 @@ export const updateItemSchema = z.object({
   vendor_id: z.number().int().positive().nullable().optional(),
   venue_id: z.number().int().positive().nullable().optional(),
   storage_area_id: z.number().int().positive().nullable().optional(),
+  sale_price: z.number().min(0).nullable().optional(),
 });
 
 export const createTransactionSchema = z.object({
@@ -256,3 +258,11 @@ export const updateForecastEntrySchema = z.object({
 export type SaveForecastInput = z.infer<typeof saveForecastSchema>;
 export type SaveForecastMappingsBulkInput = z.infer<typeof saveForecastMappingsBulkSchema>;
 export type UpdateForecastEntryInput = z.infer<typeof updateForecastEntrySchema>;
+
+// Snack Bar Sales
+export const createSaleSchema = z.object({
+  item_id: z.number().int().positive(),
+  quantity: z.number().positive('Quantity must be positive'),
+});
+
+export type CreateSaleInput = z.infer<typeof createSaleSchema>;

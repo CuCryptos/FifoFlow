@@ -50,6 +50,9 @@ import type {
   VendorPrice,
   CreateVendorInput,
   UpdateVendorInput,
+  SaleWithItem,
+  SalesSummary,
+  SalesFilters,
   WasteReport,
   WasteRow,
 } from '@fifoflow/shared';
@@ -1564,6 +1567,133 @@ export class SqliteInventoryStore implements InventoryStore {
     );
 
     return { rows, totals };
+  }
+
+  // ── Snack Bar Sales ─────────────────────────────────────────
+
+  async createSale(input: { itemId: number; quantity: number; fromAreaId: number }): Promise<SaleWithItem> {
+    const item = this.db.prepare('SELECT * FROM items WHERE id = ?').get(input.itemId) as Item | undefined;
+    if (!item) throw new Error('Item not found');
+    if (!item.sale_price) throw new Error('Item has no sale price set');
+
+    const total = input.quantity * item.sale_price;
+
+    const execute = this.db.transaction(() => {
+      // 1. Insert sale record
+      const result = this.db.prepare(
+        'INSERT INTO sales (item_id, quantity, sale_price, total) VALUES (?, ?, ?, ?)'
+      ).run(input.itemId, input.quantity, item.sale_price, total);
+
+      // 2. Decrement inventory from snack bar area
+      this.db.prepare(
+        'UPDATE item_storage SET quantity = quantity - ? WHERE item_id = ? AND area_id = ?'
+      ).run(input.quantity, input.itemId, input.fromAreaId);
+
+      // 3. Recalculate current_qty
+      const sumRow = this.db.prepare(
+        'SELECT COALESCE(SUM(quantity), 0) as total FROM item_storage WHERE item_id = ?'
+      ).get(input.itemId) as { total: number };
+      this.db.prepare('UPDATE items SET current_qty = ? WHERE id = ?').run(sumRow.total, input.itemId);
+
+      // 4. Create companion transaction for audit trail
+      this.db.prepare(
+        'INSERT INTO transactions (item_id, type, quantity, reason, notes, from_area_id) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(input.itemId, 'out', input.quantity, 'Used', 'Snack bar sale', input.fromAreaId);
+
+      const sale = this.db.prepare(`
+        SELECT s.*, i.name as item_name, i.unit as item_unit
+        FROM sales s JOIN items i ON s.item_id = i.id
+        WHERE s.id = ?
+      `).get(result.lastInsertRowid) as SaleWithItem;
+
+      return sale;
+    });
+
+    return execute();
+  }
+
+  async listSales(filters?: SalesFilters): Promise<SaleWithItem[]> {
+    let sql = `
+      SELECT s.*, i.name as item_name, i.unit as item_unit
+      FROM sales s JOIN items i ON s.item_id = i.id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    if (filters?.start_date) {
+      sql += ' AND s.created_at >= ?';
+      params.push(filters.start_date);
+    }
+    if (filters?.end_date) {
+      sql += ' AND s.created_at <= ?';
+      params.push(filters.end_date + ' 23:59:59');
+    }
+    if (filters?.item_id) {
+      sql += ' AND s.item_id = ?';
+      params.push(filters.item_id);
+    }
+
+    sql += ' ORDER BY s.created_at DESC';
+
+    return this.db.prepare(sql).all(...params) as SaleWithItem[];
+  }
+
+  async getSalesSummary(filters?: { start_date?: string; end_date?: string }): Promise<SalesSummary> {
+    let whereClause = '1=1';
+    const params: any[] = [];
+
+    if (filters?.start_date) {
+      whereClause += ' AND s.created_at >= ?';
+      params.push(filters.start_date);
+    }
+    if (filters?.end_date) {
+      whereClause += ' AND s.created_at <= ?';
+      params.push(filters.end_date + ' 23:59:59');
+    }
+
+    const totals = this.db.prepare(`
+      SELECT COALESCE(SUM(total), 0) as total_revenue,
+             COALESCE(SUM(quantity), 0) as total_items_sold,
+             COUNT(*) as sale_count
+      FROM sales s WHERE ${whereClause}
+    `).get(...params) as { total_revenue: number; total_items_sold: number; sale_count: number };
+
+    const daily = this.db.prepare(`
+      SELECT date(s.created_at) as date,
+             SUM(s.total) as revenue,
+             SUM(s.quantity) as items_sold,
+             COUNT(*) as sale_count
+      FROM sales s WHERE ${whereClause}
+      GROUP BY date(s.created_at)
+      ORDER BY date
+    `).all(...params) as SalesSummary['daily'];
+
+    const top_sellers = this.db.prepare(`
+      SELECT s.item_id, i.name as item_name,
+             SUM(s.quantity) as quantity_sold,
+             SUM(s.total) as revenue
+      FROM sales s JOIN items i ON s.item_id = i.id
+      WHERE ${whereClause}
+      GROUP BY s.item_id
+      ORDER BY revenue DESC
+      LIMIT 10
+    `).all(...params) as SalesSummary['top_sellers'];
+
+    const profit_margins = this.db.prepare(`
+      SELECT i.id as item_id, i.name as item_name,
+             i.sale_price,
+             vp.order_unit_price as cost_price,
+             CASE WHEN vp.order_unit_price IS NOT NULL AND i.sale_price > 0
+               THEN ROUND((i.sale_price - vp.order_unit_price) / i.sale_price * 100, 1)
+               ELSE NULL
+             END as margin
+      FROM items i
+      LEFT JOIN vendor_prices vp ON vp.item_id = i.id AND vp.is_default = 1
+      WHERE i.sale_price IS NOT NULL AND i.sale_price > 0
+      ORDER BY i.name
+    `).all() as SalesSummary['profit_margins'];
+
+    return { ...totals, daily, top_sellers, profit_margins };
   }
 }
 

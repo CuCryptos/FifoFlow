@@ -54,6 +54,9 @@ import type {
   ForecastParseResult,
   ForecastProductMapping,
   SaveForecastInput,
+  SaleWithItem,
+  SalesSummary,
+  CreateSaleInput,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -308,5 +311,24 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ guest_count }),
       }),
+  },
+  sales: {
+    list: (params?: { start_date?: string; end_date?: string; item_id?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.start_date) qs.set('start_date', params.start_date);
+      if (params?.end_date) qs.set('end_date', params.end_date);
+      if (params?.item_id) qs.set('item_id', String(params.item_id));
+      const query = qs.toString();
+      return fetchJson<SaleWithItem[]>(`/sales${query ? `?${query}` : ''}`);
+    },
+    create: (data: CreateSaleInput) =>
+      fetchJson<SaleWithItem>('/sales', { method: 'POST', body: JSON.stringify(data) }),
+    summary: (params?: { start_date?: string; end_date?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.start_date) qs.set('start_date', params.start_date);
+      if (params?.end_date) qs.set('end_date', params.end_date);
+      const query = qs.toString();
+      return fetchJson<SalesSummary>(`/sales/summary${query ? `?${query}` : ''}`);
+    },
   },
 };

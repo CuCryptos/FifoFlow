@@ -49,6 +49,9 @@ import type {
   VendorPrice,
   CreateVendorInput,
   UpdateVendorInput,
+  SaleWithItem,
+  SalesSummary,
+  SalesFilters,
   WasteReport,
 } from '@fifoflow/shared';
 
@@ -210,4 +213,9 @@ export interface InventoryStore {
   getUsageReport(filters: ReportFilters): Promise<UsageReport>;
   getWasteReport(filters: ReportFilters): Promise<WasteReport>;
   getCostReport(filters: ReportFilters): Promise<CostReport>;
+
+  // Snack Bar Sales
+  createSale(input: { itemId: number; quantity: number; fromAreaId: number }): Promise<SaleWithItem>;
+  listSales(filters?: SalesFilters): Promise<SaleWithItem[]>;
+  getSalesSummary(filters?: { start_date?: string; end_date?: string }): Promise<SalesSummary>;
 }

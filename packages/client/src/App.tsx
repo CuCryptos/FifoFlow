@@ -11,6 +11,7 @@ import { Counts } from './pages/Counts';
 import { Orders } from './pages/Orders';
 import { Recipes } from './pages/Recipes';
 import { Reports } from './pages/Reports';
+import SnackBar from './pages/SnackBar';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +35,7 @@ export default function App() {
                 <Route path="/activity" element={<Activity />} />
                 <Route path="/counts" element={<Counts />} />
                 <Route path="/reports" element={<Reports />} />
+                <Route path="/snack-bar" element={<SnackBar />} />
               </Route>
             </Routes>
           </BrowserRouter>

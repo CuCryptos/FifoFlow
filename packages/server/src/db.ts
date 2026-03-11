@@ -244,6 +244,18 @@ export function initializeDb(db: Database.Database): void {
     BEGIN
       UPDATE forecast_product_mappings SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
+
+    CREATE TABLE IF NOT EXISTS sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      quantity REAL NOT NULL CHECK(quantity > 0),
+      sale_price REAL NOT NULL,
+      total REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sales_item_id ON sales(item_id);
+    CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
   `);
 
   // Migrations — add inventory fields incrementally
@@ -274,6 +286,8 @@ export function initializeDb(db: Database.Database): void {
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_venue_id ON items(venue_id)');
 
   addColumnIfMissing('storage_area_id', 'INTEGER REFERENCES storage_areas(id) ON DELETE SET NULL');
+
+  addColumnIfMissing('sale_price', 'REAL');
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id)');
 
   const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;

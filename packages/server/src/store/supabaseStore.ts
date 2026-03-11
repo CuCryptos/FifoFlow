@@ -46,6 +46,9 @@ import type {
   VendorPrice,
   CreateVendorInput,
   UpdateVendorInput,
+  SaleWithItem,
+  SalesSummary,
+  SalesFilters,
   WasteReport,
 } from '@fifoflow/shared';
 import {
@@ -633,6 +636,20 @@ export class SupabaseInventoryStore implements InventoryStore {
 
   async getCostReport(_filters: ReportFilters): Promise<CostReport> {
     return this.notImplemented('getCostReport');
+  }
+
+  // Snack Bar Sales — stubs
+
+  async createSale(_input: { itemId: number; quantity: number; fromAreaId: number }): Promise<SaleWithItem> {
+    this.notImplemented('createSale');
+  }
+
+  async listSales(_filters?: SalesFilters): Promise<SaleWithItem[]> {
+    this.notImplemented('listSales');
+  }
+
+  async getSalesSummary(_filters?: { start_date?: string; end_date?: string }): Promise<SalesSummary> {
+    this.notImplemented('getSalesSummary');
   }
 }
 
