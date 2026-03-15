@@ -1,0 +1,16 @@
+table_name,row_count
+items,389
+vendors,22
+vendor_prices,122
+venues,11
+storage_areas,18
+item_storage,366
+transactions,16
+recipes,8
+recipe_items,8
+product_recipes,16
+orders,1
+order_items,7
+forecasts,1
+forecast_entries,195
+forecast_product_mappings,7

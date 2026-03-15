@@ -1,0 +1,216 @@
+import { resolvePolicy, type PolicyRepository, type PolicyResolutionPathStep, type SubjectScopeContext } from '../../platform/policy/index.js';
+import type { IntelligenceJobContext } from '../types.js';
+import {
+  DEFAULT_VARIANCE_THRESHOLD_CONFIG,
+  resolveFallbackVarianceThresholds,
+  VARIANCE_THRESHOLD_POLICY_KEYS,
+} from './varianceThresholds.js';
+import type {
+  VarianceThresholdConfig,
+  VarianceThresholdPolicySubject,
+  VarianceThresholdRuleSet,
+} from './types.js';
+
+export interface VarianceThresholdResolutionMetadataEntry {
+  threshold_field: keyof VarianceThresholdRuleSet;
+  policy_key: string;
+  value: number;
+  source: 'policy' | 'fallback_default';
+  matched_scope_type: string | null;
+  matched_scope_ref_id: number | string | null;
+  matched_scope_ref_key: string | null;
+  policy_version_id: number | string | null;
+  explanation_text: string;
+  resolution_path: PolicyResolutionPathStep[];
+}
+
+export interface ResolvedVarianceThresholdBundle {
+  thresholds: VarianceThresholdRuleSet;
+  subject_scope: SubjectScopeContext;
+  metadata: Record<keyof VarianceThresholdRuleSet, VarianceThresholdResolutionMetadataEntry>;
+  fallback_used: boolean;
+  explanation_text: string;
+}
+
+type ThresholdField = keyof VarianceThresholdRuleSet;
+
+interface PolicyKeyBinding {
+  field: ThresholdField;
+  policy_key: string;
+}
+
+const VARIANCE_THRESHOLD_BINDINGS: PolicyKeyBinding[] = [
+  { field: 'count_variance_pct_threshold', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_variance_pct_threshold },
+  { field: 'count_variance_abs_qty_threshold', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_variance_abs_qty_threshold },
+  { field: 'count_variance_abs_cost_threshold', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_variance_abs_cost_threshold },
+  { field: 'count_inconsistency_recurrence_threshold', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_inconsistency_recurrence_threshold },
+  { field: 'count_inconsistency_window_days', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_inconsistency_window_days },
+  { field: 'count_immediate_pct_threshold', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_immediate_pct_threshold },
+  { field: 'count_immediate_abs_cost_threshold', policy_key: VARIANCE_THRESHOLD_POLICY_KEYS.count_immediate_abs_cost_threshold },
+];
+
+export async function resolveVarianceThresholdPolicyBundle(input: {
+  subject: VarianceThresholdPolicySubject;
+  context: IntelligenceJobContext;
+  policyRepository?: PolicyRepository;
+  fallbackConfig?: VarianceThresholdConfig;
+}): Promise<ResolvedVarianceThresholdBundle> {
+  const fallbackThresholds = resolveFallbackVarianceThresholds(
+    input.subject.inventory_category,
+    input.fallbackConfig ?? DEFAULT_VARIANCE_THRESHOLD_CONFIG,
+  );
+  const subjectScope = buildVariancePolicyScope(input.subject, input.context);
+  const metadataEntries = await Promise.all(
+    VARIANCE_THRESHOLD_BINDINGS.map((binding) => resolveThresholdBinding(
+      binding,
+      subjectScope,
+      input.context.now,
+      fallbackThresholds,
+      input.policyRepository,
+    )),
+  );
+
+  const thresholds = metadataEntries.reduce((accumulator, entry) => {
+    accumulator[entry.threshold_field] = entry.value;
+    return accumulator;
+  }, { ...fallbackThresholds } as VarianceThresholdRuleSet);
+
+  const metadata = metadataEntries.reduce((accumulator, entry) => {
+    accumulator[entry.threshold_field] = entry;
+    return accumulator;
+  }, {} as Record<keyof VarianceThresholdRuleSet, VarianceThresholdResolutionMetadataEntry>);
+
+  const fallbackUsed = metadataEntries.some((entry) => entry.source === 'fallback_default');
+
+  return {
+    thresholds,
+    subject_scope: subjectScope,
+    metadata,
+    fallback_used: fallbackUsed,
+    explanation_text: fallbackUsed
+      ? `Variance thresholds for ${input.subject.inventory_item_name} used scoped policy resolution where available and explicit fallback defaults for unresolved keys.`
+      : `Variance thresholds for ${input.subject.inventory_item_name} resolved fully from scoped policy.`,
+  };
+}
+
+export function buildVariancePolicyScope(
+  subject: VarianceThresholdPolicySubject,
+  context: IntelligenceJobContext,
+): SubjectScopeContext {
+  return {
+    organization_id: context.scope.organizationId ?? null,
+    location_id: context.scope.locationId ?? null,
+    operation_unit_id: context.scope.operationUnitId ?? null,
+    storage_area_id: context.scope.storageAreaId ?? null,
+    inventory_category_id: context.scope.inventoryCategoryId ?? null,
+    inventory_category_key: subject.inventory_category ?? null,
+    subject_entity_type: 'inventory_item',
+    subject_entity_id: subject.inventory_item_id,
+  };
+}
+
+export function buildVarianceThresholdExplainabilityPayload(
+  bundle: ResolvedVarianceThresholdBundle,
+  fields?: ThresholdField[],
+): {
+  fallback_used: boolean;
+  explanation_text: string;
+  subject_scope: SubjectScopeContext;
+  resolved_thresholds: Array<{
+    threshold_field: ThresholdField;
+    policy_key: string;
+    value: number;
+    source: 'policy' | 'fallback_default';
+    matched_scope_type: string | null;
+    matched_scope_ref_id: number | string | null;
+    matched_scope_ref_key: string | null;
+    policy_version_id: number | string | null;
+    explanation_text: string;
+  }>;
+} {
+  const selectedFields = fields ?? VARIANCE_THRESHOLD_BINDINGS.map((binding) => binding.field);
+  const selectedEntries = selectedFields.map((field) => bundle.metadata[field]);
+  return {
+    fallback_used: selectedEntries.some((entry) => entry.source === 'fallback_default'),
+    explanation_text: bundle.explanation_text,
+    subject_scope: bundle.subject_scope,
+    resolved_thresholds: selectedFields.map((field) => {
+      const entry = bundle.metadata[field];
+      return {
+        threshold_field: field,
+        policy_key: entry.policy_key,
+        value: entry.value,
+        source: entry.source,
+        matched_scope_type: entry.matched_scope_type,
+        matched_scope_ref_id: entry.matched_scope_ref_id,
+        matched_scope_ref_key: entry.matched_scope_ref_key,
+        policy_version_id: entry.policy_version_id,
+        explanation_text: entry.explanation_text,
+      };
+    }),
+  };
+}
+
+async function resolveThresholdBinding(
+  binding: PolicyKeyBinding,
+  subjectScope: SubjectScopeContext,
+  effectiveAt: string,
+  fallbackThresholds: VarianceThresholdRuleSet,
+  policyRepository?: PolicyRepository,
+): Promise<VarianceThresholdResolutionMetadataEntry> {
+  const fallbackValue = fallbackThresholds[binding.field];
+  if (!policyRepository) {
+    return buildFallbackEntry(binding, fallbackValue, 'Scoped policy repository was not supplied to Variance Intelligence.');
+  }
+
+  const result = await resolvePolicy({
+    policy_key: binding.policy_key,
+    subject_scope: subjectScope,
+    effective_at: effectiveAt,
+  }, policyRepository);
+
+  const resolvedNumber = normalizeNumber(result.resolved_value);
+  if (!result.found || resolvedNumber == null) {
+    const explanation = !result.found
+      ? `No active policy matched ${binding.policy_key}.`
+      : `Resolved policy ${binding.policy_key} was not a numeric value.`;
+    return buildFallbackEntry(binding, fallbackValue, explanation, result.resolution_path);
+  }
+
+  return {
+    threshold_field: binding.field,
+    policy_key: binding.policy_key,
+    value: resolvedNumber,
+    source: 'policy',
+    matched_scope_type: result.matched_scope.scope_type,
+    matched_scope_ref_id: result.matched_scope.scope_ref_id,
+    matched_scope_ref_key: result.matched_scope.scope_ref_key,
+    policy_version_id: result.policy_version_id,
+    explanation_text: result.explanation_text,
+    resolution_path: result.resolution_path,
+  };
+}
+
+function buildFallbackEntry(
+  binding: PolicyKeyBinding,
+  fallbackValue: number,
+  explanation: string,
+  resolutionPath?: PolicyResolutionPathStep[],
+): VarianceThresholdResolutionMetadataEntry {
+  return {
+    threshold_field: binding.field,
+    policy_key: binding.policy_key,
+    value: fallbackValue,
+    source: 'fallback_default',
+    matched_scope_type: 'fallback_default',
+    matched_scope_ref_id: null,
+    matched_scope_ref_key: null,
+    policy_version_id: null,
+    explanation_text: `${explanation} Falling back to the explicit default threshold bundle.`,
+    resolution_path: resolutionPath ?? [],
+  };
+}
+
+function normalizeNumber(input: unknown): number | null {
+  return typeof input === 'number' && Number.isFinite(input) ? input : null;
+}

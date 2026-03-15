@@ -1,6 +1,17 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { initializeIntelligenceDb } from './intelligence/persistence/sqliteSchema.js';
+import { initializeRecipeCostDb } from './intelligence/recipeCost/persistence/sqliteSchema.js';
+import { initializeCanonicalIngredientDb } from './mapping/ingredients/persistence/sqliteSchema.js';
+import { initializeCanonicalInventoryMappingDb } from './mapping/inventory/persistence/sqliteSchema.js';
+import { initializeInventoryVendorMappingDb } from './mapping/vendor/persistence/sqliteSchema.js';
+import { initializeTemplateIngredientMappingDb } from './mapping/templates/persistence/sqliteSchema.js';
+import { initializeRecipeBuilderDb } from './recipes/builder/persistence/sqliteSchema.js';
+import { initializeRecipeTemplateLibraryDb } from './recipes/builder/persistence/sqliteTemplateSchema.js';
+import { initializeRecipePromotionDb } from './recipes/promotion/persistence/sqliteSchema.js';
+import { initializeScopedPolicyDb } from './platform/policy/persistence/sqliteSchema.js';
+import { initializeBenchmarkingDb } from './platform/benchmarking/persistence/sqliteSchema.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -390,6 +401,18 @@ export function initializeDb(db: Database.Database): void {
       SELECT id, ?, current_qty FROM items WHERE current_qty > 0
     `).run(generalId);
   }
+
+  initializeIntelligenceDb(db);
+  initializeRecipeCostDb(db);
+  initializeCanonicalIngredientDb(db);
+  initializeCanonicalInventoryMappingDb(db);
+  initializeInventoryVendorMappingDb(db);
+  initializeTemplateIngredientMappingDb(db);
+  initializeRecipeTemplateLibraryDb(db);
+  initializeRecipeBuilderDb(db);
+  initializeRecipePromotionDb(db);
+  initializeScopedPolicyDb(db);
+  initializeBenchmarkingDb(db);
 }
 
 export function getDb(): Database.Database {

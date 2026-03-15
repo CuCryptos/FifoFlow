@@ -1,0 +1,6853 @@
+{
+  "templates": [
+    {
+      "name": "Tomato Basil Sauce",
+      "category": "Sauce",
+      "yield_quantity": 3,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "crushed tomato",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "basil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Garlic Cream Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "unsalted butter",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 20,
+          "unit": "clove"
+        },
+        {
+          "name": "shallot",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 1500,
+          "unit": "ml"
+        },
+        {
+          "name": "parmesan cheese",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Lemon Caper Butter Sauce",
+      "category": "Sauce",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "unsalted butter",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "shallot",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "white wine",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "caper",
+          "qty": 0.75,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Red Wine Demi Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "beef stock",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "red wine",
+          "qty": 750,
+          "unit": "ml"
+        },
+        {
+          "name": "shallot",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "tomato paste",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Chimichurri Sauce",
+      "category": "Sauce",
+      "yield_quantity": 1,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "parsley",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "oregano",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "red wine vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 2.5,
+          "unit": "cup"
+        },
+        {
+          "name": "red pepper flake",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Salsa Verde Sauce",
+      "category": "Sauce",
+      "yield_quantity": 1,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "parsley",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "cilantro",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "caper",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "anchovy",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Romesco Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "roasted red pepper",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "tomato",
+          "qty": 6,
+          "unit": "each"
+        },
+        {
+          "name": "almond",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "sherry vinegar",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "smoked paprika",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Pepper Coulis",
+      "category": "Sauce",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "roasted red pepper",
+          "qty": 10,
+          "unit": "each"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "vegetable stock",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Teriyaki Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "soy sauce",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "mirin",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Hoisin Ginger Glaze",
+      "category": "Sauce",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "hoisin sauce",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "honey",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Black Pepper Pan Sauce",
+      "category": "Sauce",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "shallot",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "brandy",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "beef stock",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Coconut Curry Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "yellow curry paste",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "coconut milk",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Green Curry Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "green curry paste",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "coconut milk",
+          "qty": 7,
+          "unit": "cup"
+        },
+        {
+          "name": "fish sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "basil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Tikka Masala Sauce",
+      "category": "Sauce",
+      "yield_quantity": 3,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "tomato puree",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "garam masala",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "cumin",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Thai Peanut Sauce",
+      "category": "Sauce",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "peanut butter",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "coconut milk",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 0.75,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 4,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        }
+      ]
+    },
+    {
+      "name": "Herb Yogurt Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "greek yogurt",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "cucumber",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "dill",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "mint",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Mushroom Pan Sauce",
+      "category": "Sauce",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "unsalted butter",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "mushroom",
+          "qty": 2,
+          "unit": "lb"
+        },
+        {
+          "name": "shallot",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "white wine",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 2,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Peppercorn Brandy Sauce",
+      "category": "Sauce",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "shallot",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "green peppercorn",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "brandy",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "veal stock",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 4,
+          "unit": "oz"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Pickled Red Onion",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "red onion",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "apple cider vinegar",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Pickled Cucumber",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "cucumber",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "dill",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Garlic Puree",
+      "category": "Prep component",
+      "yield_quantity": 1,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "garlic",
+          "qty": 80,
+          "unit": "clove"
+        },
+        {
+          "name": "olive oil",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Caramelized Onion Base",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "yellow onion",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Parsley Herb Oil",
+      "category": "Prep component",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "parsley",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Chili Crisp Base",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 20,
+          "unit": "clove"
+        },
+        {
+          "name": "shallot",
+          "qty": 6,
+          "unit": "each"
+        },
+        {
+          "name": "red pepper flake",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sesame seed",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Sofrito Base",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "onion",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "green bell pepper",
+          "qty": 6,
+          "unit": "each"
+        },
+        {
+          "name": "red bell pepper",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "cilantro",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Mirepoix Mix",
+      "category": "Prep component",
+      "yield_quantity": 3,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "carrot",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        }
+      ]
+    },
+    {
+      "name": "Cajun Trinity Mix",
+      "category": "Prep component",
+      "yield_quantity": 3,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "green bell pepper",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 16,
+          "unit": "stalk"
+        }
+      ]
+    },
+    {
+      "name": "Ginger Garlic Paste",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "ginger",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "garlic",
+          "qty": 80,
+          "unit": "clove"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Confit Garlic",
+      "category": "Prep component",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "garlic",
+          "qty": 100,
+          "unit": "clove"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Tomato Concasse",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "roma tomato",
+          "qty": 4,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Crispy Shallot",
+      "category": "Prep component",
+      "yield_quantity": 1,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "shallot",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "rice flour",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Toasted Breadcrumb",
+      "category": "Prep component",
+      "yield_quantity": 1500,
+      "yield_unit": "g",
+      "ingredients": [
+        {
+          "name": "panko breadcrumb",
+          "qty": 10,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Preserved Lemon Mix",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "lemon",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 4,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Mushroom Mix",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "mushroom",
+          "qty": 4,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Braised Greens Base",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "collard green",
+          "qty": 4,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "apple cider vinegar",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Charred Corn Relish",
+      "category": "Prep component",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "corn kernel",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "red onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "jalapeno",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "cilantro",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Chicken Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "chicken bone",
+          "qty": 12,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "bay leaf",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Brown Chicken Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "roasted chicken bone",
+          "qty": 12,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "tomato paste",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Veal Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "veal bone",
+          "qty": 14,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "tomato paste",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Beef Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "beef bone",
+          "qty": 14,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Vegetable Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "onion",
+          "qty": 5,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 16,
+          "unit": "stalk"
+        },
+        {
+          "name": "mushroom",
+          "qty": 2,
+          "unit": "lb"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "parsley",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Mushroom Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "mushroom",
+          "qty": 6,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "celery",
+          "qty": 10,
+          "unit": "stalk"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Shellfish Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "shrimp shell",
+          "qty": 10,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 10,
+          "unit": "stalk"
+        },
+        {
+          "name": "tomato paste",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "white wine",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Fish Fumet",
+      "category": "Stock",
+      "yield_quantity": 6,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "fish bone",
+          "qty": 10,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "celery",
+          "qty": 8,
+          "unit": "stalk"
+        },
+        {
+          "name": "fennel",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "white wine",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 8,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Pork Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "pork bone",
+          "qty": 14,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Ramen Broth Base",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "pork bone",
+          "qty": 12,
+          "unit": "lb"
+        },
+        {
+          "name": "chicken bone",
+          "qty": 6,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 16,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "scallion",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Pho Broth Base",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "beef bone",
+          "qty": 14,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "ginger",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "cinnamon stick",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "star anise",
+          "qty": 10,
+          "unit": "each"
+        },
+        {
+          "name": "fish sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Dashi",
+      "category": "Stock",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "water",
+          "qty": 5,
+          "unit": "l"
+        },
+        {
+          "name": "kombu",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "bonito flake",
+          "qty": 10,
+          "unit": "oz"
+        }
+      ]
+    },
+    {
+      "name": "Corn Stock",
+      "category": "Stock",
+      "yield_quantity": 6,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "corn cob",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "celery",
+          "qty": 8,
+          "unit": "stalk"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 8,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Lamb Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lamb bone",
+          "qty": 14,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "rosemary",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Turkey Stock",
+      "category": "Stock",
+      "yield_quantity": 8,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "turkey bone",
+          "qty": 14,
+          "unit": "lb"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "carrot",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 12,
+          "unit": "stalk"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "bay leaf",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "water",
+          "qty": 10,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Tomato Stock",
+      "category": "Stock",
+      "yield_quantity": 6,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "tomato",
+          "qty": 6,
+          "unit": "kg"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "basil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 7,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Chili Broth Base",
+      "category": "Stock",
+      "yield_quantity": 6,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "chicken stock",
+          "qty": 5,
+          "unit": "l"
+        },
+        {
+          "name": "tomato",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "ancho chile",
+          "qty": 12,
+          "unit": "each"
+        },
+        {
+          "name": "cumin",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Coconut Lemongrass Broth",
+      "category": "Stock",
+      "yield_quantity": 6,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "coconut milk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "vegetable stock",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "lemongrass",
+          "qty": 10,
+          "unit": "stalk"
+        },
+        {
+          "name": "ginger",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "fish sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Caesar Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "egg yolk",
+          "qty": 12,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "anchovy",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "parmesan cheese",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Ranch Dressing",
+      "category": "Dressing",
+      "yield_quantity": 3,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "mayonnaise",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "sour cream",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "dill",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "chive",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Balsamic Vinaigrette",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "balsamic vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "honey",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Lemon Herb Vinaigrette",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lemon juice",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "shallot",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Champagne Vinaigrette",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "champagne vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "shallot",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Honey Mustard Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "dijon mustard",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "honey",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "apple cider vinegar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "mayonnaise",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Green Goddess Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "mayonnaise",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "sour cream",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "tarragon",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "chive",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "anchovy",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 0.75,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Blue Cheese Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "mayonnaise",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "sour cream",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "blue cheese",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Sesame Ginger Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "rice vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 6,
+          "unit": "clove"
+        },
+        {
+          "name": "sesame oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "honey",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Miso Carrot Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "carrot",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "white miso",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 4,
+          "unit": "oz"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "sesame oil",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Red Wine Vinaigrette",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "red wine vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "shallot",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Sherry Shallot Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "sherry vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "shallot",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Herb Buttermilk Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "buttermilk",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "mayonnaise",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "chive",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "dill",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 4,
+          "unit": "clove"
+        }
+      ]
+    },
+    {
+      "name": "Cilantro Lime Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "cilantro",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 4,
+          "unit": "clove"
+        },
+        {
+          "name": "jalapeno",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "olive oil",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Tahini Lemon Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "tahini",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Poppy Seed Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "apple cider vinegar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "mayonnaise",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "poppy seed",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Thousand Island Dressing",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "mayonnaise",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "ketchup",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "pickle relish",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "white onion",
+          "qty": 1,
+          "unit": "each"
+        },
+        {
+          "name": "paprika",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Garlic Vinaigrette",
+      "category": "Dressing",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "roasted garlic puree",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "white wine vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Pizza Dough Base",
+      "category": "Base",
+      "yield_quantity": 6,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "bread flour",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 4,
+          "unit": "tbsp"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 4,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Flatbread Dough Base",
+      "category": "Base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "bread flour",
+          "qty": 4,
+          "unit": "kg"
+        },
+        {
+          "name": "yogurt",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 2.5,
+          "unit": "l"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 3,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Risotto Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "arborio rice",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "shallot",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "white wine",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "vegetable stock",
+          "qty": 4,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Paella Sofrito Base",
+      "category": "Base",
+      "yield_quantity": 3,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "red bell pepper",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "tomato",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "smoked paprika",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Yellow Curry Paste Base",
+      "category": "Base",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "shallot",
+          "qty": 10,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 20,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "lemongrass",
+          "qty": 10,
+          "unit": "stalk"
+        },
+        {
+          "name": "turmeric",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "coriander",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "cumin",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Gumbo Roux Base",
+      "category": "Base",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 6,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Tomato Braise Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 14,
+          "unit": "clove"
+        },
+        {
+          "name": "tomato puree",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "red wine",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Coconut Curry Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "red curry paste",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "coconut milk",
+          "qty": 3,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Bean Chili Base",
+      "category": "Base",
+      "yield_quantity": 5,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 14,
+          "unit": "clove"
+        },
+        {
+          "name": "tomato puree",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "black bean",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "kidney bean",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "chili powder",
+          "qty": 4,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Mac and Cheese Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "unsalted butter",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "flour",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "milk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "cheddar cheese",
+          "qty": 8,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Polenta Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "water",
+          "qty": 5,
+          "unit": "l"
+        },
+        {
+          "name": "polenta",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "parmesan cheese",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Grits Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "l"
+        },
+        {
+          "name": "milk",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "stone ground grits",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "cheddar cheese",
+          "qty": 4,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Sushi Rice Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "sushi rice",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 3.6,
+          "unit": "l"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Pilaf Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "long grain rice",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 5,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Jambalaya Base",
+      "category": "Base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "neutral oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "green bell pepper",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "celery",
+          "qty": 10,
+          "unit": "stalk"
+        },
+        {
+          "name": "tomato",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "long grain rice",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 4,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Couscous Base",
+      "category": "Base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "couscous",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "vegetable stock",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Stir Fry Sauce Base",
+      "category": "Base",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "soy sauce",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "oyster sauce",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 4,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        }
+      ]
+    },
+    {
+      "name": "Soup Vegetable Base",
+      "category": "Base",
+      "yield_quantity": 3,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "carrot",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "celery",
+          "qty": 18,
+          "unit": "stalk"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Brined Chicken Breast",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "chicken breast",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        }
+      ]
+    },
+    {
+      "name": "Buttermilk Fried Chicken Marinade",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "chicken thigh",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "paprika",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "garlic powder",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Herb Roasted Chicken Prep",
+      "category": "Protein",
+      "yield_quantity": 12,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "whole chicken",
+          "qty": 12,
+          "unit": "each"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 20,
+          "unit": "clove"
+        },
+        {
+          "name": "rosemary",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Beef Meatball Mix",
+      "category": "Protein",
+      "yield_quantity": 80,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "ground beef",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "egg",
+          "qty": 10,
+          "unit": "each"
+        },
+        {
+          "name": "panko breadcrumb",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "parmesan cheese",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "parsley",
+          "qty": 2,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Burger Patty Mix",
+      "category": "Protein",
+      "yield_quantity": 40,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "ground beef",
+          "qty": 6,
+          "unit": "kg"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "worcestershire sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Cured Salmon Gravlax Base",
+      "category": "Protein",
+      "yield_quantity": 10,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "salmon fillet",
+          "qty": 10,
+          "unit": "lb"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "dill",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Braised Pulled Pork",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "pork shoulder",
+          "qty": 22,
+          "unit": "lb"
+        },
+        {
+          "name": "yellow onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 14,
+          "unit": "clove"
+        },
+        {
+          "name": "orange juice",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "cumin",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Confit Duck Leg",
+      "category": "Protein",
+      "yield_quantity": 24,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "duck leg",
+          "qty": 24,
+          "unit": "each"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 0.75,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 20,
+          "unit": "clove"
+        },
+        {
+          "name": "thyme",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "duck fat",
+          "qty": 4,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Blackened Salmon Portion Prep",
+      "category": "Protein",
+      "yield_quantity": 24,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "salmon fillet",
+          "qty": 24,
+          "unit": "each"
+        },
+        {
+          "name": "paprika",
+          "qty": 4,
+          "unit": "tbsp"
+        },
+        {
+          "name": "cayenne",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "garlic powder",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "onion powder",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Shrimp Skewer Prep",
+      "category": "Protein",
+      "yield_quantity": 30,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "shrimp",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "paprika",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Pork Belly Braise",
+      "category": "Protein",
+      "yield_quantity": 18,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "pork belly",
+          "qty": 20,
+          "unit": "lb"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 14,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 4,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Corned Beef Brine",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "beef brisket",
+          "qty": 20,
+          "unit": "lb"
+        },
+        {
+          "name": "water",
+          "qty": 6,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "black pepper",
+          "qty": 3,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Beef Kebab Prep",
+      "category": "Protein",
+      "yield_quantity": 40,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "beef sirloin",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Chicken Shawarma Prep",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "chicken thigh",
+          "qty": 20,
+          "unit": "lb"
+        },
+        {
+          "name": "greek yogurt",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 16,
+          "unit": "clove"
+        },
+        {
+          "name": "cumin",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "paprika",
+          "qty": 3,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Beef Bulgogi Prep",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "beef ribeye",
+          "qty": 20,
+          "unit": "lb"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "pear puree",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 16,
+          "unit": "clove"
+        },
+        {
+          "name": "sesame oil",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Carnitas Prep",
+      "category": "Protein",
+      "yield_quantity": 20,
+      "yield_unit": "lb",
+      "ingredients": [
+        {
+          "name": "pork shoulder",
+          "qty": 22,
+          "unit": "lb"
+        },
+        {
+          "name": "orange juice",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 16,
+          "unit": "clove"
+        },
+        {
+          "name": "bay leaf",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Tofu Marinade Prep",
+      "category": "Protein",
+      "yield_quantity": 30,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "firm tofu",
+          "qty": 30,
+          "unit": "each"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "sesame oil",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Sausage Patty Mix",
+      "category": "Protein",
+      "yield_quantity": 60,
+      "yield_unit": "each",
+      "ingredients": [
+        {
+          "name": "ground pork",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "sage",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "thyme",
+          "qty": 0.25,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Citrus Herb Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "orange juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Soy Ginger Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "soy sauce",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "sesame oil",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Chimichurri Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "parsley",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "oregano",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "red wine vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "red pepper flake",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Jerk Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "scallion",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 14,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "allspice",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Tikka Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "greek yogurt",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 14,
+          "unit": "clove"
+        },
+        {
+          "name": "ginger",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "garam masala",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "paprika",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Yogurt Herb Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "greek yogurt",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "dill",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "mint",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Garlic Rosemary Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 6,
+          "unit": "cup"
+        },
+        {
+          "name": "red wine vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 16,
+          "unit": "clove"
+        },
+        {
+          "name": "rosemary",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Adobo Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "achiote paste",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "orange juice",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 3,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Miso Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "white miso",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "mirin",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sake",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 4,
+          "unit": "oz"
+        }
+      ]
+    },
+    {
+      "name": "Gochujang Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "gochujang",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "soy sauce",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "rice vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "sesame oil",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Teriyaki Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "soy sauce",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "mirin",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 6,
+          "unit": "oz"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        }
+      ]
+    },
+    {
+      "name": "Harissa Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "harissa",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "cumin",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Mojo Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "orange juice",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 16,
+          "unit": "clove"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Shawarma Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "greek yogurt",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "olive oil",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "cumin",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "paprika",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Coconut Curry Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "coconut milk",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "yellow curry paste",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "fish sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        }
+      ]
+    },
+    {
+      "name": "Lemongrass Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lemongrass",
+          "qty": 8,
+          "unit": "stalk"
+        },
+        {
+          "name": "fish sauce",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 2,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Black Pepper Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "soy sauce",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "black pepper",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 3,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Smoked Paprika Marinade",
+      "category": "Marinade",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "red wine vinegar",
+          "qty": 1.5,
+          "unit": "cup"
+        },
+        {
+          "name": "smoked paprika",
+          "qty": 3,
+          "unit": "tbsp"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "oregano",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Brioche Dough",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "bread flour",
+          "qty": 4,
+          "unit": "kg"
+        },
+        {
+          "name": "egg",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "milk",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 500,
+          "unit": "g"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 4,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Focaccia Dough",
+      "category": "Baking base",
+      "yield_quantity": 6,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "bread flour",
+          "qty": 5,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 3.5,
+          "unit": "l"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 4,
+          "unit": "tbsp"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 4,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Biscuit Base",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1.2,
+          "unit": "kg"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "baking powder",
+          "qty": 6,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Pancake Batter Base",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 2.5,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 300,
+          "unit": "g"
+        },
+        {
+          "name": "baking powder",
+          "qty": 5,
+          "unit": "tbsp"
+        },
+        {
+          "name": "milk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "egg",
+          "qty": 18,
+          "unit": "each"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 12,
+          "unit": "oz"
+        }
+      ]
+    },
+    {
+      "name": "Waffle Batter Base",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 2.5,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 400,
+          "unit": "g"
+        },
+        {
+          "name": "baking powder",
+          "qty": 5,
+          "unit": "tbsp"
+        },
+        {
+          "name": "milk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "egg",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 16,
+          "unit": "oz"
+        }
+      ]
+    },
+    {
+      "name": "Muffin Batter Base",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.2,
+          "unit": "kg"
+        },
+        {
+          "name": "egg",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "milk",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "baking powder",
+          "qty": 6,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Scone Dough",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 600,
+          "unit": "g"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1.2,
+          "unit": "kg"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "baking powder",
+          "qty": 5,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Tart Dough",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 2.8,
+          "unit": "kg"
+        },
+        {
+          "name": "powdered sugar",
+          "qty": 600,
+          "unit": "g"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1.8,
+          "unit": "kg"
+        },
+        {
+          "name": "egg yolk",
+          "qty": 24,
+          "unit": "each"
+        }
+      ]
+    },
+    {
+      "name": "Pie Dough",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "ice water",
+          "qty": 1.2,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Sponge Cake Batter",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "egg",
+          "qty": 36,
+          "unit": "each"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "flour",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 12,
+          "unit": "oz"
+        }
+      ]
+    },
+    {
+      "name": "Chocolate Cake Batter",
+      "category": "Baking base",
+      "yield_quantity": 6,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 2.5,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 2.2,
+          "unit": "kg"
+        },
+        {
+          "name": "cocoa powder",
+          "qty": 800,
+          "unit": "g"
+        },
+        {
+          "name": "baking powder",
+          "qty": 5,
+          "unit": "tbsp"
+        },
+        {
+          "name": "egg",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "milk",
+          "qty": 2.5,
+          "unit": "l"
+        },
+        {
+          "name": "neutral oil",
+          "qty": 1.5,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Cornbread Batter",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "cornmeal",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "flour",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 800,
+          "unit": "g"
+        },
+        {
+          "name": "baking powder",
+          "qty": 5,
+          "unit": "tbsp"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 2.5,
+          "unit": "l"
+        },
+        {
+          "name": "egg",
+          "qty": 18,
+          "unit": "each"
+        }
+      ]
+    },
+    {
+      "name": "Brownie Batter",
+      "category": "Baking base",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "unsalted butter",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "dark chocolate",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "egg",
+          "qty": 24,
+          "unit": "each"
+        },
+        {
+          "name": "flour",
+          "qty": 1.2,
+          "unit": "kg"
+        },
+        {
+          "name": "cocoa powder",
+          "qty": 400,
+          "unit": "g"
+        }
+      ]
+    },
+    {
+      "name": "Crepe Batter",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "milk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "egg",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 10,
+          "unit": "oz"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Donut Dough",
+      "category": "Baking base",
+      "yield_quantity": 6,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "bread flour",
+          "qty": 4.5,
+          "unit": "kg"
+        },
+        {
+          "name": "milk",
+          "qty": 2.2,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 700,
+          "unit": "g"
+        },
+        {
+          "name": "egg",
+          "qty": 16,
+          "unit": "each"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 5,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Churro Batter",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "water",
+          "qty": 2.5,
+          "unit": "l"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 14,
+          "unit": "oz"
+        },
+        {
+          "name": "flour",
+          "qty": 2.2,
+          "unit": "kg"
+        },
+        {
+          "name": "egg",
+          "qty": 16,
+          "unit": "each"
+        },
+        {
+          "name": "sugar",
+          "qty": 300,
+          "unit": "g"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Cinnamon Roll Dough",
+      "category": "Baking base",
+      "yield_quantity": 6,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "bread flour",
+          "qty": 4.5,
+          "unit": "kg"
+        },
+        {
+          "name": "milk",
+          "qty": 2.2,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 800,
+          "unit": "g"
+        },
+        {
+          "name": "egg",
+          "qty": 18,
+          "unit": "each"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 5,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Pizza Cracker Dough",
+      "category": "Baking base",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "instant yeast",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Simple Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Rich Simple Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "sugar",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 1.5,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Honey Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "honey",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 1,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Demerara Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "demerara sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Ginger Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "ginger",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Cinnamon Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "cinnamon stick",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Vanilla Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "vanilla bean",
+          "qty": 10,
+          "unit": "each"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Jalapeno Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "jalapeno",
+          "qty": 12,
+          "unit": "each"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Grapefruit Cordial",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "grapefruit juice",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "lime juice",
+          "qty": 500,
+          "unit": "ml"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "grapefruit zest",
+          "qty": 2,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Lime Cordial",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lime juice",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "lime zest",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Bloody Mary Mix",
+      "category": "Bar mix",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "tomato juice",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "horseradish",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "worcestershire sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "hot sauce",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "celery salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Margarita Batch Mix",
+      "category": "Bar mix",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lime juice",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "orange liqueur",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "agave syrup",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "water",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Pina Colada Base",
+      "category": "Bar mix",
+      "yield_quantity": 4,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "pineapple juice",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "coconut cream",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "lime juice",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Mojito Batch Mix",
+      "category": "Bar mix",
+      "yield_quantity": 3,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lime juice",
+          "qty": 1.2,
+          "unit": "l"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "mint",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 800,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Sangria Base",
+      "category": "Bar mix",
+      "yield_quantity": 5,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "red wine",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "orange juice",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "brandy",
+          "qty": 500,
+          "unit": "ml"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 500,
+          "unit": "ml"
+        },
+        {
+          "name": "orange",
+          "qty": 6,
+          "unit": "each"
+        },
+        {
+          "name": "lemon",
+          "qty": 4,
+          "unit": "each"
+        }
+      ]
+    },
+    {
+      "name": "Espresso Martini Batch Mix",
+      "category": "Bar mix",
+      "yield_quantity": 3,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "cold brew concentrate",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 500,
+          "unit": "ml"
+        },
+        {
+          "name": "coffee liqueur",
+          "qty": 1,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Tonic Concentrate",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "quinine bark",
+          "qty": 8,
+          "unit": "oz"
+        },
+        {
+          "name": "lime peel",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon peel",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "citric acid",
+          "qty": 4,
+          "unit": "tbsp"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "kg"
+        }
+      ]
+    },
+    {
+      "name": "Passionfruit Syrup",
+      "category": "Bar mix",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "passionfruit puree",
+          "qty": 1.2,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.4,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Grenadine",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "pomegranate juice",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "orange blossom water",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Orgeat",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "almond",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.8,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "orange blossom water",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Falernum Syrup",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "lime zest",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "ginger",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "clove",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "almond",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.8,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 2,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Coffee Liqueur Base",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "cold brew concentrate",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "vanilla syrup",
+          "qty": 250,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Old Fashioned Batch Component",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "demerara syrup",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "orange bitters",
+          "qty": 250,
+          "unit": "ml"
+        },
+        {
+          "name": "aromatic bitters",
+          "qty": 250,
+          "unit": "ml"
+        },
+        {
+          "name": "water",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Negroni Batch Component",
+      "category": "Cocktail component",
+      "yield_quantity": 3,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "sweet vermouth",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "campari",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "gin",
+          "qty": 1,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Dirty Martini Brine",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "olive brine",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "water",
+          "qty": 500,
+          "unit": "ml"
+        },
+        {
+          "name": "lemon peel",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Oleo Saccharum",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "orange peel",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon peel",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 1,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Whipped Citrus Foam Base",
+      "category": "Cocktail component",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "egg white",
+          "qty": 20,
+          "unit": "each"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 3,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Egg White Foam Base",
+      "category": "Cocktail component",
+      "yield_quantity": 1500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "egg white",
+          "qty": 24,
+          "unit": "each"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "water",
+          "qty": 4,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Coconut Cream Blend",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "coconut cream",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "simple syrup",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Salted Rim Blend",
+      "category": "Cocktail component",
+      "yield_quantity": 1,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "kosher salt",
+          "qty": 800,
+          "unit": "g"
+        },
+        {
+          "name": "lime zest",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Spiced Sugar Blend",
+      "category": "Cocktail component",
+      "yield_quantity": 1,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "sugar",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "cinnamon",
+          "qty": 2,
+          "unit": "tbsp"
+        },
+        {
+          "name": "star anise",
+          "qty": 8,
+          "unit": "each"
+        }
+      ]
+    },
+    {
+      "name": "Mint Tincture",
+      "category": "Cocktail component",
+      "yield_quantity": 500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "mint",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "vodka",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Basil Tincture",
+      "category": "Cocktail component",
+      "yield_quantity": 500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "basil",
+          "qty": 4,
+          "unit": "cup"
+        },
+        {
+          "name": "vodka",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Rosemary Tincture",
+      "category": "Cocktail component",
+      "yield_quantity": 500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "rosemary",
+          "qty": 3,
+          "unit": "cup"
+        },
+        {
+          "name": "vodka",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Peppercorn Tincture",
+      "category": "Cocktail component",
+      "yield_quantity": 500,
+      "yield_unit": "ml",
+      "ingredients": [
+        {
+          "name": "black pepper",
+          "qty": 4,
+          "unit": "tbsp"
+        },
+        {
+          "name": "vodka",
+          "qty": 500,
+          "unit": "ml"
+        }
+      ]
+    },
+    {
+      "name": "Citrus Shrub Base",
+      "category": "Cocktail component",
+      "yield_quantity": 2,
+      "yield_unit": "l",
+      "ingredients": [
+        {
+          "name": "orange",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "lemon",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "apple cider vinegar",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "sugar",
+          "qty": 1.5,
+          "unit": "kg"
+        }
+      ]
+    },
+    {
+      "name": "Mashed Potato",
+      "category": "Common restaurant side",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "russet potato",
+          "qty": 6,
+          "unit": "kg"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 1,
+          "unit": "lb"
+        },
+        {
+          "name": "heavy cream",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Potato",
+      "category": "Common restaurant side",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "yukon potato",
+          "qty": 6,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "rosemary",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "French Fry Seasoning",
+      "category": "Common restaurant side",
+      "yield_quantity": 1,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "kosher salt",
+          "qty": 700,
+          "unit": "g"
+        },
+        {
+          "name": "paprika",
+          "qty": 100,
+          "unit": "g"
+        },
+        {
+          "name": "garlic powder",
+          "qty": 80,
+          "unit": "g"
+        },
+        {
+          "name": "onion powder",
+          "qty": 80,
+          "unit": "g"
+        },
+        {
+          "name": "black pepper",
+          "qty": 40,
+          "unit": "g"
+        }
+      ]
+    },
+    {
+      "name": "Coleslaw",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "green cabbage",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "carrot",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "mayonnaise",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "apple cider vinegar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "sugar",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Mac and Cheese Side",
+      "category": "Common restaurant side",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "macaroni",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "milk",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "cheddar cheese",
+          "qty": 10,
+          "unit": "cup"
+        },
+        {
+          "name": "unsalted butter",
+          "qty": 12,
+          "unit": "oz"
+        },
+        {
+          "name": "flour",
+          "qty": 2,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Roasted Vegetable Mix",
+      "category": "Common restaurant side",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "zucchini",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "carrot",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "red bell pepper",
+          "qty": 8,
+          "unit": "each"
+        },
+        {
+          "name": "red onion",
+          "qty": 4,
+          "unit": "each"
+        },
+        {
+          "name": "olive oil",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Sauteed Greens",
+      "category": "Common restaurant side",
+      "yield_quantity": 3,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "kale",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "garlic",
+          "qty": 12,
+          "unit": "clove"
+        },
+        {
+          "name": "red pepper flake",
+          "qty": 1,
+          "unit": "tbsp"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Spanish Rice",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "long grain rice",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "tomato puree",
+          "qty": 1,
+          "unit": "l"
+        },
+        {
+          "name": "onion",
+          "qty": 3,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 10,
+          "unit": "clove"
+        },
+        {
+          "name": "chicken stock",
+          "qty": 4,
+          "unit": "l"
+        }
+      ]
+    },
+    {
+      "name": "Cilantro Lime Rice",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "long grain rice",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "water",
+          "qty": 3.5,
+          "unit": "l"
+        },
+        {
+          "name": "lime juice",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "cilantro",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Refried Bean",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "pinto bean",
+          "qty": 4,
+          "unit": "kg"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "garlic",
+          "qty": 8,
+          "unit": "clove"
+        },
+        {
+          "name": "lard",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "cumin",
+          "qty": 1,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Cornbread Side",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "cornmeal",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "flour",
+          "qty": 1.2,
+          "unit": "kg"
+        },
+        {
+          "name": "sugar",
+          "qty": 700,
+          "unit": "g"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "egg",
+          "qty": 14,
+          "unit": "each"
+        }
+      ]
+    },
+    {
+      "name": "Garlic Bread Spread",
+      "category": "Common restaurant side",
+      "yield_quantity": 2,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "unsalted butter",
+          "qty": 1.5,
+          "unit": "kg"
+        },
+        {
+          "name": "garlic",
+          "qty": 30,
+          "unit": "clove"
+        },
+        {
+          "name": "parsley",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "parmesan cheese",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tsp"
+        }
+      ]
+    },
+    {
+      "name": "Potato Salad",
+      "category": "Common restaurant side",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "yukon potato",
+          "qty": 6,
+          "unit": "kg"
+        },
+        {
+          "name": "mayonnaise",
+          "qty": 5,
+          "unit": "cup"
+        },
+        {
+          "name": "dijon mustard",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "pickle relish",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "celery",
+          "qty": 8,
+          "unit": "stalk"
+        },
+        {
+          "name": "egg",
+          "qty": 12,
+          "unit": "each"
+        }
+      ]
+    },
+    {
+      "name": "Quinoa Pilaf",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "quinoa",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "vegetable stock",
+          "qty": 4,
+          "unit": "l"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Couscous Salad Base",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "couscous",
+          "qty": 3,
+          "unit": "kg"
+        },
+        {
+          "name": "vegetable stock",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "olive oil",
+          "qty": 0.5,
+          "unit": "cup"
+        },
+        {
+          "name": "parsley",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "lemon juice",
+          "qty": 1,
+          "unit": "cup"
+        }
+      ]
+    },
+    {
+      "name": "Hushpuppy Batter",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "cornmeal",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "flour",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "buttermilk",
+          "qty": 2,
+          "unit": "l"
+        },
+        {
+          "name": "egg",
+          "qty": 12,
+          "unit": "each"
+        },
+        {
+          "name": "green onion",
+          "qty": 2,
+          "unit": "cup"
+        },
+        {
+          "name": "baking powder",
+          "qty": 4,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Onion Ring Batter",
+      "category": "Common restaurant side",
+      "yield_quantity": 4,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "flour",
+          "qty": 2,
+          "unit": "kg"
+        },
+        {
+          "name": "cornstarch",
+          "qty": 1,
+          "unit": "kg"
+        },
+        {
+          "name": "baking powder",
+          "qty": 4,
+          "unit": "tbsp"
+        },
+        {
+          "name": "club soda",
+          "qty": 3,
+          "unit": "l"
+        },
+        {
+          "name": "kosher salt",
+          "qty": 2,
+          "unit": "tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Baked Bean",
+      "category": "Common restaurant side",
+      "yield_quantity": 5,
+      "yield_unit": "kg",
+      "ingredients": [
+        {
+          "name": "navy bean",
+          "qty": 4,
+          "unit": "kg"
+        },
+        {
+          "name": "tomato puree",
+          "qty": 1.5,
+          "unit": "l"
+        },
+        {
+          "name": "brown sugar",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "molasses",
+          "qty": 1,
+          "unit": "cup"
+        },
+        {
+          "name": "onion",
+          "qty": 2,
+          "unit": "each"
+        },
+        {
+          "name": "mustard",
+          "qty": 0.5,
+          "unit": "cup"
+        }
+      ]
+    }
+  ]
+}

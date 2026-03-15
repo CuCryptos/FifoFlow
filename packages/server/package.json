@@ -9,7 +9,9 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "seed:recipe-templates": "tsx ../../scripts/import-recipe-templates.ts",
+    "seed:canonical-ingredients": "tsx ../../scripts/import-canonical-ingredients.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
