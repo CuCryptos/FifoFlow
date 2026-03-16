@@ -46,16 +46,18 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
       for (const pr of productRecipes) {
         const recipe = await store.getRecipeById(pr.recipe_id);
         if (!recipe) continue;
+        const servingsPerBatch = recipe.serving_count && recipe.serving_count > 0 ? recipe.serving_count : 1;
 
         for (const ri of recipe.items) {
           const existing = ingredientMap.get(ri.item_id);
-          const subtotal = ri.quantity * pr.portions_per_guest * gc.guest_count;
+          const quantityPerGuest = (ri.quantity / servingsPerBatch) * pr.portions_per_guest;
+          const subtotal = quantityPerGuest * gc.guest_count;
 
           if (existing) {
             existing.total_needed += subtotal;
             existing.sources.push({
               recipe_name: recipe.name,
-              quantity_per_guest: ri.quantity * pr.portions_per_guest,
+              quantity_per_guest: quantityPerGuest,
               guest_count: gc.guest_count,
               subtotal,
             });
@@ -66,7 +68,7 @@ export function createProductRecipeRoutes(store: InventoryStore): Router {
               total_needed: subtotal,
               sources: [{
                 recipe_name: recipe.name,
-                quantity_per_guest: ri.quantity * pr.portions_per_guest,
+                quantity_per_guest: quantityPerGuest,
                 guest_count: gc.guest_count,
                 subtotal,
               }],

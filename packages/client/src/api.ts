@@ -323,6 +323,26 @@ export interface RecipeWorkflowDetailPayload {
   ingredient_rows: OperationalRecipeIngredientRowPayload[];
 }
 
+export interface RecipeTemplateSummaryPayload {
+  template_id: number;
+  name: string;
+  category: string;
+  active_version_id: number;
+  active_version_number: number;
+  yield_quantity: number;
+  yield_unit: string;
+  ingredient_count: number;
+}
+
+export interface RecipeTemplateDetailPayload extends RecipeTemplateSummaryPayload {
+  ingredients: Array<{
+    ingredient_name: string;
+    qty: number;
+    unit: string;
+    sort_order: number;
+  }>;
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -588,6 +608,10 @@ export const api = {
       fetchJson<RecipeDetail>(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/recipes/${id}`, { method: 'DELETE' }),
+  },
+  recipeTemplates: {
+    list: () => fetchJson<{ templates: RecipeTemplateSummaryPayload[] }>('/recipe-templates'),
+    get: (templateId: number) => fetchJson<RecipeTemplateDetailPayload>(`/recipe-templates/${templateId}`),
   },
   recipeWorkflow: {
     operationalSummary: (venueId?: number) => {

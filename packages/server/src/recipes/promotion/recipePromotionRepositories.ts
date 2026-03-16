@@ -299,6 +299,11 @@ interface RecipeRow {
   name: string;
   type: Recipe['type'];
   notes: string | null;
+  yield_quantity: number | null;
+  yield_unit: Recipe['yield_unit'];
+  serving_quantity: number | null;
+  serving_unit: Recipe['serving_unit'];
+  serving_count: number | null;
   created_at: string;
   updated_at: string;
 }

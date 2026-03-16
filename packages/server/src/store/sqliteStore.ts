@@ -1236,9 +1236,14 @@ export class SqliteInventoryStore implements InventoryStore {
         }
       }
 
+      const costPerServing = totalCost != null && r.serving_count != null && r.serving_count > 0
+        ? Math.round((totalCost / r.serving_count) * 100) / 100
+        : null;
+
       return {
         ...r,
         total_cost: totalCost != null ? Math.round(totalCost * 100) / 100 : null,
+        cost_per_serving: costPerServing,
         item_count: detail.length,
       };
     });
@@ -1261,6 +1266,7 @@ export class SqliteInventoryStore implements InventoryStore {
     })[];
 
     // Enrich with vendor pricing using full unit conversion
+    let totalCost: number | null = null;
     const items = rawItems.map((ri) => {
       const price = this.db.prepare(`
         SELECT order_unit_price, order_unit, qty_per_unit
@@ -1283,19 +1289,47 @@ export class SqliteInventoryStore implements InventoryStore {
       }
 
       const lineCost = unitCost != null ? Math.round(ri.quantity * unitCost * 100) / 100 : null;
+      if (lineCost != null) {
+        totalCost = (totalCost ?? 0) + lineCost;
+      }
 
       // Strip extra join fields before returning
       const { item_order_unit, item_inner_unit, item_qty_per_unit, item_size_value, item_size_unit, ...clean } = ri;
       return { ...clean, unit_cost: unitCost, line_cost: lineCost };
     });
 
-    return { ...recipe, items };
+    const roundedTotalCost = totalCost != null ? Math.round(totalCost * 100) / 100 : null;
+    const costPerServing = roundedTotalCost != null && recipe.serving_count != null && recipe.serving_count > 0
+      ? Math.round((roundedTotalCost / recipe.serving_count) * 100) / 100
+      : null;
+
+    return { ...recipe, items, total_cost: roundedTotalCost, cost_per_serving: costPerServing };
   }
 
   async createRecipe(input: CreateRecipeInput): Promise<RecipeDetail> {
     const result = this.db.prepare(
-      'INSERT INTO recipes (name, type, notes) VALUES (?, ?, ?)'
-    ).run(input.name, input.type, input.notes ?? null);
+      `
+        INSERT INTO recipes (
+          name,
+          type,
+          notes,
+          yield_quantity,
+          yield_unit,
+          serving_quantity,
+          serving_unit,
+          serving_count
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).run(
+      input.name,
+      input.type,
+      input.notes ?? null,
+      input.yield_quantity ?? null,
+      input.yield_unit ?? null,
+      input.serving_quantity ?? null,
+      input.serving_unit ?? null,
+      input.serving_count ?? null,
+    );
 
     const recipeId = Number(result.lastInsertRowid);
 
@@ -1316,6 +1350,11 @@ export class SqliteInventoryStore implements InventoryStore {
     if (input.name !== undefined) fields.push(['name', input.name]);
     if (input.type !== undefined) fields.push(['type', input.type]);
     if (input.notes !== undefined) fields.push(['notes', input.notes]);
+    if (input.yield_quantity !== undefined) fields.push(['yield_quantity', input.yield_quantity]);
+    if (input.yield_unit !== undefined) fields.push(['yield_unit', input.yield_unit]);
+    if (input.serving_quantity !== undefined) fields.push(['serving_quantity', input.serving_quantity]);
+    if (input.serving_unit !== undefined) fields.push(['serving_unit', input.serving_unit]);
+    if (input.serving_count !== undefined) fields.push(['serving_count', input.serving_count]);
 
     if (fields.length > 0) {
       const setClauses = fields.map(([col]) => `${col} = ?`).join(', ');

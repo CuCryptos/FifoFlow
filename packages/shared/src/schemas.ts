@@ -206,22 +206,72 @@ export const createRecipeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   type: z.enum(['dish', 'prep'] as const),
   notes: z.string().max(500).nullable().optional(),
+  yield_quantity: z.number().positive().nullable().optional(),
+  yield_unit: z.enum(UNITS).nullable().optional(),
+  serving_quantity: z.number().positive().nullable().optional(),
+  serving_unit: z.enum(UNITS).nullable().optional(),
+  serving_count: z.number().positive().nullable().optional(),
   items: z.array(z.object({
     item_id: z.number().int().positive(),
     quantity: z.number().positive(),
     unit: z.string().min(1),
   })).optional(),
+}).superRefine((data, ctx) => {
+  const hasYieldQuantity = data.yield_quantity != null;
+  const hasYieldUnit = data.yield_unit != null;
+  if (hasYieldQuantity !== hasYieldUnit) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: hasYieldQuantity ? ['yield_unit'] : ['yield_quantity'],
+      message: 'Yield quantity and yield unit must be provided together.',
+    });
+  }
+
+  const hasServingQuantity = data.serving_quantity != null;
+  const hasServingUnit = data.serving_unit != null;
+  if (hasServingQuantity !== hasServingUnit) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: hasServingQuantity ? ['serving_unit'] : ['serving_quantity'],
+      message: 'Serving quantity and serving unit must be provided together.',
+    });
+  }
 });
 
 export const updateRecipeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).optional(),
   type: z.enum(['dish', 'prep'] as const).optional(),
   notes: z.string().max(500).nullable().optional(),
+  yield_quantity: z.number().positive().nullable().optional(),
+  yield_unit: z.enum(UNITS).nullable().optional(),
+  serving_quantity: z.number().positive().nullable().optional(),
+  serving_unit: z.enum(UNITS).nullable().optional(),
+  serving_count: z.number().positive().nullable().optional(),
   items: z.array(z.object({
     item_id: z.number().int().positive(),
     quantity: z.number().positive(),
     unit: z.string().min(1),
   })).optional(),
+}).superRefine((data, ctx) => {
+  const yieldQuantityProvided = Object.prototype.hasOwnProperty.call(data, 'yield_quantity');
+  const yieldUnitProvided = Object.prototype.hasOwnProperty.call(data, 'yield_unit');
+  if (yieldQuantityProvided !== yieldUnitProvided) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: yieldQuantityProvided ? ['yield_unit'] : ['yield_quantity'],
+      message: 'Yield quantity and yield unit must be updated together.',
+    });
+  }
+
+  const servingQuantityProvided = Object.prototype.hasOwnProperty.call(data, 'serving_quantity');
+  const servingUnitProvided = Object.prototype.hasOwnProperty.call(data, 'serving_unit');
+  if (servingQuantityProvided !== servingUnitProvided) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: servingQuantityProvided ? ['serving_unit'] : ['serving_quantity'],
+      message: 'Serving quantity and serving unit must be updated together.',
+    });
+  }
 });
 
 export const setProductRecipeSchema = z.object({

@@ -137,11 +137,20 @@ export function WorkflowStatusPill({
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${className}`}>{children}</span>;
 }
 
-export function WorkflowEmptyState({ title, body }: { title: string; body: string }) {
+export function WorkflowEmptyState({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
       <div className="text-base font-semibold text-slate-900">{title}</div>
       <div className="mt-2 text-sm leading-6 text-slate-600">{body}</div>
+      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
     </div>
   );
 }

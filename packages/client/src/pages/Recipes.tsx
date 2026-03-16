@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment } from 'react';
+import { useState, useRef, useEffect, useMemo, Fragment } from 'react';
 import { useRecipes, useRecipe, useCreateRecipe, useUpdateRecipe, useDeleteRecipe } from '../hooks/useRecipes';
 import { useProductRecipes, useSetProductRecipe, useDeleteProductRecipe, useCalculateOrder } from '../hooks/useProductRecipes';
 import { useParseForecast, useSaveForecast, useForecasts, useForecast, useForecastMappings, useSaveForecastMappings, useUpdateForecastEntry } from '../hooks/useForecasts';
@@ -7,6 +7,7 @@ import { useVenues, useUpdateVenue, useReorderVenues } from '../hooks/useVenues'
 import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
 import { useOperationalRecipeWorkflow, useOperationalRecipeWorkflowDetail } from '../hooks/useRecipeWorkflow';
+import { useRecipeTemplate, useRecipeTemplates } from '../hooks/useRecipeTemplates';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
 import {
@@ -19,11 +20,12 @@ import {
   WorkflowPanel,
   WorkflowStatusPill,
 } from '../components/workflow/WorkflowPrimitives';
-import { UNITS } from '@fifoflow/shared';
-import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult } from '@fifoflow/shared';
+import { UNITS, tryConvertQuantity } from '@fifoflow/shared';
+import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult, Unit } from '@fifoflow/shared';
 import type {
   OperationalRecipeIngredientRowPayload,
   OperationalRecipeWorkflowSummaryPayload,
+  RecipeTemplateDetailPayload,
   RecipeWorkflowIngredientDiffPayload,
 } from '../api';
 
@@ -31,6 +33,12 @@ type RecipeTab = 'operational' | 'recipes' | 'menus' | 'calculate' | 'weekly';
 
 export function Recipes() {
   const [activeTab, setActiveTab] = useState<RecipeTab>('operational');
+  const [openCreateRecipe, setOpenCreateRecipe] = useState(false);
+
+  const launchRecipeCreate = () => {
+    setActiveTab('recipes');
+    setOpenCreateRecipe(true);
+  };
 
   return (
     <WorkflowPage
@@ -38,31 +46,44 @@ export function Recipes() {
       title="Promote, validate, and cost operational recipes through the same identity spine the backend trusts."
       description="The recipes surface now starts from promoted operational versions, scoped ingredient fulfillment, vendor lineage, and cost snapshot trust. Legacy maintenance tools still exist, but they are secondary to the operational workflow."
       actions={(
-        <div className="rounded-full border border-slate-300 bg-white/80 p-1">
-          <div className="flex flex-wrap gap-1">
-            {([
-              ['operational', 'Operational Workflow'],
-              ['recipes', 'Legacy Recipes'],
-              ['menus', 'Product Menus'],
-              ['calculate', 'Calculate Order'],
-              ['weekly', 'Weekly Order'],
-            ] as const).map(([tab, label]) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={activeTab === tab
-                  ? 'rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white'
-                  : 'rounded-full px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-950'}
-              >
-                {label}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            onClick={launchRecipeCreate}
+            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          >
+            Add Recipe
+          </button>
+          <div className="rounded-full border border-slate-300 bg-white/80 p-1">
+            <div className="flex flex-wrap gap-1">
+              {([
+                ['operational', 'Operational Workflow'],
+                ['recipes', 'Legacy Recipes'],
+                ['menus', 'Product Menus'],
+                ['calculate', 'Calculate Order'],
+                ['weekly', 'Weekly Order'],
+              ] as const).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={activeTab === tab
+                    ? 'rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white'
+                    : 'rounded-full px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-950'}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
     >
-      {activeTab === 'operational' && <OperationalRecipes />}
-      {activeTab === 'recipes' && <RecipeList />}
+      {activeTab === 'operational' && <OperationalRecipes onAddRecipe={launchRecipeCreate} />}
+      {activeTab === 'recipes' && (
+        <RecipeList
+          forceCreate={openCreateRecipe}
+          onCreateHandled={() => setOpenCreateRecipe(false)}
+        />
+      )}
       {activeTab === 'menus' && <ProductMenus />}
       {activeTab === 'calculate' && <CalculateOrder />}
       {activeTab === 'weekly' && <WeeklyOrder />}
@@ -89,7 +110,73 @@ function formatYield(summary: OperationalRecipeWorkflowSummaryPayload): string {
   return `${summary.yield_qty} ${summary.yield_unit}`;
 }
 
-function OperationalRecipes() {
+function formatLegacyRecipeYield(recipe: {
+  yield_quantity: number | null;
+  yield_unit: string | null;
+}): string {
+  if (recipe.yield_quantity == null || !recipe.yield_unit) {
+    return 'Batch yield not set';
+  }
+  return `${trimRecipeNumber(recipe.yield_quantity)} ${recipe.yield_unit} per batch`;
+}
+
+function formatLegacyRecipeServing(recipe: {
+  serving_quantity: number | null;
+  serving_unit: string | null;
+  serving_count: number | null;
+}): string {
+  if (recipe.serving_quantity != null && recipe.serving_unit) {
+    const servingSize = `${trimRecipeNumber(recipe.serving_quantity)} ${recipe.serving_unit}`;
+    if (recipe.serving_count != null) {
+      return `${servingSize} • ${trimRecipeNumber(recipe.serving_count)} servings`;
+    }
+    return servingSize;
+  }
+  if (recipe.serving_count != null) {
+    return `${trimRecipeNumber(recipe.serving_count)} servings per batch`;
+  }
+  return 'Serving size not set';
+}
+
+function trimRecipeNumber(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) {
+    return '—';
+  }
+  return Number.isInteger(value) ? String(value) : Number(value.toFixed(2)).toString();
+}
+
+function deriveServingCount(input: {
+  yieldQuantity: string;
+  yieldUnit: string;
+  servingQuantity: string;
+  servingUnit: string;
+}): number | null {
+  const yieldQuantity = Number(input.yieldQuantity);
+  const servingQuantity = Number(input.servingQuantity);
+  if (!(yieldQuantity > 0) || !(servingQuantity > 0) || !input.yieldUnit || !input.servingUnit) {
+    return null;
+  }
+
+  const convertedYield = tryConvertQuantity(
+    yieldQuantity,
+    input.yieldUnit as Unit,
+    input.servingUnit as Unit,
+  );
+
+  if (convertedYield == null || !(convertedYield > 0)) {
+    return null;
+  }
+
+  return Number((convertedYield / servingQuantity).toFixed(2));
+}
+
+function inferRecipeTypeFromTemplateCategory(category: string): 'dish' | 'prep' {
+  const normalized = category.trim().toLowerCase();
+  const prepCategories = ['sauce', 'dressing', 'marinade', 'stock', 'syrup', 'mix', 'mixer', 'prep', 'batch', 'cocktail'];
+  return prepCategories.some((token) => normalized.includes(token)) ? 'prep' : 'dish';
+}
+
+function OperationalRecipes({ onAddRecipe }: { onAddRecipe: () => void }) {
   const { selectedVenueId } = useVenueContext();
   const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
@@ -169,6 +256,14 @@ function OperationalRecipes() {
           <WorkflowEmptyState
             title="No promoted recipes matched this lane"
             body="Either no promoted operational versions exist yet for this scope, or the current filter is excluding them."
+            action={(
+              <button
+                onClick={onAddRecipe}
+                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Add Recipe
+              </button>
+            )}
           />
         ) : (
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
@@ -779,10 +874,35 @@ function ItemSearchInput({
 
 // ── Recipe List Tab ───────────────────────────────────────────
 
-function RecipeList() {
+function RecipeList({
+  forceCreate = false,
+  onCreateHandled,
+}: {
+  forceCreate?: boolean;
+  onCreateHandled?: () => void;
+}) {
   const { data: recipes, isLoading } = useRecipes();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (!forceCreate) {
+      return;
+    }
+    setEditingId(null);
+    setShowForm(true);
+    onCreateHandled?.();
+  }, [forceCreate, onCreateHandled]);
+
+  const filteredRecipes = useMemo(() => {
+    const rows = recipes ?? [];
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      return rows;
+    }
+    return rows.filter((recipe) => `${recipe.name} ${recipe.type} ${recipe.notes ?? ''}`.toLowerCase().includes(query));
+  }, [recipes, search]);
 
   if (isLoading) return <div className="text-text-secondary text-sm">Loading...</div>;
 
@@ -795,33 +915,66 @@ function RecipeList() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover transition-colors"
-        >
-          Add Recipe
-        </button>
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Recipe Catalog</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Build recipes as batch definitions with yield, serving size, and ingredient usage that can feed real order and inventory math.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search recipes, notes, or type"
+              className="min-w-[280px] rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+            />
+            <button
+              onClick={() => setShowForm(true)}
+              className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Add Recipe
+            </button>
+          </div>
+        </div>
       </div>
 
       {!recipes?.length ? (
-        <div className="text-text-secondary text-sm">No recipes yet. Create one to get started.</div>
+        <WorkflowEmptyState
+          title="No recipes yet"
+          body="Create the first recipe with batch yield and serving math so FIFOFlow can turn ingredient quantities into usable inventory demand."
+          action={(
+            <button
+              onClick={() => setShowForm(true)}
+              className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Create first recipe
+            </button>
+          )}
+        />
+      ) : !filteredRecipes.length ? (
+        <WorkflowEmptyState
+          title="No recipes matched that search"
+          body="Try a broader name, note, or recipe-type search."
+        />
       ) : (
-        <div className="bg-bg-card rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-bg-table-header text-text-secondary text-left">
-                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Name</th>
-                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide">Type</th>
-                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Ingredients</th>
-                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Cost/Portion</th>
-                <th className="px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Actions</th>
+              <tr className="bg-slate-50 text-left text-slate-500">
+                <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Recipe</th>
+                <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Batch / Serving</th>
+                <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Ingredients</th>
+                <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Batch Cost</th>
+                <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Cost / Serving</th>
+                <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {recipes.map((r) => (
-                <RecipeRow key={r.id} recipe={r} onEdit={() => setEditingId(r.id)} onView={() => setEditingId(r.id)} />
+              {filteredRecipes.map((recipe) => (
+                <RecipeRow key={recipe.id} recipe={recipe} onEdit={() => setEditingId(recipe.id)} />
               ))}
             </tbody>
           </table>
@@ -831,34 +984,42 @@ function RecipeList() {
   );
 }
 
-function RecipeRow({ recipe, onEdit }: { recipe: RecipeWithCost; onEdit: () => void; onView: () => void }) {
+function RecipeRow({ recipe, onEdit }: { recipe: RecipeWithCost; onEdit: () => void }) {
   const deleteRecipe = useDeleteRecipe();
   const { toast } = useToast();
 
   return (
-    <tr className="border-b border-border hover:bg-bg-hover">
-      <td className="px-4 py-2 text-text-primary font-medium">{recipe.name}</td>
-      <td className="px-4 py-2">
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+    <tr className="border-b border-slate-200 hover:bg-slate-50/80">
+      <td className="px-4 py-3 align-top">
+        <div className="font-medium text-slate-950">{recipe.name}</div>
+        <div className="mt-1 text-xs text-slate-500">{recipe.notes || 'No operational note yet.'}</div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
           recipe.type === 'dish'
             ? 'bg-accent-green/20 text-accent-green'
             : 'bg-accent-amber/20 text-accent-amber'
         }`}>
           {recipe.type}
         </span>
+        <div className="mt-2 text-xs text-slate-600">{formatLegacyRecipeYield(recipe)}</div>
+        <div className="mt-1 text-xs text-slate-500">{formatLegacyRecipeServing(recipe)}</div>
       </td>
-      <td className="px-4 py-2 text-right font-mono text-text-secondary">{recipe.item_count}</td>
-      <td className="px-4 py-2 text-right font-mono text-text-secondary">
+      <td className="px-4 py-3 text-right font-mono text-slate-700">{recipe.item_count}</td>
+      <td className="px-4 py-3 text-right font-mono text-slate-700">
         {recipe.total_cost != null ? `$${recipe.total_cost.toFixed(2)}` : '\u2014'}
       </td>
-      <td className="px-4 py-2 text-right">
-        <button onClick={onEdit} className="text-accent-indigo hover:underline text-xs mr-3">Edit</button>
+      <td className="px-4 py-3 text-right font-mono text-slate-700">
+        {recipe.cost_per_serving != null ? `$${recipe.cost_per_serving.toFixed(2)}` : '\u2014'}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <button onClick={onEdit} className="mr-3 text-xs text-accent-indigo hover:underline">Edit</button>
         <button
           onClick={() => deleteRecipe.mutate(recipe.id, {
             onSuccess: () => toast('Recipe deleted', 'success'),
             onError: (err) => toast(err.message, 'error'),
           })}
-          className="text-accent-red hover:underline text-xs"
+          className="text-xs text-accent-red hover:underline"
         >
           Delete
         </button>
@@ -878,31 +1039,73 @@ interface IngredientRow {
 function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => void }) {
   const { data: existing } = useRecipe(recipeId ?? 0);
   const { data: items } = useItems();
+  const { data: templates, isLoading: templatesLoading } = useRecipeTemplates();
   const createRecipe = useCreateRecipe();
   const updateRecipe = useUpdateRecipe();
   const { toast } = useToast();
 
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<'dish' | 'prep'>('dish');
   const [notes, setNotes] = useState('');
-  const [ingredients, setIngredients] = useState<IngredientRow[]>([]);
+  const [yieldQuantity, setYieldQuantity] = useState('');
+  const [yieldUnit, setYieldUnit] = useState<string>('each');
+  const [servingQuantity, setServingQuantity] = useState('');
+  const [servingUnit, setServingUnit] = useState<string>('each');
+  const [servingCountOverride, setServingCountOverride] = useState('');
+  const [ingredients, setIngredients] = useState<IngredientRow[]>([{ item_id: 0, quantity: '', unit: 'each' }]);
   const [initialized, setInitialized] = useState(false);
+  const [appliedTemplateVersionId, setAppliedTemplateVersionId] = useState<number | null>(null);
 
-  // Populate form when editing
-  if (existing && !initialized) {
-    setName(existing.name);
-    setType(existing.type);
-    setNotes(existing.notes ?? '');
-    setIngredients(existing.items.map((i) => ({
-      item_id: i.item_id,
-      quantity: String(i.quantity),
-      unit: i.unit,
-    })));
+  const { data: selectedTemplate, isLoading: templateDetailLoading } = useRecipeTemplate(selectedTemplateId);
+
+  useEffect(() => {
+    if (initialized) {
+      return;
+    }
+
+    if (recipeId && !existing) {
+      return;
+    }
+
+    if (existing) {
+      setName(existing.name);
+      setType(existing.type);
+      setNotes(existing.notes ?? '');
+      setYieldQuantity(existing.yield_quantity != null ? String(existing.yield_quantity) : '');
+      setYieldUnit(existing.yield_unit ?? 'each');
+      setServingQuantity(existing.serving_quantity != null ? String(existing.serving_quantity) : '');
+      setServingUnit(existing.serving_unit ?? 'each');
+      setServingCountOverride(existing.serving_count != null ? String(existing.serving_count) : '');
+      setIngredients(existing.items.length > 0
+        ? existing.items.map((ingredient) => ({
+            item_id: ingredient.item_id,
+            quantity: String(ingredient.quantity),
+            unit: ingredient.unit,
+          }))
+        : [{ item_id: 0, quantity: '', unit: 'each' }]);
+      setAppliedTemplateVersionId(null);
+    }
+
     setInitialized(true);
-  }
-  if (!recipeId && !initialized) {
-    setInitialized(true);
-  }
+  }, [existing, initialized, recipeId]);
+
+  useEffect(() => {
+    if (!templates?.length || selectedTemplateId != null) {
+      return;
+    }
+    setSelectedTemplateId(templates[0].template_id);
+  }, [selectedTemplateId, templates]);
+
+  const filteredTemplates = useMemo(() => {
+    const rows = templates ?? [];
+    const query = templateSearch.trim().toLowerCase();
+    if (!query) {
+      return rows;
+    }
+    return rows.filter((template) => `${template.name} ${template.category}`.toLowerCase().includes(query));
+  }, [templateSearch, templates]);
 
   const addIngredient = () => {
     setIngredients((prev) => [...prev, { item_id: 0, quantity: '', unit: 'each' }]);
@@ -916,14 +1119,60 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
     setIngredients((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row));
   };
 
+  const derivedServingCount = useMemo(() => deriveServingCount({
+    yieldQuantity,
+    yieldUnit,
+    servingQuantity,
+    servingUnit,
+  }), [yieldQuantity, yieldUnit, servingQuantity, servingUnit]);
+
+  const effectiveServingCount = useMemo(() => {
+    const manual = Number(servingCountOverride);
+    if (manual > 0) {
+      return manual;
+    }
+    return derivedServingCount;
+  }, [derivedServingCount, servingCountOverride]);
+
+  const validIngredientCount = ingredients.filter((ingredient) => ingredient.item_id > 0 && Number(ingredient.quantity) > 0).length;
+
+  const applyTemplate = (template: RecipeTemplateDetailPayload) => {
+    setSelectedTemplateId(template.template_id);
+    setAppliedTemplateVersionId(template.active_version_id);
+    setName(template.name);
+    setType(inferRecipeTypeFromTemplateCategory(template.category));
+    setNotes((existingNotes) => {
+      const templateNote = `Seeded from template: ${template.name} v${template.active_version_number}.`;
+      if (!existingNotes.trim()) {
+        return templateNote;
+      }
+      return existingNotes.includes(templateNote) ? existingNotes : `${templateNote}\n${existingNotes}`;
+    });
+    setYieldQuantity(String(template.yield_quantity));
+    setYieldUnit(template.yield_unit);
+    setServingQuantity('');
+    setServingUnit(template.yield_unit);
+    setServingCountOverride('');
+    setIngredients(template.ingredients.map((ingredient) => ({
+      item_id: 0,
+      quantity: String(ingredient.qty),
+      unit: ingredient.unit,
+    })));
+  };
+
   const handleSubmit = () => {
     const data = {
       name,
       type,
       notes: notes || null,
+      yield_quantity: yieldQuantity ? Number(yieldQuantity) : null,
+      yield_unit: yieldQuantity && yieldUnit ? yieldUnit as Unit : null,
+      serving_quantity: servingQuantity ? Number(servingQuantity) : null,
+      serving_unit: servingQuantity && servingUnit ? servingUnit as Unit : null,
+      serving_count: effectiveServingCount && effectiveServingCount > 0 ? effectiveServingCount : null,
       items: ingredients
-        .filter((i) => i.item_id > 0 && Number(i.quantity) > 0)
-        .map((i) => ({ item_id: i.item_id, quantity: Number(i.quantity), unit: i.unit })),
+        .filter((ingredient) => ingredient.item_id > 0 && Number(ingredient.quantity) > 0)
+        .map((ingredient) => ({ item_id: ingredient.item_id, quantity: Number(ingredient.quantity), unit: ingredient.unit })),
     };
 
     if (recipeId) {
@@ -931,128 +1180,414 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
         onSuccess: () => { toast('Recipe updated', 'success'); onDone(); },
         onError: (err) => toast(err.message, 'error'),
       });
-    } else {
-      createRecipe.mutate(data, {
-        onSuccess: () => { toast('Recipe created', 'success'); onDone(); },
-        onError: (err) => toast(err.message, 'error'),
-      });
+      return;
     }
+
+    createRecipe.mutate(data, {
+      onSuccess: () => { toast('Recipe created', 'success'); onDone(); },
+      onError: (err) => toast(err.message, 'error'),
+    });
   };
 
   const isPending = createRecipe.isPending || updateRecipe.isPending;
 
   return (
-    <div className="bg-bg-card rounded-xl shadow-sm p-6 space-y-4 max-w-2xl">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-text-primary">
-          {recipeId ? 'Edit Recipe' : 'New Recipe'}
-        </h2>
-        <button onClick={onDone} className="text-text-secondary hover:text-text-primary text-sm">Cancel</button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1">Name</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-            placeholder="e.g. Grilled Mahi"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-text-secondary mb-1">Type</label>
-          <select
-            value={type}
-            onChange={(e) => setType(e.target.value as 'dish' | 'prep')}
-            className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-          >
-            <option value="dish">Dish</option>
-            <option value="prep">Prep</option>
-          </select>
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">
+              {recipeId ? 'Edit Recipe' : 'New Recipe'}
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Define the batch yield first, then the serving size, then the ingredient quantities for the full batch.
+            </p>
+          </div>
+          <button onClick={onDone} className="text-sm text-slate-500 transition hover:text-slate-900">Cancel</button>
         </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-text-secondary mb-1">Notes</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-          rows={2}
-        />
-      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Recipe name</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  placeholder="e.g. House Pinot Pour"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Recipe type</label>
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value as 'dish' | 'prep')}
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                >
+                  <option value="dish">Dish</option>
+                  <option value="prep">Prep</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Ingredient rows</label>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  {validIngredientCount} active row{validIngredientCount === 1 ? '' : 's'}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Operator note</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  rows={3}
+                  placeholder="Prep notes, plating constraints, or station guidance"
+                />
+              </div>
+            </div>
+          </div>
 
-      {/* Ingredients */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-xs font-medium text-text-secondary">Ingredients</label>
-          <button
-            onClick={addIngredient}
-            className="text-accent-indigo text-xs hover:underline"
-          >
-            + Add Ingredient
-          </button>
-        </div>
-
-        {ingredients.length === 0 ? (
-          <div className="text-text-secondary text-xs">No ingredients added yet.</div>
-        ) : (
-          <div className="space-y-2">
-            {ingredients.map((ing, idx) => {
-              // Find matching existing item for cost display
-              const existingItem = existing?.items.find((ei) => ei.item_id === ing.item_id);
-              return (
-                <div key={idx} className="flex items-center gap-2">
-                  <ItemSearchInput
-                    items={items ?? []}
-                    selectedId={ing.item_id}
-                    onSelect={(id, unit) => {
-                      updateIngredient(idx, 'item_id', id);
-                      updateIngredient(idx, 'unit', unit);
-                    }}
-                  />
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Batch yield</div>
+                <p className="mt-1 text-sm text-slate-600">How much finished product one full recipe batch produces.</p>
+                <div className="mt-3 grid gap-3 grid-cols-[minmax(0,1fr)_140px]">
                   <input
                     type="number"
                     step="any"
                     min="0"
-                    placeholder="Qty"
-                    value={ing.quantity}
-                    onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)}
-                    className="w-20 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-right text-text-primary"
+                    value={yieldQuantity}
+                    onChange={(e) => setYieldQuantity(e.target.value)}
+                    placeholder="e.g. 6"
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
                   />
                   <select
-                    value={ing.unit}
-                    onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
-                    className="w-20 bg-white border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
+                    value={yieldUnit}
+                    onChange={(e) => setYieldUnit(e.target.value)}
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
                   >
-                    {UNITS.map((u) => (
-                      <option key={u} value={u}>{u}</option>
+                    {UNITS.map((unit) => (
+                      <option key={unit} value={unit}>{unit}</option>
                     ))}
                   </select>
-                  <span className="w-20 text-right text-xs font-mono text-text-secondary">
-                    {existingItem?.line_cost != null ? `$${existingItem.line_cost.toFixed(2)}` : ''}
-                  </span>
-                  <button
-                    onClick={() => removeIngredient(idx)}
-                    className="text-accent-red text-xs hover:underline"
-                  >
-                    Remove
-                  </button>
                 </div>
-              );
-            })}
-            {/* Total cost */}
-            {existing && existing.items.some((i) => i.line_cost != null) && (
-              <div className="flex items-center justify-end gap-2 pt-1 border-t border-border">
-                <span className="text-xs font-medium text-text-secondary">Total Cost/Portion:</span>
-                <span className="text-xs font-mono font-semibold text-text-primary">
-                  ${existing.items.reduce((sum, i) => sum + (i.line_cost ?? 0), 0).toFixed(2)}
-                </span>
               </div>
-            )}
+
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Serving size</div>
+                <p className="mt-1 text-sm text-slate-600">What one usable portion represents for demand and cost math.</p>
+                <div className="mt-3 grid gap-3 grid-cols-[minmax(0,1fr)_140px]">
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={servingQuantity}
+                    onChange={(e) => setServingQuantity(e.target.value)}
+                    placeholder="e.g. 150"
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  />
+                  <select
+                    value={servingUnit}
+                    onChange={(e) => setServingUnit(e.target.value)}
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  >
+                    {UNITS.map((unit) => (
+                      <option key={unit} value={unit}>{unit}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Derived servings per batch</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">
+                  {derivedServingCount != null ? trimRecipeNumber(derivedServingCount) : 'Not yet derivable'}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  FIFOFlow derives this when batch yield and serving size can convert into the same measurable unit.
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Manual servings override</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={servingCountOverride}
+                  onChange={(e) => setServingCountOverride(e.target.value)}
+                  placeholder={derivedServingCount != null ? trimRecipeNumber(derivedServingCount) : 'Optional'}
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Use this when plating or trim loss means the theoretical yield does not equal real servings.
+                </p>
+              </div>
+            </div>
           </div>
-        )}
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">Batch ingredients</div>
+                <p className="mt-1 text-sm text-slate-600">
+                  Enter quantities for the full batch. FIFOFlow will derive per-serving usage from the serving math above.
+                </p>
+              </div>
+              <button
+                onClick={addIngredient}
+                className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                Add Ingredient
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {ingredients.map((ingredient, idx) => {
+                const existingItem = existing?.items.find((row) => row.item_id === ingredient.item_id);
+                const quantityNumber = Number(ingredient.quantity);
+                const perServingUsage = effectiveServingCount && effectiveServingCount > 0 && quantityNumber > 0
+                  ? trimRecipeNumber(quantityNumber / effectiveServingCount)
+                  : null;
+
+                return (
+                  <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_120px_120px_minmax(0,0.9fr)_80px] lg:items-start">
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500">Inventory item</label>
+                        <ItemSearchInput
+                          items={items ?? []}
+                          selectedId={ingredient.item_id}
+                          onSelect={(id, unit) => {
+                            updateIngredient(idx, 'item_id', id);
+                            updateIngredient(idx, 'unit', unit);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500">Batch qty</label>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="Qty"
+                          value={ingredient.quantity}
+                          onChange={(e) => updateIngredient(idx, 'quantity', e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-right text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500">Unit</label>
+                        <select
+                          value={ingredient.unit}
+                          onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                        >
+                          {UNITS.map((unit) => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Per serving usage</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {perServingUsage ? `${perServingUsage} ${ingredient.unit}` : 'Set serving math'}
+                        </div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          {existingItem?.line_cost != null ? `Current batch cost line: $${existingItem.line_cost.toFixed(2)}` : 'No cost preview yet'}
+                        </div>
+                      </div>
+                      <div className="flex lg:justify-end">
+                        <button
+                          onClick={() => removeIngredient(idx)}
+                          className="mt-5 text-xs font-medium text-rose-600 transition hover:text-rose-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Seeded template library</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  Start from the recipe template library, then adjust serving math and map ingredients to live inventory items.
+                </div>
+              </div>
+              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                {templates?.length ?? 0} templates
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <input
+                value={templateSearch}
+                onChange={(event) => setTemplateSearch(event.target.value)}
+                placeholder="Search template name or category"
+                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+              <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                {templatesLoading ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    Loading template library...
+                  </div>
+                ) : !filteredTemplates.length ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    No templates matched that search.
+                  </div>
+                ) : (
+                  filteredTemplates.map((template) => {
+                    const selected = template.template_id === selectedTemplateId;
+                    return (
+                      <button
+                        key={template.template_id}
+                        type="button"
+                        onClick={() => setSelectedTemplateId(template.template_id)}
+                        className={selected
+                          ? 'w-full rounded-2xl border border-slate-900 bg-slate-950 px-4 py-3 text-left text-white'
+                          : 'w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-slate-900 transition hover:border-slate-300 hover:bg-white'}
+                      >
+                        <div className="font-medium">{template.name}</div>
+                        <div className={selected ? 'mt-1 text-xs text-slate-200' : 'mt-1 text-xs text-slate-500'}>
+                          {template.category} • {trimRecipeNumber(template.yield_quantity)} {template.yield_unit} • {template.ingredient_count} rows
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                {templateDetailLoading && selectedTemplateId != null ? (
+                  <div className="text-sm text-slate-500">Loading template detail...</div>
+                ) : selectedTemplate ? (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold text-slate-950">{selectedTemplate.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {selectedTemplate.category} • Active v{selectedTemplate.active_version_number}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => applyTemplate(selectedTemplate)}
+                        className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                      >
+                        Apply Template
+                      </button>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Template yield</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-950">
+                          {trimRecipeNumber(selectedTemplate.yield_quantity)} {selectedTemplate.yield_unit}
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Ingredient rows</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-950">{selectedTemplate.ingredient_count}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Template ingredients</div>
+                      <div className="mt-2 max-h-[180px] space-y-2 overflow-y-auto pr-1">
+                        {selectedTemplate.ingredients.map((ingredient) => (
+                          <div key={`${selectedTemplate.template_id}-${ingredient.sort_order}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                            <div className="font-medium text-slate-950">{ingredient.ingredient_name}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {trimRecipeNumber(ingredient.qty)} {ingredient.unit}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {appliedTemplateVersionId === selectedTemplate.active_version_id ? (
+                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                        This template is currently applied to the draft form.
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="text-sm text-slate-500">Select a template to preview and apply it to the recipe form.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Recipe math summary</div>
+            <dl className="mt-4 space-y-4 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-slate-500">Batch yield</dt>
+                <dd className="font-semibold text-slate-950">
+                  {yieldQuantity && yieldUnit ? `${trimRecipeNumber(Number(yieldQuantity))} ${yieldUnit}` : 'Not set'}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-slate-500">Serving size</dt>
+                <dd className="font-semibold text-slate-950">
+                  {servingQuantity && servingUnit ? `${trimRecipeNumber(Number(servingQuantity))} ${servingUnit}` : 'Not set'}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-slate-500">Effective servings / batch</dt>
+                <dd className="font-semibold text-slate-950">
+                  {effectiveServingCount != null ? trimRecipeNumber(effectiveServingCount) : 'Not set'}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-slate-500">Batch ingredients</dt>
+                <dd className="font-semibold text-slate-950">{validIngredientCount}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-slate-500">Estimated batch cost</dt>
+                <dd className="font-semibold text-slate-950">
+                  {existing?.total_cost != null ? `$${existing.total_cost.toFixed(2)}` : 'Preview after save'}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-slate-500">Estimated cost / serving</dt>
+                <dd className="font-semibold text-slate-950">
+                  {existing?.cost_per_serving != null ? `$${existing.cost_per_serving.toFixed(2)}` : 'Preview after save'}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+              Ingredient quantities should always represent the full batch. Portion demand and menu usage now flow from servings-per-batch instead of assuming every quantity is already per guest.
+            </div>
+          </div>
+
+          {createRecipe.error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {createRecipe.error.message}
+            </div>
+          )}
+          {updateRecipe.error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {updateRecipe.error.message}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end gap-2 pt-2">

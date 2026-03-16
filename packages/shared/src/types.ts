@@ -264,6 +264,11 @@ export interface Recipe {
   name: string;
   type: RecipeType;
   notes: string | null;
+  yield_quantity: number | null;
+  yield_unit: Unit | null;
+  serving_quantity: number | null;
+  serving_unit: Unit | null;
+  serving_count: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -284,11 +289,14 @@ export interface RecipeItem {
 
 export interface RecipeWithCost extends Recipe {
   total_cost: number | null;
+  cost_per_serving: number | null;
   item_count: number;
 }
 
 export interface RecipeDetail extends Recipe {
   items: RecipeItem[];
+  total_cost: number | null;
+  cost_per_serving: number | null;
 }
 
 export type RecipeBuilderSourceType = 'freeform' | 'template';

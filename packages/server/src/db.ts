@@ -191,6 +191,11 @@ export function initializeDb(db: Database.Database): void {
       name TEXT NOT NULL UNIQUE,
       type TEXT NOT NULL CHECK(type IN ('dish', 'prep')),
       notes TEXT,
+      yield_quantity REAL,
+      yield_unit TEXT,
+      serving_quantity REAL,
+      serving_unit TEXT,
+      serving_count REAL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -301,6 +306,21 @@ export function initializeDb(db: Database.Database): void {
 
   addColumnIfMissing('sale_price', 'REAL');
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id)');
+
+  const recipeColumns = db.pragma('table_info(recipes)') as Array<{ name: string }>;
+  const recipeColumnNames = recipeColumns.map((c) => c.name);
+  const addRecipeColumnIfMissing = (name: string, definition: string) => {
+    if (!recipeColumnNames.includes(name)) {
+      db.exec(`ALTER TABLE recipes ADD COLUMN ${name} ${definition};`);
+      recipeColumnNames.push(name);
+    }
+  };
+
+  addRecipeColumnIfMissing('yield_quantity', 'REAL');
+  addRecipeColumnIfMissing('yield_unit', 'TEXT');
+  addRecipeColumnIfMissing('serving_quantity', 'REAL');
+  addRecipeColumnIfMissing('serving_unit', 'TEXT');
+  addRecipeColumnIfMissing('serving_count', 'REAL');
 
   const sessionColumns = db.pragma('table_info(count_sessions)') as Array<{ name: string }>;
   const sessionColumnNames = sessionColumns.map((c) => c.name);
