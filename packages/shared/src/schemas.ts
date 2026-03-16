@@ -103,7 +103,22 @@ export type RecordCountEntryInput = z.infer<typeof recordCountEntrySchema>;
 export const bulkUpdateItemsSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1),
   updates: z.object({
-    category: z.enum(CATEGORIES),
+    category: z.enum(CATEGORIES).optional(),
+    vendor_id: z.number().int().positive().nullable().optional(),
+    venue_id: z.number().int().positive().nullable().optional(),
+    storage_area_id: z.number().int().positive().nullable().optional(),
+  }).superRefine((updates, ctx) => {
+    if (
+      updates.category === undefined
+      && updates.vendor_id === undefined
+      && updates.venue_id === undefined
+      && updates.storage_area_id === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one bulk update field is required.',
+      });
+    }
   }),
 });
 

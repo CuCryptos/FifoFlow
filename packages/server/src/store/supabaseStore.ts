@@ -475,7 +475,20 @@ export class SupabaseInventoryStore implements InventoryStore {
 
   // ── Bulk Operations ──────────────────────────────────────────────────
 
-  async bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }> {
+  async bulkUpdateItems(
+    ids: number[],
+    updates: {
+      category?: string;
+      vendor_id?: number | null;
+      venue_id?: number | null;
+      storage_area_id?: number | null;
+    },
+  ): Promise<{ updated: number }> {
+    const body = Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined));
+    if (Object.keys(body).length === 0) {
+      return { updated: 0 };
+    }
+
     const params = new URLSearchParams();
     params.set('id', `in.(${ids.join(',')})`);
     params.set('select', 'id');
@@ -484,7 +497,7 @@ export class SupabaseInventoryStore implements InventoryStore {
       method: 'PATCH',
       path: 'items',
       params,
-      body: { category: updates.category },
+      body,
       prefer: 'return=representation',
     });
     return { updated: rows.length };

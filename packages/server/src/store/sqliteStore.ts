@@ -665,11 +665,26 @@ export class SqliteInventoryStore implements InventoryStore {
   }
   // ── Bulk Operations ──────────────────────────────────────────────────
 
-  async bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }> {
+  async bulkUpdateItems(
+    ids: number[],
+    updates: {
+      category?: string;
+      vendor_id?: number | null;
+      venue_id?: number | null;
+      storage_area_id?: number | null;
+    },
+  ): Promise<{ updated: number }> {
+    const fields = Object.entries(updates).filter(([, value]) => value !== undefined);
+    if (fields.length === 0) {
+      return { updated: 0 };
+    }
+
     const placeholders = ids.map(() => '?').join(',');
+    const setClauses = fields.map(([key]) => `${key} = ?`).join(', ');
+    const values = fields.map(([, value]) => value);
     const result = this.db.prepare(
-      `UPDATE items SET category = ? WHERE id IN (${placeholders})`
-    ).run(updates.category, ...ids);
+      `UPDATE items SET ${setClauses} WHERE id IN (${placeholders})`
+    ).run(...values, ...ids);
     return { updated: result.changes };
   }
 

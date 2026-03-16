@@ -207,6 +207,97 @@ export interface RecommendationDetailPayload {
   review_events: RecommendationReviewEventPayload[];
 }
 
+export interface RecipeWorkflowSnapshotPayload {
+  id: number;
+  snapshot_at: string;
+  total_cost: number;
+  cost_per_serving: number | null;
+  completeness_status: 'complete' | 'partial' | 'incomplete';
+  confidence_label: 'high' | 'medium' | 'low';
+  resolved_ingredient_count: number;
+  ingredient_count: number;
+  missing_cost_count: number;
+  stale_cost_count: number;
+  ambiguous_cost_count: number;
+  unit_mismatch_count: number;
+}
+
+export interface OperationalRecipeWorkflowSummaryPayload {
+  recipe_id: number;
+  recipe_name: string;
+  recipe_type: string;
+  recipe_version_id: number;
+  version_number: number;
+  yield_qty: number | null;
+  yield_unit: string | null;
+  serving_count: number | null;
+  source_builder_job_id: number | string | null;
+  source_builder_draft_recipe_id: number | string | null;
+  source_template_id: number | string | null;
+  source_template_version_id: number | string | null;
+  ingredient_row_count: number;
+  resolved_row_count: number;
+  unresolved_row_count: number;
+  inventory_linked_row_count: number;
+  vendor_linked_row_count: number;
+  missing_canonical_count: number;
+  missing_inventory_mapping_count: number;
+  missing_vendor_mapping_count: number;
+  missing_vendor_cost_lineage_count: number;
+  costable_percent: number;
+  costability_classification: 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING';
+  blocker_messages: string[];
+  latest_snapshot: RecipeWorkflowSnapshotPayload | null;
+}
+
+export interface RecipeWorkflowPayload {
+  generated_at: string;
+  scope: {
+    venue_id: number | null;
+    organization_id: number | null;
+    operation_unit_id: number | null;
+  };
+  counts: {
+    total_promoted_recipes: number;
+    costable_now_count: number;
+    operational_only_count: number;
+    blocked_for_costing_count: number;
+    with_snapshot_count: number;
+    complete_snapshot_count: number;
+  };
+  summaries: OperationalRecipeWorkflowSummaryPayload[];
+}
+
+export interface OperationalRecipeIngredientRowPayload {
+  recipe_item_id: number | string;
+  line_index: number | null;
+  raw_ingredient_text: string;
+  canonical_ingredient_id: number | string | null;
+  canonical_ingredient_name: string | null;
+  inventory_item_id: number | null;
+  inventory_item_name: string;
+  quantity: number;
+  unit: string;
+  base_unit: string;
+  preparation_note: string | null;
+  costability_status:
+    | 'RESOLVED_FOR_COSTING'
+    | 'MISSING_CANONICAL_INGREDIENT'
+    | 'MISSING_SCOPED_INVENTORY_MAPPING'
+    | 'MISSING_SCOPED_VENDOR_MAPPING'
+    | 'MISSING_VENDOR_COST_LINEAGE';
+  resolution_explanation: string;
+  inventory_mapping_resolution: Record<string, unknown> | null;
+  vendor_mapping_resolution: Record<string, unknown> | null;
+  vendor_cost_lineage: Record<string, unknown> | null;
+}
+
+export interface RecipeWorkflowDetailPayload {
+  generated_at: string;
+  summary: OperationalRecipeWorkflowSummaryPayload;
+  ingredient_rows: OperationalRecipeIngredientRowPayload[];
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -338,7 +429,15 @@ export const api = {
       fetchJson<ItemStorage[]>(`/items/${itemId}/storage`),
     listAllStorage: () =>
       fetchJson<ItemStorage[]>(`/items/storage`),
-    bulkUpdate: (data: { ids: number[]; updates: { category: string } }) =>
+    bulkUpdate: (data: {
+      ids: number[];
+      updates: {
+        category?: string;
+        vendor_id?: number | null;
+        venue_id?: number | null;
+        storage_area_id?: number | null;
+      };
+    }) =>
       fetchJson<{ updated: number }>('/items/bulk', { method: 'PATCH', body: JSON.stringify(data) }),
     bulkDelete: (data: { ids: number[] }) =>
       fetchJson<{ deleted: number; skipped: number; skippedIds: number[] }>('/items/bulk', { method: 'DELETE', body: JSON.stringify(data) }),
@@ -464,6 +563,16 @@ export const api = {
       fetchJson<RecipeDetail>(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/recipes/${id}`, { method: 'DELETE' }),
+  },
+  recipeWorkflow: {
+    operationalSummary: (venueId?: number) => {
+      const qs = venueId ? `?venue_id=${venueId}` : '';
+      return fetchJson<RecipeWorkflowPayload>(`/recipe-workflow/operational-summary${qs}`);
+    },
+    operationalDetail: (recipeVersionId: number, venueId?: number) => {
+      const qs = venueId ? `?venue_id=${venueId}` : '';
+      return fetchJson<RecipeWorkflowDetailPayload>(`/recipe-workflow/operational-summary/${recipeVersionId}${qs}`);
+    },
   },
   productRecipes: {
     list: (venueId?: number) => {

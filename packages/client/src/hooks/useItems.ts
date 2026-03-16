@@ -62,7 +62,15 @@ export function useSetItemCount() {
 export function useBulkUpdateItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { ids: number[]; updates: { category: string } }) => api.items.bulkUpdate(data),
+    mutationFn: (data: {
+      ids: number[];
+      updates: {
+        category?: string;
+        vendor_id?: number | null;
+        venue_id?: number | null;
+        storage_area_id?: number | null;
+      };
+    }) => api.items.bulkUpdate(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
   });
 }

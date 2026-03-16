@@ -6,14 +6,17 @@ import { useItems, useSetItemCount } from '../hooks/useItems';
 import { useVenues, useUpdateVenue, useReorderVenues } from '../hooks/useVenues';
 import { useVendors } from '../hooks/useVendors';
 import { useCreateOrder } from '../hooks/useOrders';
+import { useOperationalRecipeWorkflow, useOperationalRecipeWorkflowDetail } from '../hooks/useRecipeWorkflow';
+import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
 import { UNITS } from '@fifoflow/shared';
 import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult } from '@fifoflow/shared';
+import type { OperationalRecipeIngredientRowPayload, OperationalRecipeWorkflowSummaryPayload } from '../api';
 
-type RecipeTab = 'recipes' | 'menus' | 'calculate' | 'weekly';
+type RecipeTab = 'operational' | 'recipes' | 'menus' | 'calculate' | 'weekly';
 
 export function Recipes() {
-  const [activeTab, setActiveTab] = useState<RecipeTab>('recipes');
+  const [activeTab, setActiveTab] = useState<RecipeTab>('operational');
 
   return (
     <div className="space-y-4">
@@ -21,6 +24,7 @@ export function Recipes() {
 
       <div className="flex gap-1 bg-bg-card rounded-lg p-1 w-fit">
         {([
+          ['operational', 'Operational Workflow'],
           ['recipes', 'Recipes'],
           ['menus', 'Product Menus'],
           ['calculate', 'Calculate Order'],
@@ -40,10 +44,379 @@ export function Recipes() {
         ))}
       </div>
 
+      {activeTab === 'operational' && <OperationalRecipes />}
       {activeTab === 'recipes' && <RecipeList />}
       {activeTab === 'menus' && <ProductMenus />}
       {activeTab === 'calculate' && <CalculateOrder />}
       {activeTab === 'weekly' && <WeeklyOrder />}
+    </div>
+  );
+}
+
+function formatRecipeCurrency(value: number | null): string {
+  if (value == null) {
+    return '—';
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatYield(summary: OperationalRecipeWorkflowSummaryPayload): string {
+  if (summary.yield_qty == null || !summary.yield_unit) {
+    return 'Yield not set';
+  }
+  return `${summary.yield_qty} ${summary.yield_unit}`;
+}
+
+function OperationalRecipes() {
+  const { selectedVenueId } = useVenueContext();
+  const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
+  const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
+
+  const summaries = data?.summaries ?? [];
+  const filteredSummaries = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
+  const selectedSummary = filteredSummaries.find((summary) => summary.recipe_version_id === selectedRecipeVersionId)
+    ?? filteredSummaries[0]
+    ?? null;
+
+  useEffect(() => {
+    if (!selectedSummary) {
+      setSelectedRecipeVersionId(null);
+      return;
+    }
+    if (selectedRecipeVersionId == null || !filteredSummaries.some((summary) => summary.recipe_version_id === selectedRecipeVersionId)) {
+      setSelectedRecipeVersionId(selectedSummary.recipe_version_id);
+    }
+  }, [filteredSummaries, selectedRecipeVersionId, selectedSummary]);
+
+  if (isLoading) {
+    return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
+  }
+
+  if (error instanceof Error) {
+    return <div className="text-accent-red text-sm">{error.message}</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <WorkflowMetricCard
+          label="Promoted Recipes"
+          value={data?.counts.total_promoted_recipes ?? 0}
+          note="Active operational recipe versions in scope"
+        />
+        <WorkflowMetricCard
+          label="Costable Now"
+          value={data?.counts.costable_now_count ?? 0}
+          note="Ready for recipe cost snapshots"
+          tone="green"
+        />
+        <WorkflowMetricCard
+          label="Operational Only"
+          value={data?.counts.operational_only_count ?? 0}
+          note="Promoted but still blocked by mapping or cost lineage"
+          tone="amber"
+        />
+        <WorkflowMetricCard
+          label="Blocked For Costing"
+          value={data?.counts.blocked_for_costing_count ?? 0}
+          note="Canonical ingredient identity is incomplete"
+          tone="red"
+        />
+      </div>
+
+      <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-text-primary">Operational Recipe Workflow</h2>
+            <p className="text-sm text-text-secondary">
+              Promoted recipe versions are evaluated through canonical ingredient, inventory item, vendor item, and live cost lineage before they can be trusted for costing.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ['all', 'All'],
+              ['COSTABLE_NOW', 'Costable Now'],
+              ['OPERATIONAL_ONLY', 'Operational Only'],
+              ['BLOCKED_FOR_COSTING', 'Blocked'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatusFilter(value)}
+                className={statusFilter === value
+                  ? 'rounded-full bg-accent-indigo text-white px-3 py-1.5 text-sm font-medium'
+                  : 'rounded-full border border-border text-text-secondary px-3 py-1.5 text-sm hover:text-text-primary transition-colors'}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!filteredSummaries.length ? (
+          <div className="text-sm text-text-secondary">No promoted recipes matched the current filter.</div>
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
+            <div className="overflow-hidden rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-bg-table-header text-left text-text-secondary">
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Recipe</th>
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Coverage</th>
+                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Latest Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSummaries.map((summary) => {
+                    const selected = summary.recipe_version_id === selectedSummary?.recipe_version_id;
+                    return (
+                      <tr
+                        key={summary.recipe_version_id}
+                        onClick={() => setSelectedRecipeVersionId(summary.recipe_version_id)}
+                        className={selected
+                          ? 'cursor-pointer border-b border-border bg-accent-indigo/5'
+                          : 'cursor-pointer border-b border-border hover:bg-bg-hover'}
+                      >
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-text-primary">{summary.recipe_name}</div>
+                          <div className="text-xs text-text-secondary">
+                            v{summary.version_number} • {summary.recipe_type} • {formatYield(summary)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <WorkflowStatusBadge classification={summary.costability_classification} />
+                        </td>
+                        <td className="px-4 py-3 align-top text-right">
+                          <div className="font-mono text-text-primary">{summary.costable_percent.toFixed(0)}%</div>
+                          <div className="text-xs text-text-secondary">
+                            {summary.resolved_row_count}/{summary.ingredient_row_count} rows
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top text-right">
+                          <div className="font-mono text-text-primary">{formatRecipeCurrency(summary.latest_snapshot?.total_cost ?? null)}</div>
+                          <div className="text-xs text-text-secondary">
+                            {summary.latest_snapshot ? `${summary.latest_snapshot.completeness_status} snapshot` : 'No snapshot yet'}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedSummary && <OperationalRecipeDetail summary={selectedSummary} />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WorkflowMetricCard({
+  label,
+  value,
+  note,
+  tone = 'default',
+}: {
+  label: string;
+  value: number;
+  note: string;
+  tone?: 'default' | 'green' | 'amber' | 'red';
+}) {
+  const toneClass = tone === 'green'
+    ? 'border-accent-green/30'
+    : tone === 'amber'
+      ? 'border-accent-amber/30'
+      : tone === 'red'
+        ? 'border-accent-red/30'
+        : 'border-border';
+
+  return (
+    <div className={`bg-bg-card rounded-xl border ${toneClass} shadow-sm p-4`}>
+      <div className="text-xs uppercase tracking-wide text-text-secondary">{label}</div>
+      <div className="mt-2 text-3xl font-semibold text-text-primary">{value}</div>
+      <div className="mt-2 text-sm text-text-secondary">{note}</div>
+    </div>
+  );
+}
+
+function WorkflowStatusBadge({
+  classification,
+}: {
+  classification: OperationalRecipeWorkflowSummaryPayload['costability_classification'];
+}) {
+  if (classification === 'COSTABLE_NOW') {
+    return <span className="rounded-full bg-accent-green/15 px-2 py-1 text-xs font-medium text-accent-green">Costable Now</span>;
+  }
+  if (classification === 'BLOCKED_FOR_COSTING') {
+    return <span className="rounded-full bg-accent-red/10 px-2 py-1 text-xs font-medium text-accent-red">Blocked</span>;
+  }
+  return <span className="rounded-full bg-accent-amber/15 px-2 py-1 text-xs font-medium text-accent-amber">Operational Only</span>;
+}
+
+function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkflowSummaryPayload }) {
+  const { selectedVenueId } = useVenueContext();
+  const { data: detail, isLoading } = useOperationalRecipeWorkflowDetail(summary.recipe_version_id, selectedVenueId);
+  const blockers = summary.blocker_messages.length > 0 ? summary.blocker_messages : ['No active blockers. This recipe is ready to cost in the current scope.'];
+
+  return (
+    <div className="bg-bg-page rounded-xl border border-border p-4 space-y-4">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-text-primary">{summary.recipe_name}</h3>
+            <p className="text-sm text-text-secondary">
+              Version {summary.version_number} • {summary.recipe_type} • {formatYield(summary)}
+            </p>
+          </div>
+          <WorkflowStatusBadge classification={summary.costability_classification} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <DetailMetric label="Ingredient Rows" value={`${summary.ingredient_row_count}`} />
+        <DetailMetric label="Resolved Rows" value={`${summary.resolved_row_count}`} />
+        <DetailMetric label="Inventory Linked" value={`${summary.inventory_linked_row_count}`} />
+        <DetailMetric label="Vendor Linked" value={`${summary.vendor_linked_row_count}`} />
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-text-primary">Costability blockers</h4>
+        <ul className="space-y-2 text-sm text-text-secondary">
+          {blockers.map((message, index) => (
+            <li key={`${summary.recipe_version_id}-${index}`} className="rounded-lg bg-white px-3 py-2 border border-border">
+              {message}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-text-primary">Latest snapshot</h4>
+        {summary.latest_snapshot ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border space-y-2 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-text-secondary">Snapshot total</span>
+              <span className="font-mono text-text-primary">{formatRecipeCurrency(summary.latest_snapshot.total_cost)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-text-secondary">Cost per serving</span>
+              <span className="font-mono text-text-primary">{formatRecipeCurrency(summary.latest_snapshot.cost_per_serving)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-text-secondary">Completeness</span>
+              <span className="text-text-primary">{summary.latest_snapshot.completeness_status} • {summary.latest_snapshot.confidence_label} confidence</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-text-secondary">
+              <div>Resolved {summary.latest_snapshot.resolved_ingredient_count}/{summary.latest_snapshot.ingredient_count}</div>
+              <div>Missing {summary.latest_snapshot.missing_cost_count}</div>
+              <div>Stale {summary.latest_snapshot.stale_cost_count}</div>
+              <div>Ambiguous {summary.latest_snapshot.ambiguous_cost_count}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            No recipe cost snapshot has been persisted for this promoted version yet.
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-text-primary">Ingredient resolution drilldown</h4>
+        {isLoading ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            Loading ingredient resolution...
+          </div>
+        ) : !detail?.ingredient_rows.length ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            No promoted ingredient rows were returned for this version.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {detail.ingredient_rows.map((row) => (
+              <IngredientResolutionCard key={String(row.recipe_item_id)} row={row} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-white border border-border px-3 py-2">
+      <div className="text-xs uppercase tracking-wide text-text-secondary">{label}</div>
+      <div className="mt-1 text-base font-semibold text-text-primary">{value}</div>
+    </div>
+  );
+}
+
+function IngredientResolutionCard({ row }: { row: OperationalRecipeIngredientRowPayload }) {
+  const statusTone = row.costability_status === 'RESOLVED_FOR_COSTING'
+    ? 'text-accent-green bg-accent-green/10'
+    : row.costability_status === 'MISSING_CANONICAL_INGREDIENT'
+      ? 'text-accent-red bg-accent-red/10'
+      : 'text-accent-amber bg-accent-amber/15';
+
+  const vendorLineage = row.vendor_cost_lineage as {
+    vendor_item_name?: string | null;
+    vendor_name?: string | null;
+    normalized_unit_cost?: number | null;
+    base_unit?: string | null;
+    source_type?: string | null;
+    stale?: boolean;
+  } | null;
+
+  return (
+    <div className="rounded-xl border border-border bg-white p-3 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-text-primary">{row.raw_ingredient_text}</div>
+          <div className="text-xs text-text-secondary">
+            Line {row.line_index ?? '—'} • {row.quantity} {row.unit}
+            {row.preparation_note ? ` • ${row.preparation_note}` : ''}
+          </div>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${statusTone}`}>
+          {row.costability_status.replaceAll('_', ' ')}
+        </span>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-3 text-xs">
+        <div className="rounded-lg bg-bg-page px-3 py-2">
+          <div className="uppercase tracking-wide text-text-secondary">Canonical</div>
+          <div className="mt-1 text-text-primary">{row.canonical_ingredient_name ?? 'Missing canonical identity'}</div>
+        </div>
+        <div className="rounded-lg bg-bg-page px-3 py-2">
+          <div className="uppercase tracking-wide text-text-secondary">Inventory Fulfillment</div>
+          <div className="mt-1 text-text-primary">{row.inventory_item_id != null ? row.inventory_item_name : 'No trusted inventory item'}</div>
+        </div>
+        <div className="rounded-lg bg-bg-page px-3 py-2">
+          <div className="uppercase tracking-wide text-text-secondary">Vendor Cost Lineage</div>
+          <div className="mt-1 text-text-primary">
+            {vendorLineage?.vendor_item_name
+              ? `${vendorLineage.vendor_name ?? 'Vendor'} • ${vendorLineage.vendor_item_name}`
+              : 'No trusted vendor lineage'}
+          </div>
+          {vendorLineage?.normalized_unit_cost != null && (
+            <div className="mt-1 text-text-secondary">
+              {formatRecipeCurrency(vendorLineage.normalized_unit_cost)} / {vendorLineage.base_unit ?? row.base_unit}
+              {vendorLineage.stale ? ' • stale' : ''}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="text-sm text-text-secondary">{row.resolution_explanation}</div>
     </div>
   );
 }

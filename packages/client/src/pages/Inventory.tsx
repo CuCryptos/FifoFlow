@@ -26,6 +26,41 @@ function formatCurrency(value: number | null): string {
   }).format(value);
 }
 
+type InventoryWorkflowFocus =
+  | 'all'
+  | 'needs_attention'
+  | 'reorder'
+  | 'missing_vendor'
+  | 'missing_venue'
+  | 'missing_storage_area'
+  | 'ordering_incomplete';
+
+function InventoryWorkflowCard({
+  label,
+  value,
+  note,
+  tone = 'default',
+}: {
+  label: string;
+  value: number;
+  note: string;
+  tone?: 'default' | 'amber' | 'red';
+}) {
+  const borderClass = tone === 'amber'
+    ? 'border-accent-amber/30'
+    : tone === 'red'
+      ? 'border-accent-red/30'
+      : 'border-border';
+
+  return (
+    <div className={`bg-bg-card rounded-xl border ${borderClass} shadow-sm p-4`}>
+      <div className="text-xs uppercase tracking-wide text-text-secondary">{label}</div>
+      <div className="mt-2 text-3xl font-semibold text-text-primary">{value}</div>
+      <div className="mt-2 text-sm text-text-secondary">{note}</div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  InlineEdit – spreadsheet-style editable cell                      */
 /* ------------------------------------------------------------------ */
@@ -311,10 +346,14 @@ export function Inventory() {
   const mergeItems = useMergeItems();
   const { toast } = useToast();
   const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkVendorId, setBulkVendorId] = useState('');
+  const [bulkVenueId, setBulkVenueId] = useState('');
+  const [bulkStorageAreaId, setBulkStorageAreaId] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
   const [showInvoiceUpload, setShowInvoiceUpload] = useState(false);
+  const [workflowFocus, setWorkflowFocus] = useState<InventoryWorkflowFocus>('all');
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -362,11 +401,59 @@ export function Inventory() {
   const { data: reorderSuggestions } = useReorderSuggestions();
 
   const reorderIds = new Set((reorderSuggestions ?? []).map((r) => r.item_id));
+  const workflowCounts = useMemo(() => {
+    const allItems = items ?? [];
+    const missingVendorIds = new Set(allItems.filter((item) => item.vendor_id == null).map((item) => item.id));
+    const missingVenueIds = new Set(allItems.filter((item) => item.venue_id == null).map((item) => item.id));
+    const missingStorageAreaIds = new Set(allItems.filter((item) => {
+      const assignedAreas = storageByItem.get(item.id) ?? [];
+      return item.storage_area_id == null && assignedAreas.length === 0;
+    }).map((item) => item.id));
+    const orderingIncompleteIds = new Set(allItems.filter((item) => (
+      item.reorder_level == null
+      || item.reorder_qty == null
+      || item.order_unit == null
+      || item.qty_per_unit == null
+      || item.order_unit_price == null
+    )).map((item) => item.id));
+    const needsAttentionIds = new Set<number>([
+      ...reorderIds,
+      ...missingVendorIds,
+      ...missingVenueIds,
+      ...missingStorageAreaIds,
+      ...orderingIncompleteIds,
+    ]);
+
+    return {
+      reorder: reorderIds,
+      missingVendor: missingVendorIds,
+      missingVenue: missingVenueIds,
+      missingStorageArea: missingStorageAreaIds,
+      orderingIncomplete: orderingIncompleteIds,
+      needsAttention: needsAttentionIds,
+      cards: {
+        total: allItems.length,
+        reorder: reorderIds.size,
+        missingVendor: missingVendorIds.size,
+        missingVenue: missingVenueIds.size,
+        missingStorageArea: missingStorageAreaIds.size,
+        orderingIncomplete: orderingIncompleteIds.size,
+        needsAttention: needsAttentionIds.size,
+      },
+    };
+  }, [items, reorderIds, storageByItem]);
+
   const itemsToRender = (items ?? []).filter((item) => {
     if (showReorderOnly && !reorderIds.has(item.id)) return false;
     if (areaFilter) {
       if (item.storage_area_id !== Number(areaFilter)) return false;
     }
+    if (workflowFocus === 'needs_attention' && !workflowCounts.needsAttention.has(item.id)) return false;
+    if (workflowFocus === 'reorder' && !workflowCounts.reorder.has(item.id)) return false;
+    if (workflowFocus === 'missing_vendor' && !workflowCounts.missingVendor.has(item.id)) return false;
+    if (workflowFocus === 'missing_venue' && !workflowCounts.missingVenue.has(item.id)) return false;
+    if (workflowFocus === 'missing_storage_area' && !workflowCounts.missingStorageArea.has(item.id)) return false;
+    if (workflowFocus === 'ordering_incomplete' && !workflowCounts.orderingIncomplete.has(item.id)) return false;
     return true;
   });
   const areaNameLookup = useMemo(() => {
@@ -418,7 +505,7 @@ export function Inventory() {
   // Reset to page 1 when filters or sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, category, areaFilter, showReorderOnly, sortField, sortDir]);
+  }, [search, category, areaFilter, showReorderOnly, workflowFocus, sortField, sortDir]);
 
   const totalPages = Math.ceil(sortedItems.length / ITEMS_PER_PAGE);
   const paginatedItems = sortedItems.slice(
@@ -431,7 +518,7 @@ export function Inventory() {
   // Clear selection when page, filters, or sort changes
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [currentPage, search, category, areaFilter, showReorderOnly, sortField, sortDir]);
+  }, [currentPage, search, category, areaFilter, showReorderOnly, workflowFocus, sortField, sortDir]);
 
   const allOnPageSelected = paginatedItems.length > 0 && paginatedItems.every((item) => selectedIds.has(item.id));
 
@@ -458,6 +545,30 @@ export function Inventory() {
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
     0,
   );
+
+  const applyBulkWorkflowUpdate = (updates: {
+    category?: string;
+    vendor_id?: number | null;
+    venue_id?: number | null;
+    storage_area_id?: number | null;
+  }, successMessage: string) => {
+    bulkUpdate.mutate(
+      { ids: Array.from(selectedIds), updates },
+      {
+        onSuccess: (data) => {
+          toast(`${successMessage} (${data.updated} item${data.updated !== 1 ? 's' : ''})`, 'success');
+          setSelectedIds(new Set());
+          setBulkCategory('');
+          setBulkVendorId('');
+          setBulkVenueId('');
+          setBulkStorageAreaId('');
+        },
+        onError: (err) => {
+          toast(`Failed to update: ${err.message}`, 'error');
+        },
+      },
+    );
+  };
 
 
   return (
@@ -530,8 +641,41 @@ export function Inventory() {
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <InventoryWorkflowCard label="Needs Attention" value={workflowCounts.cards.needsAttention} note="Any reorder or setup gap" tone="red" />
+        <InventoryWorkflowCard label="Needs Reorder" value={workflowCounts.cards.reorder} note="Below reorder level" tone="amber" />
+        <InventoryWorkflowCard label="Missing Vendor" value={workflowCounts.cards.missingVendor} note="No purchasing owner" />
+        <InventoryWorkflowCard label="Missing Venue" value={workflowCounts.cards.missingVenue} note="Not assigned to an operating location" />
+        <InventoryWorkflowCard label="Missing Area" value={workflowCounts.cards.missingStorageArea} note="No storage placement recorded" />
+        <InventoryWorkflowCard label="Ordering Incomplete" value={workflowCounts.cards.orderingIncomplete} note="Pack, reorder, or pricing setup missing" />
+      </div>
+
       {/* Filters */}
-      <div className="bg-bg-card rounded-xl shadow-sm p-4 flex flex-wrap gap-3 items-center">
+      <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {([
+            ['all', `All (${workflowCounts.cards.total})`],
+            ['needs_attention', `Needs Attention (${workflowCounts.cards.needsAttention})`],
+            ['reorder', `Needs Reorder (${workflowCounts.cards.reorder})`],
+            ['missing_vendor', `Missing Vendor (${workflowCounts.cards.missingVendor})`],
+            ['missing_venue', `Missing Venue (${workflowCounts.cards.missingVenue})`],
+            ['missing_storage_area', `Missing Area (${workflowCounts.cards.missingStorageArea})`],
+            ['ordering_incomplete', `Ordering Incomplete (${workflowCounts.cards.orderingIncomplete})`],
+          ] as const).map(([focus, label]) => (
+            <button
+              key={focus}
+              type="button"
+              onClick={() => setWorkflowFocus(focus)}
+              className={workflowFocus === focus
+                ? 'rounded-full bg-accent-indigo text-white px-3 py-1.5 text-sm font-medium'
+                : 'rounded-full border border-border text-text-secondary hover:text-text-primary px-3 py-1.5 text-sm transition-colors'}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-center">
         <input
           type="text"
           placeholder="Search items..."
@@ -571,6 +715,7 @@ export function Inventory() {
         >
           Needs Reorder
         </button>
+        </div>
       </div>
 
       {!!reorderSuggestions?.length && (
@@ -591,8 +736,7 @@ export function Inventory() {
             {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
           </span>
 
-          {/* Category reassign */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={bulkCategory}
               onChange={(e) => setBulkCategory(e.target.value)}
@@ -606,24 +750,78 @@ export function Inventory() {
             <button
               onClick={() => {
                 if (!bulkCategory) return;
-                bulkUpdate.mutate(
-                  { ids: Array.from(selectedIds), updates: { category: bulkCategory } },
-                  {
-                    onSuccess: (data) => {
-                      toast(`Updated ${data.updated} item${data.updated !== 1 ? 's' : ''} to ${bulkCategory}`, 'success');
-                      setSelectedIds(new Set());
-                      setBulkCategory('');
-                    },
-                    onError: (err) => {
-                      toast(`Failed to update: ${err.message}`, 'error');
-                    },
-                  },
-                );
+                applyBulkWorkflowUpdate({ category: bulkCategory }, `Updated category to ${bulkCategory}`);
               }}
               disabled={!bulkCategory || bulkUpdate.isPending}
               className="bg-accent-indigo text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              Apply
+              Apply Category
+            </button>
+
+            <select
+              value={bulkVendorId}
+              onChange={(e) => setBulkVendorId(e.target.value)}
+              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+            >
+              <option value="">Assign vendor…</option>
+              {(vendors ?? []).map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                if (!bulkVendorId) return;
+                const vendorName = vendors?.find((vendor) => vendor.id === Number(bulkVendorId))?.name ?? 'vendor';
+                applyBulkWorkflowUpdate({ vendor_id: Number(bulkVendorId) }, `Assigned ${vendorName}`);
+              }}
+              disabled={!bulkVendorId || bulkUpdate.isPending}
+              className="bg-bg-page border border-border-emphasis text-text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Assign Vendor
+            </button>
+
+            <select
+              value={bulkVenueId}
+              onChange={(e) => setBulkVenueId(e.target.value)}
+              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+            >
+              <option value="">Assign venue…</option>
+              {(venues ?? []).map((venue) => (
+                <option key={venue.id} value={venue.id}>{venue.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                if (!bulkVenueId) return;
+                const venueName = venues?.find((venue) => venue.id === Number(bulkVenueId))?.name ?? 'venue';
+                applyBulkWorkflowUpdate({ venue_id: Number(bulkVenueId) }, `Assigned ${venueName}`);
+              }}
+              disabled={!bulkVenueId || bulkUpdate.isPending}
+              className="bg-bg-page border border-border-emphasis text-text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Assign Venue
+            </button>
+
+            <select
+              value={bulkStorageAreaId}
+              onChange={(e) => setBulkStorageAreaId(e.target.value)}
+              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
+            >
+              <option value="">Assign area…</option>
+              {(areas ?? []).map((area) => (
+                <option key={area.id} value={area.id}>{area.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                if (!bulkStorageAreaId) return;
+                const areaName = areas?.find((area) => area.id === Number(bulkStorageAreaId))?.name ?? 'area';
+                applyBulkWorkflowUpdate({ storage_area_id: Number(bulkStorageAreaId) }, `Assigned ${areaName}`);
+              }}
+              disabled={!bulkStorageAreaId || bulkUpdate.isPending}
+              className="bg-bg-page border border-border-emphasis text-text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Assign Area
             </button>
           </div>
 

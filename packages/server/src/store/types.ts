@@ -145,7 +145,15 @@ export interface InventoryStore {
   countItemsInArea(areaId: number): Promise<number>;
 
   // Bulk operations
-  bulkUpdateItems(ids: number[], updates: { category: string }): Promise<{ updated: number }>;
+  bulkUpdateItems(
+    ids: number[],
+    updates: {
+      category?: string;
+      vendor_id?: number | null;
+      venue_id?: number | null;
+      storage_area_id?: number | null;
+    },
+  ): Promise<{ updated: number }>;
   bulkDeleteItems(ids: number[]): Promise<{ deleted: number; skipped: number; skippedIds: number[] }>;
   mergeItems(targetId: number, sourceIds: number[]): Promise<MergeItemsResult>;
 
