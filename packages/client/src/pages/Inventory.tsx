@@ -739,7 +739,15 @@ export function Inventory() {
           </div>
         ) : sortedItems.length > 0 ? (
           <div className="space-y-5">
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="hidden rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 xl:grid xl:grid-cols-[minmax(0,2.2fr)_minmax(170px,0.85fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(160px,0.8fr)_auto] xl:items-center xl:gap-4">
+              <div>Item</div>
+              <div>On hand</div>
+              <div>Pack / Cost</div>
+              <div>Ownership</div>
+              <div>Exceptions</div>
+              <div className="text-right">Action</div>
+            </div>
+            <div className="space-y-2">
               {paginatedItems.map((item) => {
                 const itemAreas = storageByItem.get(item.id) ?? [];
                 const hasAreas = itemAreas.length > 0;
@@ -750,9 +758,6 @@ export function Inventory() {
                 const orderingIncomplete = workflowCounts.orderingIncomplete.has(item.id);
                 const totalValue = item.order_unit_price != null && item.current_qty > 0
                   ? item.order_unit_price * item.current_qty
-                  : null;
-                const unitCost = item.order_unit_price != null && item.qty_per_unit && item.qty_per_unit > 0
-                  ? item.order_unit_price / item.qty_per_unit
                   : null;
                 const economics = deriveInventoryUnitEconomics({
                   baseUnit: item.unit,
@@ -770,174 +775,150 @@ export function Inventory() {
                   : hasAreas
                     ? `${itemAreas.length} area balance${itemAreas.length === 1 ? '' : 's'}`
                     : 'Storage area missing';
-                const insideUnitLabel = item.inner_unit ?? item.order_unit ?? item.unit;
                 const issuePills = [
                   missingVendor ? { label: 'Missing vendor', tone: 'blue' as const } : null,
                   missingVenue ? { label: 'Missing venue', tone: 'blue' as const } : null,
                   missingStorageArea ? { label: 'Missing area', tone: 'blue' as const } : null,
                   orderingIncomplete ? { label: 'Ordering incomplete', tone: 'amber' as const } : null,
                 ].filter((value): value is { label: string; tone: 'blue' | 'amber' } => value !== null);
+                const topIssues = issuePills.slice(0, 2);
+                const overflowIssues = issuePills.length - topIssues.length;
 
                 return (
                   <article
                     key={item.id}
-                    className="flex h-full flex-col rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-slate-300 hover:shadow-md"
                   >
-                    <div className="flex items-start gap-4">
-                      <label className="mt-1 flex min-h-6 min-w-6 items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(item.id)}
-                          onChange={() => toggleSelectOne(item.id)}
-                          aria-label={`Select ${item.name}`}
-                          className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
-                        />
-                      </label>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedItemId(item.id)}
-                              className="truncate text-left text-lg font-semibold text-slate-950 transition hover:text-slate-700"
-                            >
-                              {item.name}
-                            </button>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
-                              <span>{item.category}</span>
-                              <span className="text-slate-300">•</span>
-                              <span>{item.current_qty} {item.unit} on hand</span>
-                              <span className="text-slate-300">•</span>
-                              <span>{selectedIds.has(item.id) ? 'Selected for workflow actions' : 'Available in queue'}</span>
+                    <div className="grid gap-3 xl:grid-cols-[minmax(0,2.2fr)_minmax(170px,0.85fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(160px,0.8fr)_auto] xl:items-center xl:gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-start gap-3">
+                          <label className="mt-1 flex min-h-6 min-w-6 items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(item.id)}
+                              onChange={() => toggleSelectOne(item.id)}
+                              aria-label={`Select ${item.name}`}
+                              className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                            />
+                          </label>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedItemId(item.id)}
+                                  className="truncate text-left text-base font-semibold text-slate-950 transition hover:text-slate-700"
+                                >
+                                  {item.name}
+                                </button>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
+                                  <span>{item.category}</span>
+                                  <span className="text-slate-300">•</span>
+                                  <span>{item.unit}</span>
+                                  {economics.eachLine && (
+                                    <>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="truncate">{economics.eachLine}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <WorkflowStatusPill tone={reorderNeeded ? 'amber' : 'green'}>
+                                  {reorderNeeded ? 'Needs reorder' : 'In range'}
+                                </WorkflowStatusPill>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <WorkflowStatusPill tone={reorderNeeded ? 'amber' : 'green'}>
-                              {reorderNeeded ? 'Needs reorder' : 'In range'}
-                            </WorkflowStatusPill>
-                            <WorkflowStatusPill tone={orderingIncomplete ? 'amber' : 'slate'}>
-                              {orderingIncomplete ? 'Setup gap' : 'Setup complete'}
-                            </WorkflowStatusPill>
+                            {hasAreas && (
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpand(item.id)}
+                                  aria-expanded={expandedItems.has(item.id)}
+                                  className="inline-flex min-h-9 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
+                                >
+                                  {expandedItems.has(item.id) ? 'Hide area balances' : `Area balances (${itemAreas.length})`}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
+                        {expandedItems.has(item.id) && hasAreas && (
+                          <div className="mt-3 flex flex-wrap gap-2 pl-9">
+                            {itemAreas.map((area) => (
+                              <div key={area.area_id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
+                                <span className="font-medium text-slate-900">{area.area_name}</span>
+                                <span className="mx-2 text-slate-300">•</span>
+                                <span>{area.quantity} {item.unit}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
-                        {issuePills.length > 0 && (
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {issuePills.map((issue) => (
+                      <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 xl:hidden">On hand</div>
+                        <div className="text-sm font-semibold text-slate-950">{item.current_qty} {item.unit}</div>
+                        <div className="mt-1 text-xs text-slate-600">
+                          {item.reorder_level != null ? `Reorder at ${item.reorder_level} ${item.unit}` : 'No reorder level set'}
+                        </div>
+                        {item.reorder_qty != null && (
+                          <div className="mt-1 text-xs text-slate-500">Target {item.reorder_qty} {item.unit}</div>
+                        )}
+                      </div>
+
+                      <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 xl:hidden">Pack / cost</div>
+                        <div className="text-sm font-medium text-slate-900">{economics.packLine ?? 'Purchase pack incomplete'}</div>
+                        <div className="mt-1 text-xs text-slate-600">{economics.costLine ?? 'Add case price and pack quantity'}</div>
+                        {showOrdering && economics.purchaseMeasureLine && (
+                          <div className="mt-1 text-xs text-slate-500">{economics.purchaseMeasureLine}</div>
+                        )}
+                      </div>
+
+                      <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 xl:hidden">Ownership</div>
+                        <div className="text-sm font-medium text-slate-900">{vendorName}</div>
+                        <div className="mt-1 text-xs text-slate-600">{venueName}</div>
+                        <div className="mt-1 text-xs text-slate-500">{storageName}</div>
+                      </div>
+
+                      <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 xl:hidden">Exceptions</div>
+                        {topIssues.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {topIssues.map((issue) => (
                               <WorkflowStatusPill key={issue.label} tone={issue.tone}>
                                 {issue.label}
                               </WorkflowStatusPill>
                             ))}
-                          </div>
-                        )}
-
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                          <InventoryKeyStat
-                            label="On hand"
-                            value={`${item.current_qty} ${item.unit}`}
-                            note={reorderNeeded && item.reorder_level != null ? `Threshold ${item.reorder_level} ${item.unit}` : 'Current stocked quantity'}
-                          />
-                          <InventoryKeyStat
-                            label="Vendor"
-                            value={vendorName}
-                            note={item.vendor_id == null ? 'Assign purchasing ownership' : 'Current purchasing owner'}
-                            tone={missingVendor ? 'blue' : 'default'}
-                          />
-                          <InventoryKeyStat
-                            label="Storage"
-                            value={storageName}
-                            note={missingStorageArea ? 'Storage routing incomplete' : hasAreas ? 'Area balances available below' : 'Primary area assignment'}
-                            tone={missingStorageArea ? 'blue' : 'default'}
-                          />
-                          <InventoryKeyStat
-                            label="Value"
-                            value={formatCurrency(totalValue)}
-                            note={item.order_unit_price != null ? `${formatCurrency(item.order_unit_price)} case price` : 'Cost not set'}
-                            tone={item.order_unit_price == null ? 'amber' : 'default'}
-                          />
-                        </div>
-
-                        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Unit chain</div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-700">
-                            {economics.packLine && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{economics.packLine}</span>}
-                            {economics.eachLine && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{economics.eachLine}</span>}
-                            {economics.costLine && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{economics.costLine}</span>}
-                            {!economics.packLine && !economics.eachLine && !economics.costLine && (
-                              <span className="text-slate-600">Pack math is still incomplete for this item.</span>
+                            {overflowIssues > 0 && (
+                              <span className="inline-flex rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                +{overflowIssues} more
+                              </span>
                             )}
                           </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-4">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Operational ownership</div>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              <InventoryDetailRow label="Venue" value={venueName} />
-                              <InventoryDetailRow label="Reorder target" value={item.reorder_qty != null ? `${item.reorder_qty} ${item.unit}` : 'Missing'} />
-                              <InventoryDetailRow label="Primary area" value={item.storage_area_id != null ? areaNameLookup.get(item.storage_area_id) ?? 'Assigned' : 'Missing'} />
-                              <InventoryDetailRow label="Pack base unit" value={insideUnitLabel} />
-                            </div>
-                          </div>
-
-                          {showOrdering ? (
-                            <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#f7fbff_0%,#ffffff_100%)] px-4 py-4">
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Purchasing detail</div>
-                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                <InventoryDetailRow label="Order unit" value={item.order_unit ?? 'Missing'} />
-                                <InventoryDetailRow label="Pack quantity" value={item.qty_per_unit ?? 'Missing'} />
-                                <InventoryDetailRow label="Unit cost" value={formatCurrency(unitCost)} />
-                                <InventoryDetailRow label="Case cost" value={formatCurrency(item.order_unit_price)} />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4">
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Purchasing detail</div>
-                              <p className="mt-2 text-sm leading-6 text-slate-600">
-                                Keep this panel collapsed when you are triaging the queue quickly. Turn it on when you need pack and cost setup while resolving ordering gaps.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {hasAreas && (
-                          <div className="mt-4">
-                            <button
-                              type="button"
-                              onClick={() => toggleExpand(item.id)}
-                              aria-expanded={expandedItems.has(item.id)}
-                              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-                            >
-                              {expandedItems.has(item.id) ? 'Hide area balances' : `Show area balances (${itemAreas.length})`}
-                            </button>
-                            {expandedItems.has(item.id) && (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {itemAreas.map((area) => (
-                                  <div key={area.area_id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                                    <span className="font-medium text-slate-900">{area.area_name}</span>
-                                    <span className="mx-2 text-slate-300">•</span>
-                                    <span>{area.quantity} {item.unit}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                        ) : (
+                          <div className="text-sm font-medium text-slate-900">No active setup blockers</div>
                         )}
-
-                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-                          <div className="text-sm text-slate-600">
-                            {reorderNeeded
-                              ? 'This item is below its reorder threshold and should be reviewed in the current operating cycle.'
-                              : 'This item is stocked within range. Use the side panel for assignment or pack corrections.'}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedItemId(item.id)}
-                            className="inline-flex min-h-11 items-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                          >
-                            Open item workflow
-                          </button>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {totalValue != null ? `${formatCurrency(totalValue)} estimated value` : 'Inventory value needs cost setup'}
                         </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 xl:flex-col xl:items-end">
+                        {selectedIds.has(item.id) && (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Selected
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItemId(item.id)}
+                          className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                        >
+                          Open
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -1864,47 +1845,6 @@ function InventoryItemSidePanel({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function InventoryKeyStat({
-  label,
-  value,
-  note,
-  tone = 'default',
-}: {
-  label: string;
-  value: string;
-  note: string;
-  tone?: 'default' | 'amber' | 'blue';
-}) {
-  const className = tone === 'amber'
-    ? 'border-amber-200 bg-amber-50/70'
-    : tone === 'blue'
-      ? 'border-sky-200 bg-sky-50/70'
-      : 'border-slate-200 bg-white';
-
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${className}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="mt-2 text-base font-semibold text-slate-950">{value}</div>
-      <div className="mt-1 text-sm leading-5 text-slate-600">{note}</div>
-    </div>
-  );
-}
-
-function InventoryDetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <div className="rounded-xl bg-white/80 px-3 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="mt-1 text-sm font-medium text-slate-900">{String(value)}</div>
     </div>
   );
 }
