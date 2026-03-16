@@ -15,6 +15,15 @@ import { InvoiceUpload } from '../components/InvoiceUpload';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
+import {
+  WorkflowChip,
+  WorkflowFocusBar,
+  WorkflowMetricCard,
+  WorkflowMetricGrid,
+  WorkflowPage,
+  WorkflowPanel,
+  WorkflowStatusPill,
+} from '../components/workflow/WorkflowPrimitives';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '—';
@@ -35,31 +44,43 @@ type InventoryWorkflowFocus =
   | 'missing_storage_area'
   | 'ordering_incomplete';
 
-function InventoryWorkflowCard({
-  label,
-  value,
-  note,
-  tone = 'default',
-}: {
-  label: string;
-  value: number;
-  note: string;
-  tone?: 'default' | 'amber' | 'red';
-}) {
-  const borderClass = tone === 'amber'
-    ? 'border-accent-amber/30'
-    : tone === 'red'
-      ? 'border-accent-red/30'
-      : 'border-border';
-
-  return (
-    <div className={`bg-bg-card rounded-xl border ${borderClass} shadow-sm p-4`}>
-      <div className="text-xs uppercase tracking-wide text-text-secondary">{label}</div>
-      <div className="mt-2 text-3xl font-semibold text-text-primary">{value}</div>
-      <div className="mt-2 text-sm text-text-secondary">{note}</div>
-    </div>
-  );
-}
+const INVENTORY_FOCUS_COPY: Record<InventoryWorkflowFocus, { title: string; body: string; tone: 'slate' | 'amber' | 'red' | 'blue' }> = {
+  all: {
+    title: 'Full inventory catalog',
+    body: 'Use this lane to review the full operating catalog, then narrow into a specific readiness gap when you need action instead of browsing.',
+    tone: 'slate',
+  },
+  needs_attention: {
+    title: 'Attention queue',
+    body: 'This lane combines reorder pressure and setup gaps so operators can work the highest-friction inventory items first.',
+    tone: 'red',
+  },
+  reorder: {
+    title: 'Reorder queue',
+    body: 'These items are below their reorder level. Confirm pack setup, vendor ownership, and order quantity before issuing a PO.',
+    tone: 'amber',
+  },
+  missing_vendor: {
+    title: 'Vendor setup gap',
+    body: 'These items are stocked but not anchored to a purchasing owner yet. Bulk vendor assignment should clear this lane quickly.',
+    tone: 'blue',
+  },
+  missing_venue: {
+    title: 'Venue scope gap',
+    body: 'These items are not attached to an operating venue, so location-specific workflows and reporting remain incomplete.',
+    tone: 'blue',
+  },
+  missing_storage_area: {
+    title: 'Storage mapping gap',
+    body: 'These items do not have a clear storage placement. That weakens count discipline and operational retrieval.',
+    tone: 'blue',
+  },
+  ordering_incomplete: {
+    title: 'Ordering setup gap',
+    body: 'These items are missing reorder or pack/price fields. They are difficult to purchase accurately at scale.',
+    tone: 'amber',
+  },
+};
 
 /* ------------------------------------------------------------------ */
 /*  InlineEdit – spreadsheet-style editable cell                      */
@@ -570,17 +591,19 @@ export function Inventory() {
     );
   };
 
+  const currentFocus = INVENTORY_FOCUS_COPY[workflowFocus];
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text-primary">Inventory</h1>
-        <div className="flex gap-2 flex-wrap justify-end">
+    <WorkflowPage
+      eyebrow="Inventory Control"
+      title="Run inventory as an operating workflow, not a spreadsheet."
+      description="This surface is now oriented around reorder pressure, setup gaps, and bulk correction lanes. The inventory data remains intact, but the workflow is moving toward the same explicit, explainable model as the backend."
+      actions={(
+        <>
           <select
             value={exportGroupBy}
             onChange={(e) => setExportGroupBy(e.target.value as GroupBy)}
-            className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
+            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
           >
             <option value="storage_area">Group by Area</option>
             <option value="venue">Group by Venue</option>
@@ -593,7 +616,7 @@ export function Inventory() {
               const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
               exportToPdf({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy, format: 'pdf' });
             }}
-            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
           >
             Export PDF
           </button>
@@ -604,118 +627,142 @@ export function Inventory() {
               const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
               exportToExcel({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy, format: 'xlsx' });
             }}
-            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
           >
             Export Excel
           </button>
           <button
-            onClick={() => setShowVenuesModal(true)}
-            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
-          >
-            Manage Venues
-          </button>
-          <button
-            onClick={() => setShowVendorsModal(true)}
-            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
-          >
-            Manage Vendors
-          </button>
-          <button
-            onClick={() => setShowAreasModal(true)}
-            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
-          >
-            Manage Areas
-          </button>
-          <button
             onClick={() => setShowInvoiceUpload(true)}
-            className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
           >
             Upload Invoice
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover transition-colors"
+            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
-            + Add Item
+            Add Item
           </button>
-        </div>
-      </div>
+        </>
+      )}
+    >
+      <WorkflowMetricGrid>
+        <WorkflowMetricCard label="Needs Attention" value={workflowCounts.cards.needsAttention} detail="Any reorder or setup gap." tone="red" />
+        <WorkflowMetricCard label="Needs Reorder" value={workflowCounts.cards.reorder} detail="Below reorder level." tone="amber" />
+        <WorkflowMetricCard label="Missing Vendor" value={workflowCounts.cards.missingVendor} detail="No purchasing owner assigned." tone="blue" />
+        <WorkflowMetricCard label="Ordering Incomplete" value={workflowCounts.cards.orderingIncomplete} detail="Reorder or pack/price setup missing." tone="amber" />
+      </WorkflowMetricGrid>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <InventoryWorkflowCard label="Needs Attention" value={workflowCounts.cards.needsAttention} note="Any reorder or setup gap" tone="red" />
-        <InventoryWorkflowCard label="Needs Reorder" value={workflowCounts.cards.reorder} note="Below reorder level" tone="amber" />
-        <InventoryWorkflowCard label="Missing Vendor" value={workflowCounts.cards.missingVendor} note="No purchasing owner" />
-        <InventoryWorkflowCard label="Missing Venue" value={workflowCounts.cards.missingVenue} note="Not assigned to an operating location" />
-        <InventoryWorkflowCard label="Missing Area" value={workflowCounts.cards.missingStorageArea} note="No storage placement recorded" />
-        <InventoryWorkflowCard label="Ordering Incomplete" value={workflowCounts.cards.orderingIncomplete} note="Pack, reorder, or pricing setup missing" />
-      </div>
-
-      {/* Filters */}
-      <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {([
-            ['all', `All (${workflowCounts.cards.total})`],
-            ['needs_attention', `Needs Attention (${workflowCounts.cards.needsAttention})`],
-            ['reorder', `Needs Reorder (${workflowCounts.cards.reorder})`],
-            ['missing_vendor', `Missing Vendor (${workflowCounts.cards.missingVendor})`],
-            ['missing_venue', `Missing Venue (${workflowCounts.cards.missingVenue})`],
-            ['missing_storage_area', `Missing Area (${workflowCounts.cards.missingStorageArea})`],
-            ['ordering_incomplete', `Ordering Incomplete (${workflowCounts.cards.orderingIncomplete})`],
-          ] as const).map(([focus, label]) => (
-            <button
-              key={focus}
-              type="button"
-              onClick={() => setWorkflowFocus(focus)}
-              className={workflowFocus === focus
-                ? 'rounded-full bg-accent-indigo text-white px-3 py-1.5 text-sm font-medium'
-                : 'rounded-full border border-border text-text-secondary hover:text-text-primary px-3 py-1.5 text-sm transition-colors'}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)]">
+        <WorkflowPanel
+          title="Inventory Workflow"
+          description="Choose a lane, filter the catalog, and work the exception queue directly from the current inventory data."
+          actions={(
+            <WorkflowFocusBar>
+              {([
+                ['all', `All (${workflowCounts.cards.total})`],
+                ['needs_attention', `Needs Attention (${workflowCounts.cards.needsAttention})`],
+                ['reorder', `Needs Reorder (${workflowCounts.cards.reorder})`],
+                ['missing_vendor', `Missing Vendor (${workflowCounts.cards.missingVendor})`],
+                ['missing_venue', `Missing Venue (${workflowCounts.cards.missingVenue})`],
+                ['missing_storage_area', `Missing Area (${workflowCounts.cards.missingStorageArea})`],
+                ['ordering_incomplete', `Ordering Incomplete (${workflowCounts.cards.orderingIncomplete})`],
+              ] as const).map(([focus, label]) => (
+                <WorkflowChip key={focus} active={workflowFocus === focus} onClick={() => setWorkflowFocus(focus)}>
+                  {label}
+                </WorkflowChip>
+              ))}
+            </WorkflowFocusBar>
+          )}
+        >
+          <div className="flex flex-wrap gap-3 items-center">
+            <input
+              type="text"
+              placeholder="Search items..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="min-w-[220px] flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
             >
-              {label}
-            </button>
-          ))}
-        </div>
+              <option value="">All Categories</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            <select
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            >
+              <option value="">All Areas</option>
+              {areas?.map((area) => (
+                <option key={area.id} value={String(area.id)}>{area.name}</option>
+              ))}
+            </select>
+            <WorkflowChip active={showReorderOnly} onClick={() => setShowReorderOnly((value) => !value)}>
+              Needs Reorder
+            </WorkflowChip>
+          </div>
+        </WorkflowPanel>
 
-        <div className="flex flex-wrap gap-3 items-center">
-        <input
-          type="text"
-          placeholder="Search items..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted flex-1 max-w-sm focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
-        />
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
+        <WorkflowPanel
+          title={currentFocus.title}
+          description={currentFocus.body}
+          actions={(
+            <>
+              <button
+                type="button"
+                onClick={() => setShowVendorsModal(true)}
+                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+              >
+                Manage Vendors
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowVenuesModal(true)}
+                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+              >
+                Manage Venues
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAreasModal(true)}
+                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+              >
+                Manage Areas
+              </button>
+            </>
+          )}
         >
-          <option value="">All Categories</option>
-          {CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-        <select
-          value={areaFilter}
-          onChange={(e) => setAreaFilter(e.target.value)}
-          className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
-        >
-          <option value="">All Areas</option>
-          {areas?.map((area) => (
-            <option key={area.id} value={String(area.id)}>{area.name}</option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => setShowReorderOnly((v) => !v)}
-          className={showReorderOnly
-            ? 'rounded-full bg-badge-red-bg text-badge-red-text border border-accent-red/30 px-3 py-2 text-sm'
-            : 'rounded-full border border-border text-text-secondary hover:text-text-primary px-3 py-2 text-sm transition-colors'
-          }
-        >
-          Needs Reorder
-        </button>
-        </div>
+          <div className="space-y-3">
+            <div className="rounded-2xl bg-slate-50 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current lane</div>
+              <div className="mt-2">
+                <WorkflowStatusPill tone={currentFocus.tone}>{currentFocus.title}</WorkflowStatusPill>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Selection rail</div>
+              <div className="mt-2 text-sm text-slate-600">
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} item${selectedIds.size === 1 ? '' : 's'} selected for bulk action.`
+                  : 'Select items from the catalog to assign ownership, location, or storage in bulk.'}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
+              Estimated reorder spend for the current view:
+              <div className="mt-2 font-mono text-lg text-slate-950">{formatCurrency(reorderSpend)}</div>
+            </div>
+          </div>
+        </WorkflowPanel>
       </div>
 
       {!!reorderSuggestions?.length && (
@@ -731,7 +778,11 @@ export function Inventory() {
 
       {/* Selection actions bar */}
       {selectedIds.size > 0 && (
-        <div className="bg-bg-card rounded-xl shadow-sm px-4 py-3 flex items-center gap-4 flex-wrap">
+        <WorkflowPanel
+          title="Bulk workflow actions"
+          description="Use batch actions to correct ownership and setup gaps directly from the attention queue."
+        >
+        <div className="flex items-center gap-4 flex-wrap">
           <span className="text-sm font-medium text-text-primary">
             {selectedIds.size} item{selectedIds.size > 1 ? 's' : ''} selected
           </span>
@@ -845,6 +896,7 @@ export function Inventory() {
             </button>
           </div>
         </div>
+        </WorkflowPanel>
       )}
 
       {/* Spreadsheet table */}
@@ -1403,6 +1455,6 @@ export function Inventory() {
           </div>
         );
       })()}
-    </div>
+    </WorkflowPage>
   );
 }

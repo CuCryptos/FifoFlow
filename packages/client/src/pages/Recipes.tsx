@@ -9,6 +9,16 @@ import { useCreateOrder } from '../hooks/useOrders';
 import { useOperationalRecipeWorkflow, useOperationalRecipeWorkflowDetail } from '../hooks/useRecipeWorkflow';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
+import {
+  WorkflowChip,
+  WorkflowEmptyState,
+  WorkflowFocusBar,
+  WorkflowMetricCard,
+  WorkflowMetricGrid,
+  WorkflowPage,
+  WorkflowPanel,
+  WorkflowStatusPill,
+} from '../components/workflow/WorkflowPrimitives';
 import { UNITS } from '@fifoflow/shared';
 import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult } from '@fifoflow/shared';
 import type { OperationalRecipeIngredientRowPayload, OperationalRecipeWorkflowSummaryPayload } from '../api';
@@ -19,37 +29,40 @@ export function Recipes() {
   const [activeTab, setActiveTab] = useState<RecipeTab>('operational');
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-text-primary">Recipes</h1>
-
-      <div className="flex gap-1 bg-bg-card rounded-lg p-1 w-fit">
-        {([
-          ['operational', 'Operational Workflow'],
-          ['recipes', 'Recipes'],
-          ['menus', 'Product Menus'],
-          ['calculate', 'Calculate Order'],
-          ['weekly', 'Weekly Order'],
-        ] as const).map(([tab, label]) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab
-                ? 'bg-accent-indigo text-white'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
+    <WorkflowPage
+      eyebrow="Recipe Operations"
+      title="Promote, validate, and cost operational recipes through the same identity spine the backend trusts."
+      description="The recipes surface now starts from promoted operational versions, scoped ingredient fulfillment, vendor lineage, and cost snapshot trust. Legacy maintenance tools still exist, but they are secondary to the operational workflow."
+      actions={(
+        <div className="rounded-full border border-slate-300 bg-white/80 p-1">
+          <div className="flex flex-wrap gap-1">
+            {([
+              ['operational', 'Operational Workflow'],
+              ['recipes', 'Legacy Recipes'],
+              ['menus', 'Product Menus'],
+              ['calculate', 'Calculate Order'],
+              ['weekly', 'Weekly Order'],
+            ] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={activeTab === tab
+                  ? 'rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white'
+                  : 'rounded-full px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-950'}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    >
       {activeTab === 'operational' && <OperationalRecipes />}
       {activeTab === 'recipes' && <RecipeList />}
       {activeTab === 'menus' && <ProductMenus />}
       {activeTab === 'calculate' && <CalculateOrder />}
       {activeTab === 'weekly' && <WeeklyOrder />}
-    </div>
+    </WorkflowPage>
   );
 }
 
@@ -103,70 +116,62 @@ function OperationalRecipes() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-6">
+      <WorkflowMetricGrid>
         <WorkflowMetricCard
           label="Promoted Recipes"
           value={data?.counts.total_promoted_recipes ?? 0}
-          note="Active operational recipe versions in scope"
+          detail="Active operational versions in the current venue scope."
         />
         <WorkflowMetricCard
           label="Costable Now"
           value={data?.counts.costable_now_count ?? 0}
-          note="Ready for recipe cost snapshots"
+          detail="Ready for trusted recipe cost snapshots."
           tone="green"
         />
         <WorkflowMetricCard
           label="Operational Only"
           value={data?.counts.operational_only_count ?? 0}
-          note="Promoted but still blocked by mapping or cost lineage"
+          detail="Promoted, but still blocked by mapping or supplier lineage."
           tone="amber"
         />
         <WorkflowMetricCard
-          label="Blocked For Costing"
+          label="Blocked"
           value={data?.counts.blocked_for_costing_count ?? 0}
-          note="Canonical ingredient identity is incomplete"
+          detail="Canonical ingredient identity is incomplete."
           tone="red"
         />
-      </div>
+      </WorkflowMetricGrid>
 
-      <div className="bg-bg-card rounded-xl shadow-sm p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-text-primary">Operational Recipe Workflow</h2>
-            <p className="text-sm text-text-secondary">
-              Promoted recipe versions are evaluated through canonical ingredient, inventory item, vendor item, and live cost lineage before they can be trusted for costing.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
+      <WorkflowPanel
+        title="Operational Recipe Workspace"
+        description="Review promoted recipe readiness, inspect ingredient-level resolution, and see whether the current live data path is trustworthy enough for costing."
+        actions={(
+          <WorkflowFocusBar>
             {([
               ['all', 'All'],
               ['COSTABLE_NOW', 'Costable Now'],
               ['OPERATIONAL_ONLY', 'Operational Only'],
               ['BLOCKED_FOR_COSTING', 'Blocked'],
             ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatusFilter(value)}
-                className={statusFilter === value
-                  ? 'rounded-full bg-accent-indigo text-white px-3 py-1.5 text-sm font-medium'
-                  : 'rounded-full border border-border text-text-secondary px-3 py-1.5 text-sm hover:text-text-primary transition-colors'}
-              >
+              <WorkflowChip key={value} active={statusFilter === value} onClick={() => setStatusFilter(value)}>
                 {label}
-              </button>
+              </WorkflowChip>
             ))}
-          </div>
-        </div>
-
+          </WorkflowFocusBar>
+        )}
+      >
         {!filteredSummaries.length ? (
-          <div className="text-sm text-text-secondary">No promoted recipes matched the current filter.</div>
+          <WorkflowEmptyState
+            title="No promoted recipes matched this lane"
+            body="Either no promoted operational versions exist yet for this scope, or the current filter is excluding them."
+          />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
-            <div className="overflow-hidden rounded-xl border border-border">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-bg-table-header text-left text-text-secondary">
+                <thead className="bg-white/90">
+                  <tr className="text-left text-slate-500">
                     <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Recipe</th>
                     <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Status</th>
                     <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Coverage</th>
@@ -181,12 +186,12 @@ function OperationalRecipes() {
                         key={summary.recipe_version_id}
                         onClick={() => setSelectedRecipeVersionId(summary.recipe_version_id)}
                         className={selected
-                          ? 'cursor-pointer border-b border-border bg-accent-indigo/5'
-                          : 'cursor-pointer border-b border-border hover:bg-bg-hover'}
+                          ? 'cursor-pointer border-b border-slate-200 bg-white'
+                          : 'cursor-pointer border-b border-slate-200 hover:bg-white/80'}
                       >
                         <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-text-primary">{summary.recipe_name}</div>
-                          <div className="text-xs text-text-secondary">
+                          <div className="font-medium text-slate-950">{summary.recipe_name}</div>
+                          <div className="text-xs text-slate-500">
                             v{summary.version_number} • {summary.recipe_type} • {formatYield(summary)}
                           </div>
                         </td>
@@ -194,14 +199,14 @@ function OperationalRecipes() {
                           <WorkflowStatusBadge classification={summary.costability_classification} />
                         </td>
                         <td className="px-4 py-3 align-top text-right">
-                          <div className="font-mono text-text-primary">{summary.costable_percent.toFixed(0)}%</div>
-                          <div className="text-xs text-text-secondary">
+                          <div className="font-mono text-slate-950">{summary.costable_percent.toFixed(0)}%</div>
+                          <div className="text-xs text-slate-500">
                             {summary.resolved_row_count}/{summary.ingredient_row_count} rows
                           </div>
                         </td>
                         <td className="px-4 py-3 align-top text-right">
-                          <div className="font-mono text-text-primary">{formatRecipeCurrency(summary.latest_snapshot?.total_cost ?? null)}</div>
-                          <div className="text-xs text-text-secondary">
+                          <div className="font-mono text-slate-950">{formatRecipeCurrency(summary.latest_snapshot?.total_cost ?? null)}</div>
+                          <div className="text-xs text-slate-500">
                             {summary.latest_snapshot ? `${summary.latest_snapshot.completeness_status} snapshot` : 'No snapshot yet'}
                           </div>
                         </td>
@@ -215,35 +220,7 @@ function OperationalRecipes() {
             {selectedSummary && <OperationalRecipeDetail summary={selectedSummary} />}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function WorkflowMetricCard({
-  label,
-  value,
-  note,
-  tone = 'default',
-}: {
-  label: string;
-  value: number;
-  note: string;
-  tone?: 'default' | 'green' | 'amber' | 'red';
-}) {
-  const toneClass = tone === 'green'
-    ? 'border-accent-green/30'
-    : tone === 'amber'
-      ? 'border-accent-amber/30'
-      : tone === 'red'
-        ? 'border-accent-red/30'
-        : 'border-border';
-
-  return (
-    <div className={`bg-bg-card rounded-xl border ${toneClass} shadow-sm p-4`}>
-      <div className="text-xs uppercase tracking-wide text-text-secondary">{label}</div>
-      <div className="mt-2 text-3xl font-semibold text-text-primary">{value}</div>
-      <div className="mt-2 text-sm text-text-secondary">{note}</div>
+      </WorkflowPanel>
     </div>
   );
 }
@@ -254,12 +231,12 @@ function WorkflowStatusBadge({
   classification: OperationalRecipeWorkflowSummaryPayload['costability_classification'];
 }) {
   if (classification === 'COSTABLE_NOW') {
-    return <span className="rounded-full bg-accent-green/15 px-2 py-1 text-xs font-medium text-accent-green">Costable Now</span>;
+    return <WorkflowStatusPill tone="green">Costable Now</WorkflowStatusPill>;
   }
   if (classification === 'BLOCKED_FOR_COSTING') {
-    return <span className="rounded-full bg-accent-red/10 px-2 py-1 text-xs font-medium text-accent-red">Blocked</span>;
+    return <WorkflowStatusPill tone="red">Blocked</WorkflowStatusPill>;
   }
-  return <span className="rounded-full bg-accent-amber/15 px-2 py-1 text-xs font-medium text-accent-amber">Operational Only</span>;
+  return <WorkflowStatusPill tone="amber">Operational Only</WorkflowStatusPill>;
 }
 
 function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkflowSummaryPayload }) {
