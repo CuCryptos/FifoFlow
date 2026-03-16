@@ -136,6 +136,20 @@ export function initializeIntelligenceDb(db: Database.Database): void {
       evidence_weight
     );
 
+    CREATE TABLE IF NOT EXISTS recommendation_review_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recommendation_id INTEGER NOT NULL REFERENCES recommendations(id) ON DELETE CASCADE,
+      action_type TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT,
+      actor_name TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_recommendation_review_events_recommendation
+      ON recommendation_review_events(recommendation_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS intelligence_runs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       job_type TEXT NOT NULL,

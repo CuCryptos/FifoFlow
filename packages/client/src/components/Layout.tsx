@@ -15,6 +15,7 @@ import {
   X,
   Settings,
   NotebookText,
+  ListChecks,
 } from 'lucide-react';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useVenues } from '../hooks/useVenues';
@@ -22,6 +23,7 @@ import { ManageVenuesModal } from './ManageVenuesModal';
 
 const navItems = [
   { to: '/', label: 'Operating Memo', icon: NotebookText },
+  { to: '/intelligence/recommendations', label: 'Recommendations', icon: ListChecks },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/inventory', label: 'Inventory', icon: Package },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },

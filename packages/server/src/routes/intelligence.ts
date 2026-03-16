@@ -20,9 +20,16 @@ import type { Recommendation } from '@fifoflow/shared';
 import type { IntelligenceJobContext, IntelligenceJobResult } from '../intelligence/types.js';
 import { SQLiteCanonicalInventoryRepository } from '../mapping/inventory/canonicalInventoryMappingRepositories.js';
 import { SQLiteInventoryVendorRepository } from '../mapping/vendor/inventoryVendorMappingRepositories.js';
+import { SQLiteOperatorSurfaceRepository } from '../intelligence/operatorSurface/operatorSurfaceRepositories.js';
+import type { RecommendationStatus } from '@fifoflow/shared';
+
+const RUNNABLE_PACKS = ['price', 'variance', 'recipe_cost', 'recipe_cost_drift', 'recommendations', 'weekly_memo'] as const;
+type RunnablePack = (typeof RUNNABLE_PACKS)[number];
+const MUTABLE_RECOMMENDATION_STATUSES: RecommendationStatus[] = ['OPEN', 'REVIEWED', 'ACTIVE', 'DISMISSED'];
 
 export function createIntelligenceRoutes(db: Database.Database) {
   const router = express.Router();
+  const operatorRepository = new SQLiteOperatorSurfaceRepository(db);
 
   router.get('/operator-brief', async (req, res, next) => {
     try {
@@ -81,6 +88,142 @@ export function createIntelligenceRoutes(db: Database.Database) {
         refreshed_at: memoContext.now,
         jobs,
         operator_brief,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/freshness', async (req, res, next) => {
+    try {
+      const context = buildIntelligenceContext(req.query, 7);
+      res.json({
+        generated_at: context.now,
+        packs: operatorRepository.listPackFreshness(context.now),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/jobs/:pack/run', async (req, res, next) => {
+    try {
+      const pack = req.params.pack as RunnablePack;
+      if (!RUNNABLE_PACKS.includes(pack)) {
+        res.status(404).json({ error: `Unknown intelligence pack '${req.params.pack}'.` });
+        return;
+      }
+
+      const querySource = typeof req.body === 'object' && req.body !== null ? req.body as Record<string, unknown> : {};
+      const signalLookbackDays = positiveNumber(querySource['signal_lookback_days']) ?? 30;
+      const memoWindowDays = positiveNumber(querySource['memo_window_days']) ?? 7;
+      const signalContext = buildIntelligenceContext(querySource, signalLookbackDays);
+      const memoContext = buildIntelligenceContext(querySource, memoWindowDays);
+
+      const pipeline = await runPackPipeline(db, pack, signalContext, memoContext);
+      const operator_brief = await buildOperatorBrief(db, memoContext);
+      const freshness = operatorRepository.listPackFreshness(memoContext.now);
+
+      res.json({
+        refreshed_at: memoContext.now,
+        requested_pack: pack,
+        pipeline,
+        operator_brief,
+        freshness,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/signals/:id', async (req, res, next) => {
+    try {
+      const signalId = positiveNumber(req.params.id);
+      if (signalId == null) {
+        res.status(400).json({ error: 'Signal id must be a positive number.' });
+        return;
+      }
+      const context = buildIntelligenceContext(req.query, 7);
+      const detail = operatorRepository.getSignalDetail(signalId, context.now);
+      if (!detail) {
+        res.status(404).json({ error: `Signal ${signalId} was not found.` });
+        return;
+      }
+      res.json({
+        ...detail,
+        related_recommendations: detail.related_recommendations.map(buildRecommendationPayload),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/recommendations', async (req, res, next) => {
+    try {
+      const limit = positiveNumber(req.query.limit) ?? 50;
+      const locationId = positiveNumber(req.query.venue_id);
+      const statuses = parseRecommendationStatuses(req.query.statuses);
+      const recommendations = operatorRepository.listRecommendations({
+        locationId,
+        statuses,
+        limit,
+      });
+      res.json({ recommendations: recommendations.map(buildRecommendationPayload) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/recommendations/:id', async (req, res, next) => {
+    try {
+      const recommendationId = positiveNumber(req.params.id);
+      if (recommendationId == null) {
+        res.status(400).json({ error: 'Recommendation id must be a positive number.' });
+        return;
+      }
+      const detail = operatorRepository.getRecommendationDetail(recommendationId);
+      if (!detail) {
+        res.status(404).json({ error: `Recommendation ${recommendationId} was not found.` });
+        return;
+      }
+      res.json({
+        ...detail,
+        recommendation: buildRecommendationPayload(detail.recommendation),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/recommendations/:id/status', async (req, res, next) => {
+    try {
+      const recommendationId = positiveNumber(req.params.id);
+      if (recommendationId == null) {
+        res.status(400).json({ error: 'Recommendation id must be a positive number.' });
+        return;
+      }
+      const targetStatus = typeof req.body?.status === 'string' ? req.body.status as RecommendationStatus : null;
+      if (!targetStatus || !MUTABLE_RECOMMENDATION_STATUSES.includes(targetStatus)) {
+        res.status(400).json({ error: `Status must be one of: ${MUTABLE_RECOMMENDATION_STATUSES.join(', ')}.` });
+        return;
+      }
+
+      const detail = operatorRepository.updateRecommendationStatus({
+        recommendation_id: recommendationId,
+        status: targetStatus,
+        actor_name: typeof req.body?.actor_name === 'string' ? req.body.actor_name : null,
+        notes: typeof req.body?.notes === 'string' ? req.body.notes : null,
+        changed_at: new Date().toISOString(),
+      });
+
+      if (!detail) {
+        res.status(404).json({ error: `Recommendation ${recommendationId} was not found.` });
+        return;
+      }
+
+      res.json({
+        ...detail,
+        recommendation: buildRecommendationPayload(detail.recommendation),
       });
     } catch (error) {
       next(error);
@@ -253,6 +396,90 @@ function summarizeJobResult(result: IntelligenceJobResult) {
   };
 }
 
+async function runPackPipeline(
+  db: Database.Database,
+  pack: RunnablePack,
+  signalContext: IntelligenceJobContext,
+  memoContext: IntelligenceJobContext,
+) {
+  const pipeline = pipelineForPack(pack);
+  const results: Record<string, Awaited<ReturnType<typeof safeRun>>> = {};
+
+  for (const step of pipeline) {
+    results[step] = await runNamedJob(db, step, step === 'weekly_memo' ? memoContext : signalContext);
+  }
+
+  return {
+    packs_run: pipeline,
+    jobs: results,
+  };
+}
+
+function pipelineForPack(pack: RunnablePack): RunnablePack[] {
+  switch (pack) {
+    case 'price':
+      return ['price', 'recommendations', 'weekly_memo'];
+    case 'variance':
+      return ['variance', 'recommendations', 'weekly_memo'];
+    case 'recipe_cost':
+      return ['recipe_cost', 'recipe_cost_drift', 'recommendations', 'weekly_memo'];
+    case 'recipe_cost_drift':
+      return ['recipe_cost_drift', 'recommendations', 'weekly_memo'];
+    case 'recommendations':
+      return ['recommendations', 'weekly_memo'];
+    case 'weekly_memo':
+    default:
+      return ['weekly_memo'];
+  }
+}
+
+async function runNamedJob(
+  db: Database.Database,
+  job: RunnablePack,
+  context: IntelligenceJobContext,
+) {
+  const intelligenceRepository = new SQLiteIntelligenceRepository(db);
+  const policyRepository = new SQLitePolicyRepository(db);
+
+  switch (job) {
+    case 'price':
+      return safeRun('price', () => runPriceIntelligenceJob(context, {
+        source: createLegacySqlitePriceIntelligenceSource(db),
+        repository: intelligenceRepository,
+        policyRepository,
+      }));
+    case 'variance':
+      return safeRun('variance', () => runVarianceJob(context, {
+        source: new SQLiteVarianceReadRepository(db),
+        repository: intelligenceRepository,
+        policyRepository,
+      }));
+    case 'recipe_cost':
+      return safeRun('recipe_cost', () => runRecipeCostJob(context, {
+        repository: new SQLiteRecipeCostRepository(db),
+        operationalRepository: new SQLiteOperationalRecipeCostReadRepository(db),
+        inventoryRepository: new SQLiteCanonicalInventoryRepository(db),
+        vendorRepository: new SQLiteInventoryVendorRepository(db),
+      }));
+    case 'recipe_cost_drift':
+      return safeRun('recipe_cost_drift', () => runRecipeCostDriftJob(context, {
+        recipeCostRepository: new SQLiteRecipeCostRepository(db),
+        intelligenceRepository,
+        policyRepository,
+      }));
+    case 'recommendations':
+      return safeRun('recommendations', () => runRecommendationSynthesisJob(context, {
+        source: new SQLiteRecommendationSignalReadRepository(db),
+        repository: intelligenceRepository,
+      }));
+    case 'weekly_memo':
+      return safeRun('weekly_memo', () => runWeeklyOperatingMemoJob(context, {
+        source: new SQLiteMemoSignalReadRepository(db),
+        repository: intelligenceRepository,
+      }));
+  }
+}
+
 function buildIntelligenceContext(source: Record<string, unknown>, defaultDays: number): IntelligenceJobContext {
   const now = new Date().toISOString();
   const venueId = positiveNumber(source['venue_id']) ?? null;
@@ -280,6 +507,19 @@ function buildIntelligenceContext(source: Record<string, unknown>, defaultDays: 
 function positiveNumber(value: unknown): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function parseRecommendationStatuses(value: unknown): RecommendationStatus[] | undefined {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const statuses = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry): entry is RecommendationStatus => entry.length > 0);
+
+  return statuses.length > 0 ? statuses : undefined;
 }
 
 function parseJson(value: string | null): Record<string, unknown> {
@@ -314,6 +554,31 @@ function buildRecommendationSubjectSummary(row: RecommendationRow) {
     inventory_item_id: row.inventory_item_id,
     recipe_id: row.recipe_id,
     vendor_id: row.vendor_id,
+  };
+}
+
+function buildRecommendationPayload(recommendation: Recommendation) {
+  const operatorAction = recommendation.operator_action_payload ?? {};
+  return {
+    ...recommendation,
+    likely_owner: typeof operatorAction['assigned_role'] === 'string' ? operatorAction['assigned_role'] : 'Unit Manager',
+    scope_summary: {
+      organization_id: recommendation.organization_id,
+      location_id: recommendation.location_id,
+      operation_unit_id: recommendation.operation_unit_id,
+      storage_area_id: recommendation.storage_area_id,
+      inventory_item_id: recommendation.inventory_item_id,
+      recipe_id: recommendation.recipe_id,
+      vendor_id: recommendation.vendor_id,
+    },
+    subject_summary: {
+      subject_type: recommendation.subject_type,
+      subject_id: recommendation.subject_id,
+      subject_key: recommendation.subject_key,
+      inventory_item_id: recommendation.inventory_item_id,
+      recipe_id: recommendation.recipe_id,
+      vendor_id: recommendation.vendor_id,
+    },
   };
 }
 

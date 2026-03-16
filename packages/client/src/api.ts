@@ -143,6 +143,118 @@ export interface RecommendationCardPayload {
   }>;
 }
 
+export interface RecommendationReviewEventPayload {
+  id: number | string;
+  recommendation_id: number | string;
+  action_type: 'STATUS_CHANGED';
+  from_status: string | null;
+  to_status: string | null;
+  actor_name: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface SignalDetailPayload {
+  signal: {
+    id: number | string;
+    signal_type: string;
+    subject_type: string;
+    subject_id: number;
+    subject_key?: string | null;
+    severity_label: 'low' | 'medium' | 'high' | 'critical';
+    confidence_label: 'Early signal' | 'Emerging pattern' | 'Stable pattern';
+    confidence_score: number | null;
+    rule_version: string;
+    window_start: string | null;
+    window_end: string | null;
+    observed_at: string;
+    organization_id: number | null;
+    location_id: number | null;
+    operation_unit_id: number | null;
+    storage_area_id: number | null;
+    inventory_category_id: number | null;
+    inventory_item_id: number | null;
+    recipe_id: number | null;
+    vendor_id: number | null;
+    vendor_item_id: number | null;
+    magnitude_value?: number | null;
+    evidence_count?: number;
+    signal_payload: Record<string, unknown>;
+    evidence: MemoItemPayload['evidence_references'];
+    last_confirmed_at?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  memo_item: MemoItemPayload;
+  subject_signal_history: SignalDetailPayload['signal'][];
+  related_recommendations: RecommendationCardPayload[];
+}
+
+export interface RecommendationDetailPayload {
+  recommendation: RecommendationCardPayload & {
+    recommendation_type: string;
+    rule_version?: string;
+    subject_type: string;
+    subject_id: number;
+    subject_key?: string | null;
+    dedupe_key: string | null;
+    superseded_by_recommendation_id: number | string | null;
+    closed_at: string | null;
+    created_at?: string;
+  };
+  evidence_signals: SignalDetailPayload['signal'][];
+  subject_signal_history: SignalDetailPayload['signal'][];
+  review_events: RecommendationReviewEventPayload[];
+}
+
+export interface PackFreshnessEntryPayload {
+  pack_key: string;
+  label: string;
+  description: string;
+  downstream_packs: string[];
+  last_run: {
+    id: number | string;
+    job_type: string;
+    run_started_at: string;
+    run_completed_at: string | null;
+    signals_created: number;
+    signals_updated: number;
+    patterns_created: number;
+    patterns_updated: number;
+    recommendations_created: number;
+    recommendations_updated: number;
+    recommendations_superseded: number;
+    status: 'running' | 'completed' | 'failed';
+    created_at?: string;
+    updated_at?: string;
+  } | null;
+  freshness_label: 'fresh' | 'aging' | 'stale' | 'missing';
+  age_hours: number | null;
+  metrics: Record<string, number | string | null>;
+}
+
+export interface IntelligenceFreshnessPayload {
+  generated_at: string;
+  packs: PackFreshnessEntryPayload[];
+}
+
+export interface PackRunPayload {
+  refreshed_at: string;
+  requested_pack: string;
+  pipeline: {
+    packs_run: string[];
+    jobs: Record<string, {
+      status: 'ok' | 'error';
+      job: string;
+      notes: string[];
+      run_summary: Record<string, unknown> | null;
+      extra: Record<string, unknown> | null;
+    }>;
+  };
+  operator_brief: OperatorBriefPayload;
+  freshness: PackFreshnessEntryPayload[];
+}
+
 export interface OperatorBriefPayload {
   generated_at: string;
   memo_window: {
@@ -467,6 +579,46 @@ export const api = {
       fetchJson<IntelligenceRefreshPayload>('/intelligence/refresh', {
         method: 'POST',
         body: JSON.stringify(data ?? {}),
+      }),
+    freshness: (params?: { venue_id?: number; days?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      if (params?.days) qs.set('days', String(params.days));
+      const query = qs.toString();
+      return fetchJson<IntelligenceFreshnessPayload>(`/intelligence/freshness${query ? `?${query}` : ''}`);
+    },
+    runPack: (
+      pack: string,
+      data?: { venue_id?: number; signal_lookback_days?: number; memo_window_days?: number },
+    ) =>
+      fetchJson<PackRunPayload>(`/intelligence/jobs/${pack}/run`, {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      }),
+    signalDetail: (id: number, params?: { venue_id?: number; days?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      if (params?.days) qs.set('days', String(params.days));
+      const query = qs.toString();
+      return fetchJson<SignalDetailPayload>(`/intelligence/signals/${id}${query ? `?${query}` : ''}`);
+    },
+    recommendations: (params?: { venue_id?: number; statuses?: string[]; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      if (params?.statuses?.length) qs.set('statuses', params.statuses.join(','));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      const query = qs.toString();
+      return fetchJson<{ recommendations: RecommendationCardPayload[] }>(`/intelligence/recommendations${query ? `?${query}` : ''}`);
+    },
+    recommendationDetail: (id: number) =>
+      fetchJson<RecommendationDetailPayload>(`/intelligence/recommendations/${id}`),
+    updateRecommendationStatus: (
+      id: number,
+      data: { status: string; actor_name?: string; notes?: string },
+    ) =>
+      fetchJson<RecommendationDetailPayload>(`/intelligence/recommendations/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
       }),
   },
 };

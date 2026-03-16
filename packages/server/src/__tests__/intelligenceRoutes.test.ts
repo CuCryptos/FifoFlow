@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import type { DerivedSignal, Recommendation } from '@fifoflow/shared';
 import { initializeDb } from '../db.js';
 import { SQLiteIntelligenceRepository } from '../intelligence/persistence/sqliteIntelligenceRepository.js';
+import { SQLiteRecipeCostRepository } from '../intelligence/recipeCost/persistence/sqliteRecipeCostRepository.js';
 import { createIntelligenceRoutes } from '../routes/intelligence.js';
 
 function createTestApp() {
@@ -101,10 +102,12 @@ describe('Intelligence routes', () => {
   let app: express.Express;
   let db: Database.Database;
   let repository: SQLiteIntelligenceRepository;
+  let recipeCostRepository: SQLiteRecipeCostRepository;
 
   beforeEach(() => {
     ({ app, db } = createTestApp());
     repository = new SQLiteIntelligenceRepository(db);
+    recipeCostRepository = new SQLiteRecipeCostRepository(db);
   });
 
   afterEach(() => {
@@ -147,5 +150,91 @@ describe('Intelligence routes', () => {
       expect.arrayContaining(['price', 'variance', 'recipe_cost', 'recipe_cost_drift', 'recommendations', 'weekly_memo']),
     );
     expect(res.body.operator_brief).toBeDefined();
+  });
+
+  it('returns signal detail with memo metadata and related recommendations', async () => {
+    const signalResult = await repository.upsertSignal(createSignal());
+    const recommendation = await repository.upsertRecommendation(createRecommendation());
+    await repository.attachRecommendationEvidence([
+      {
+        id: 'evidence-2',
+        recommendation_id: recommendation.record.id,
+        evidence_type: 'price_signal',
+        evidence_ref_table: 'derived_signals',
+        evidence_ref_id: String(signalResult.record.id),
+        explanation_text: 'Signal supports recommendation.',
+        evidence_weight: 1,
+        created_at: '2026-03-10T00:00:00.000Z',
+      },
+    ]);
+
+    const res = await request(app).get(`/api/intelligence/signals/${signalResult.record.id}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.signal.id).toBe(signalResult.record.id);
+    expect(res.body.memo_item.title).toBe('Price increase detected');
+    expect(res.body.related_recommendations).toHaveLength(1);
+    expect(res.body.related_recommendations[0].likely_owner).toBe('Purchasing Owner');
+  });
+
+  it('updates recommendation status and records a review event', async () => {
+    const recommendation = await repository.upsertRecommendation(createRecommendation());
+
+    const res = await request(app)
+      .patch(`/api/intelligence/recommendations/${recommendation.record.id}/status`)
+      .send({ status: 'REVIEWED', actor_name: 'Operator UI', notes: 'Checked vendor history.' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recommendation.status).toBe('REVIEWED');
+    expect(res.body.review_events).toHaveLength(1);
+    expect(res.body.review_events[0].from_status).toBe('OPEN');
+    expect(res.body.review_events[0].to_status).toBe('REVIEWED');
+  });
+
+  it('returns freshness data across intelligence packs and recipe cost runs', async () => {
+    const priceRun = await repository.startRun('price-intelligence-job', '2026-03-10T00:00:00.000Z');
+    await repository.completeRun(priceRun.id, 'completed', {
+      signals_created: 2,
+      signals_updated: 1,
+      patterns_created: 0,
+      patterns_updated: 0,
+      recommendations_created: 0,
+      recommendations_updated: 0,
+      recommendations_superseded: 0,
+    }, '2026-03-10T00:10:00.000Z');
+
+    const recipeRun = await recipeCostRepository.startRun('2026-03-10T01:00:00.000Z');
+    await recipeCostRepository.completeRun(recipeRun.id, 'completed', {
+      recipe_count: 2,
+      snapshots_created: 2,
+      snapshots_updated: 0,
+      complete_snapshots: 1,
+      partial_snapshots: 1,
+      incomplete_snapshots: 0,
+      missing_cost_resolutions: 0,
+      stale_cost_resolutions: 0,
+      ambiguous_cost_resolutions: 0,
+      unit_mismatch_resolutions: 0,
+    }, '2026-03-10T01:05:00.000Z');
+
+    const res = await request(app).get('/api/intelligence/freshness');
+
+    expect(res.status).toBe(200);
+    expect(res.body.packs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ pack_key: 'price', last_run: expect.objectContaining({ job_type: 'price-intelligence-job' }) }),
+      expect.objectContaining({ pack_key: 'recipe_cost', last_run: expect.objectContaining({ job_type: 'recipe-cost-job' }) }),
+    ]));
+  });
+
+  it('runs a pack pipeline and returns a refreshed operator brief', async () => {
+    const res = await request(app)
+      .post('/api/intelligence/jobs/weekly_memo/run')
+      .send({ venue_id: 2, signal_lookback_days: 14, memo_window_days: 7 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.requested_pack).toBe('weekly_memo');
+    expect(res.body.pipeline.packs_run).toEqual(['weekly_memo']);
+    expect(res.body.operator_brief).toBeDefined();
+    expect(Array.isArray(res.body.freshness)).toBe(true);
   });
 });

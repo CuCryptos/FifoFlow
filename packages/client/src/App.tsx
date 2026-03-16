@@ -13,6 +13,8 @@ import { Orders } from './pages/Orders';
 import { Recipes } from './pages/Recipes';
 import { Reports } from './pages/Reports';
 import SnackBar from './pages/SnackBar';
+import { SignalDetail } from './pages/SignalDetail';
+import { RecommendationsPage } from './pages/Recommendations';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +31,9 @@ export default function App() {
             <Routes>
               <Route element={<Layout />}>
                 <Route path="/" element={<OperatingMemo />} />
+                <Route path="/intelligence/signals/:signalId" element={<SignalDetail />} />
+                <Route path="/intelligence/recommendations" element={<RecommendationsPage />} />
+                <Route path="/intelligence/recommendations/:recommendationId" element={<RecommendationsPage />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/inventory/:id" element={<ItemDetail />} />
