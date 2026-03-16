@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSalesSummary } from '../../hooks/useSales';
 import type { SalesSummary } from '@fifoflow/shared';
 
@@ -148,6 +148,7 @@ type RevenueHoverPoint = {
 function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
   const [hoveredPoint, setHoveredPoint] = useState<RevenueHoverPoint | null>(null);
   const tooltipId = 'snackbar-revenue-tooltip';
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const chart = useMemo(() => {
     const revenueMax = Math.max(...daily.map((entry) => entry.revenue), 1);
     const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
@@ -169,10 +170,23 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
     return { innerHeight, points, polyline, ticks };
   }, [daily]);
 
+  useEffect(() => {
+    if (!hoveredPoint) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setHoveredPoint(null);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [hoveredPoint]);
+
   return (
     <div className="space-y-3">
       <div className="text-xs text-text-muted">Hover, focus, or tap a point for exact revenue details.</div>
-      <div className="relative h-[240px] w-full">
+      <div ref={containerRef} className="relative h-[240px] w-full">
         <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-full w-full overflow-visible">
           <defs>
             <linearGradient id="revenue-fill" x1="0" x2="0" y1="0" y2="1">
@@ -268,10 +282,24 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
 function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }) {
   const [hoveredSellerId, setHoveredSellerId] = useState<number | null>(null);
   const tooltipId = 'snackbar-seller-tooltip';
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const maxRevenue = Math.max(...sellers.map((seller) => seller.revenue), 1);
 
+  useEffect(() => {
+    if (hoveredSellerId == null) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setHoveredSellerId(null);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [hoveredSellerId]);
+
   return (
-    <div className="space-y-3">
+    <div ref={containerRef} className="space-y-3">
       <div className="text-xs text-text-muted">Hover, focus, or tap a row for exact seller totals.</div>
       {sellers.map((seller) => {
         const width = Math.max((seller.revenue / maxRevenue) * 100, 6);

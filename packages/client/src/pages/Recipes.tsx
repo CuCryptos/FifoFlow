@@ -542,6 +542,7 @@ function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayloa
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-lg bg-bg-page px-3 py-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">Current version</div>
+          {diff.current_row && <DiffRowLegend row={diff.current_row} />}
           {diff.current_row ? (
             <DiffRowDetail row={diff.current_row} />
           ) : (
@@ -550,6 +551,7 @@ function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayloa
         </div>
         <div className="rounded-lg bg-bg-page px-3 py-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">Compared version</div>
+          {diff.previous_row && <DiffRowLegend row={diff.previous_row} />}
           {diff.previous_row ? (
             <DiffRowDetail row={diff.previous_row} />
           ) : (
@@ -564,6 +566,18 @@ function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayloa
 function isResolutionBlockedDiff(diff: RecipeWorkflowIngredientDiffPayload): boolean {
   return [diff.current_row?.costability_status, diff.previous_row?.costability_status]
     .some((status) => status != null && status !== 'RESOLVED_FOR_COSTING');
+}
+
+function DiffRowLegend({ row }: { row: OperationalRecipeIngredientRowPayload }) {
+  const blocked = row.costability_status !== 'RESOLVED_FOR_COSTING';
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+      <WorkflowStatusPill tone={blocked ? 'red' : 'green'}>
+        {blocked ? 'Resolution blocked' : 'Resolved for costing'}
+      </WorkflowStatusPill>
+      <span className="text-text-secondary">{row.costability_status.replaceAll('_', ' ')}</span>
+    </div>
+  );
 }
 
 function DiffRowDetail({ row }: { row: OperationalRecipeIngredientRowPayload }) {

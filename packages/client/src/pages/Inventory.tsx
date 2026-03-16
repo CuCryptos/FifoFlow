@@ -1862,7 +1862,11 @@ function InventoryItemSidePanel({
           </div>
         </div>
         {groupBanner.assignments && (
-          <StickyGroupBanner tone={groupBanner.assignments.tone} message={groupBanner.assignments.message} />
+          <StickyGroupBanner
+            tone={groupBanner.assignments.tone}
+            message={groupBanner.assignments.message}
+            onDismiss={() => setGroupBanner((current) => ({ ...current, assignments: null }))}
+          />
         )}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
@@ -1942,7 +1946,11 @@ function InventoryItemSidePanel({
           </div>
         </div>
         {groupBanner.ordering && (
-          <StickyGroupBanner tone={groupBanner.ordering.tone} message={groupBanner.ordering.message} />
+          <StickyGroupBanner
+            tone={groupBanner.ordering.tone}
+            message={groupBanner.ordering.message}
+            onDismiss={() => setGroupBanner((current) => ({ ...current, ordering: null }))}
+          />
         )}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
@@ -2144,21 +2152,31 @@ function FieldStateSummary({
 function StickyGroupBanner({
   tone,
   message,
+  onDismiss,
 }: {
   tone: 'success' | 'error';
   message: string;
+  onDismiss: () => void;
 }) {
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`mt-3 rounded-xl border px-3 py-2 text-sm ${
+      className={`mt-3 flex items-start justify-between gap-3 rounded-xl border px-3 py-2 text-sm ${
         tone === 'success'
           ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
           : 'border-rose-200 bg-rose-50 text-rose-800'
       }`}
     >
-      {message}
+      <span>{message}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="rounded-full border border-current/20 px-2 py-0.5 text-xs font-medium transition hover:bg-white/40"
+        aria-label="Dismiss save status"
+      >
+        Dismiss
+      </button>
     </div>
   );
 }
