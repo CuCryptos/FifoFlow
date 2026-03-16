@@ -246,15 +246,24 @@ function WorkflowStatusBadge({
 function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkflowSummaryPayload }) {
   const { selectedVenueId } = useVenueContext();
   const [comparisonRecipeVersionId, setComparisonRecipeVersionId] = useState<number | null>(null);
+  const [diffFilter, setDiffFilter] = useState<'changed' | 'all'>('changed');
+  const [diffTypeFilter, setDiffTypeFilter] = useState<'all' | 'QUANTITY_CHANGED' | 'RESOLUTION_CHANGED' | 'ADDED' | 'REMOVED'>('all');
   const { data: detail, isLoading } = useOperationalRecipeWorkflowDetail(summary.recipe_version_id, selectedVenueId, comparisonRecipeVersionId);
   const blockers = summary.blocker_messages.length > 0 ? summary.blocker_messages : ['No active blockers. This recipe is ready to cost in the current scope.'];
 
   useEffect(() => {
     setComparisonRecipeVersionId(null);
+    setDiffFilter('changed');
+    setDiffTypeFilter('all');
   }, [summary.recipe_version_id]);
 
   const comparisonOptions = detail?.version_history.filter((version) => version.recipe_version_id !== summary.recipe_version_id) ?? [];
   const activeComparisonVersionNumber = detail?.comparison_version?.version_number ?? comparisonOptions[0]?.version_number ?? null;
+  const filteredDiffs = detail?.ingredient_diffs.filter((diff) => {
+    const matchesVisibility = diffFilter === 'all' || diff.change_type !== 'UNCHANGED';
+    const matchesType = diffTypeFilter === 'all' || diff.change_type === diffTypeFilter;
+    return matchesVisibility && matchesType;
+  }) ?? [];
 
   return (
     <div className="bg-bg-page rounded-xl border border-border p-4 space-y-4">
@@ -396,12 +405,45 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
-              Comparing current version {summary.version_number} against version {activeComparisonVersionNumber}.
+            <div className="rounded-lg border border-border bg-white px-3 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-text-secondary">
+                  Comparing current version {summary.version_number} against version {activeComparisonVersionNumber}.
+                </div>
+                <div className="flex items-center gap-2">
+                  <WorkflowChip active={diffFilter === 'changed'} onClick={() => setDiffFilter('changed')}>
+                    Changed only
+                  </WorkflowChip>
+                  <WorkflowChip active={diffFilter === 'all'} onClick={() => setDiffFilter('all')}>
+                    All rows
+                  </WorkflowChip>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {([
+                  ['all', 'All change types'],
+                  ['QUANTITY_CHANGED', 'Quantity'],
+                  ['RESOLUTION_CHANGED', 'Resolution'],
+                  ['ADDED', 'Added'],
+                  ['REMOVED', 'Removed'],
+                ] as const).map(([value, label]) => (
+                  <WorkflowChip key={value} active={diffTypeFilter === value} onClick={() => setDiffTypeFilter(value)}>
+                    {label}
+                  </WorkflowChip>
+                ))}
+              </div>
             </div>
-            {detail.ingredient_diffs.map((diff) => (
-              <IngredientDiffCard key={`${diff.comparison_key}-${diff.current_row?.recipe_item_id ?? 'none'}-${diff.previous_row?.recipe_item_id ?? 'none'}`} diff={diff} />
-            ))}
+            {!filteredDiffs.length ? (
+              <div className="rounded-lg border border-border bg-white px-3 py-3 text-sm text-text-secondary">
+                {diffTypeFilter === 'all'
+                  ? 'All compared ingredient rows are unchanged for this version pair.'
+                  : 'No ingredient rows matched the selected change-type filter for this version pair.'}
+              </div>
+            ) : (
+              filteredDiffs.map((diff) => (
+                <IngredientDiffCard key={`${diff.comparison_key}-${diff.current_row?.recipe_item_id ?? 'none'}-${diff.previous_row?.recipe_item_id ?? 'none'}`} diff={diff} />
+              ))
+            )}
           </div>
         )}
       </div>

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSalesSummary } from '../../hooks/useSales';
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
+import type { SalesSummary } from '@fifoflow/shared';
+
+const CHART_HEIGHT = 240;
+const CHART_WIDTH = 720;
+const CHART_PADDING = { top: 18, right: 18, bottom: 34, left: 48 };
 
 export function AnalyticsTab() {
   const [period, setPeriod] = useState<'week' | 'month' | '3months'>('month');
@@ -31,13 +33,8 @@ export function AnalyticsTab() {
   const filters = getDateRange();
   const { data: summary, isLoading } = useSalesSummary(filters);
 
-  if (isLoading) return <p className="text-text-muted text-center py-8">Loading analytics...</p>;
-  if (!summary) return <p className="text-text-muted text-center py-8">No data available.</p>;
-
-  const chartColors = {
-    green: '#34D399',
-    indigo: '#818CF8',
-  };
+  if (isLoading) return <p className="py-8 text-center text-text-muted">Loading analytics...</p>;
+  if (!summary) return <p className="py-8 text-center text-text-muted">No data available.</p>;
 
   return (
     <div className="space-y-6">
@@ -46,10 +43,10 @@ export function AnalyticsTab() {
           <button
             key={key}
             onClick={() => setPeriod(key)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               period === key
                 ? 'bg-accent-indigo text-white'
-                : 'bg-bg-card text-text-secondary hover:text-text-primary border border-border-primary'
+                : 'border border-border-primary bg-bg-card text-text-secondary hover:text-text-primary'
             }`}
           >
             {label}
@@ -57,86 +54,73 @@ export function AnalyticsTab() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-bg-card rounded-xl border border-border-primary p-4">
-          <p className="text-text-muted text-sm">Total Revenue</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-xl border border-border-primary bg-bg-card p-4">
+          <p className="text-sm text-text-muted">Total Revenue</p>
           <p className="text-2xl font-bold text-accent-green">${summary.total_revenue.toFixed(2)}</p>
         </div>
-        <div className="bg-bg-card rounded-xl border border-border-primary p-4">
-          <p className="text-text-muted text-sm">Items Sold</p>
+        <div className="rounded-xl border border-border-primary bg-bg-card p-4">
+          <p className="text-sm text-text-muted">Items Sold</p>
           <p className="text-2xl font-bold text-text-primary">{summary.total_items_sold}</p>
         </div>
-        <div className="bg-bg-card rounded-xl border border-border-primary p-4">
-          <p className="text-text-muted text-sm">Total Sales</p>
+        <div className="rounded-xl border border-border-primary bg-bg-card p-4">
+          <p className="text-sm text-text-muted">Total Sales</p>
           <p className="text-2xl font-bold text-text-primary">{summary.sale_count}</p>
         </div>
       </div>
 
       {summary.daily.length > 0 && (
-        <div className="bg-bg-card rounded-xl border border-border-primary p-4">
-          <h3 className="text-sm font-medium text-text-secondary mb-4">Revenue Over Time</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={summary.daily}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2A2F38" />
-              <XAxis
-                dataKey="date"
-                stroke="#6B7280"
-                fontSize={12}
-                tickFormatter={(d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-              />
-              <YAxis stroke="#6B7280" fontSize={12} tickFormatter={(v: number) => `$${v}`} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1A1F2B', border: '1px solid #2A2F38', borderRadius: '8px' }}
-                labelStyle={{ color: '#9CA3AF' }}
-                formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Revenue']}
-              />
-              <Line type="monotone" dataKey="revenue" stroke={chartColors.green} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="rounded-xl border border-border-primary bg-bg-card p-4">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-medium text-text-secondary">Revenue Over Time</h3>
+              <p className="mt-1 text-xs text-text-muted">Daily sales revenue in the selected operating window.</p>
+            </div>
+            <div className="text-right text-xs text-text-muted">
+              Peak day {formatCurrency(Math.max(...summary.daily.map((entry) => entry.revenue)))}
+            </div>
+          </div>
+          <RevenueTimelineChart daily={summary.daily} />
         </div>
       )}
 
       {summary.top_sellers.length > 0 && (
-        <div className="bg-bg-card rounded-xl border border-border-primary p-4">
-          <h3 className="text-sm font-medium text-text-secondary mb-4">Top Sellers by Revenue</h3>
-          <ResponsiveContainer width="100%" height={Math.max(200, summary.top_sellers.length * 40)}>
-            <BarChart data={summary.top_sellers} layout="vertical" margin={{ left: 100 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2A2F38" />
-              <XAxis type="number" stroke="#6B7280" fontSize={12} tickFormatter={(v: number) => `$${v}`} />
-              <YAxis type="category" dataKey="item_name" stroke="#6B7280" fontSize={12} width={90} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1A1F2B', border: '1px solid #2A2F38', borderRadius: '8px' }}
-                labelStyle={{ color: '#9CA3AF' }}
-                formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Revenue']}
-              />
-              <Bar dataKey="revenue" fill={chartColors.indigo} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="rounded-xl border border-border-primary bg-bg-card p-4">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-medium text-text-secondary">Top Sellers by Revenue</h3>
+              <p className="mt-1 text-xs text-text-muted">Highest revenue items in the current sales window.</p>
+            </div>
+            <div className="text-right text-xs text-text-muted">
+              {summary.top_sellers.length} ranked item{summary.top_sellers.length === 1 ? '' : 's'}
+            </div>
+          </div>
+          <TopSellerBarChart sellers={summary.top_sellers} />
         </div>
       )}
 
       {summary.profit_margins.length > 0 && (
-        <div className="bg-bg-card rounded-xl border border-border-primary p-4">
-          <h3 className="text-sm font-medium text-text-secondary mb-4">Profit Margins</h3>
+        <div className="rounded-xl border border-border-primary bg-bg-card p-4">
+          <h3 className="mb-4 text-sm font-medium text-text-secondary">Profit Margins</h3>
           <div className="overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-primary">
-                  <th className="text-left px-4 py-2 text-xs font-medium text-text-muted uppercase">Item</th>
-                  <th className="text-right px-4 py-2 text-xs font-medium text-text-muted uppercase">Sell Price</th>
-                  <th className="text-right px-4 py-2 text-xs font-medium text-text-muted uppercase">Cost</th>
-                  <th className="text-right px-4 py-2 text-xs font-medium text-text-muted uppercase">Margin</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium uppercase text-text-muted">Item</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium uppercase text-text-muted">Sell Price</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium uppercase text-text-muted">Cost</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium uppercase text-text-muted">Margin</th>
                 </tr>
               </thead>
               <tbody>
                 {summary.profit_margins.map((pm) => (
                   <tr key={pm.item_id} className="border-b border-border-primary last:border-0">
                     <td className="px-4 py-2 text-sm text-text-primary">{pm.item_name}</td>
-                    <td className="px-4 py-2 text-sm text-text-secondary text-right">${pm.sale_price.toFixed(2)}</td>
-                    <td className="px-4 py-2 text-sm text-text-secondary text-right">
+                    <td className="px-4 py-2 text-right text-sm text-text-secondary">${pm.sale_price.toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right text-sm text-text-secondary">
                       {pm.cost_price != null ? `$${pm.cost_price.toFixed(2)}` : '\u2014'}
                     </td>
-                    <td className={`px-4 py-2 text-sm font-medium text-right ${
+                    <td className={`px-4 py-2 text-right text-sm font-medium ${
                       pm.margin != null && pm.margin > 0 ? 'text-accent-green' : 'text-text-muted'
                     }`}>
                       {pm.margin != null ? `${pm.margin}%` : '\u2014'}
@@ -150,4 +134,132 @@ export function AnalyticsTab() {
       )}
     </div>
   );
+}
+
+function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
+  const chart = useMemo(() => {
+    const revenueMax = Math.max(...daily.map((entry) => entry.revenue), 1);
+    const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+    const innerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+    const step = daily.length > 1 ? innerWidth / (daily.length - 1) : 0;
+
+    const points = daily.map((entry, index) => {
+      const x = CHART_PADDING.left + step * index;
+      const y = CHART_PADDING.top + innerHeight - (entry.revenue / revenueMax) * innerHeight;
+      return { ...entry, x, y };
+    });
+
+    const polyline = points.map((point) => `${point.x},${point.y}`).join(' ');
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
+      y: CHART_PADDING.top + innerHeight - innerHeight * ratio,
+      value: revenueMax * ratio,
+    }));
+
+    return { innerHeight, points, polyline, ticks };
+  }, [daily]);
+
+  return (
+    <div className="space-y-3">
+      <div className="h-[240px] w-full">
+        <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-full w-full overflow-visible">
+          <defs>
+            <linearGradient id="revenue-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#34D399" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#34D399" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {chart.ticks.map((tick) => (
+            <g key={tick.y}>
+              <line
+                x1={CHART_PADDING.left}
+                x2={CHART_WIDTH - CHART_PADDING.right}
+                y1={tick.y}
+                y2={tick.y}
+                stroke="#2A2F38"
+                strokeDasharray="4 6"
+              />
+              <text x={CHART_PADDING.left - 10} y={tick.y + 4} textAnchor="end" fontSize="11" fill="#6B7280">
+                {formatCurrency(tick.value)}
+              </text>
+            </g>
+          ))}
+
+          {chart.points.length > 1 && (
+            <path
+              d={`M ${chart.points.map((point) => `${point.x} ${point.y}`).join(' L ')} L ${chart.points[chart.points.length - 1].x} ${CHART_HEIGHT - CHART_PADDING.bottom} L ${chart.points[0].x} ${CHART_HEIGHT - CHART_PADDING.bottom} Z`}
+              fill="url(#revenue-fill)"
+            />
+          )}
+
+          <polyline
+            fill="none"
+            stroke="#34D399"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            points={chart.polyline}
+          />
+
+          {chart.points.map((point) => (
+            <g key={point.date}>
+              <circle cx={point.x} cy={point.y} r="4" fill="#0F172A" />
+              <circle cx={point.x} cy={point.y} r="2.5" fill="#34D399" />
+            </g>
+          ))}
+        </svg>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs text-text-muted sm:grid-cols-4">
+        {daily.map((entry) => (
+          <div key={entry.date} className="rounded-lg border border-border-primary bg-bg-page px-3 py-2">
+            <div>{formatChartDate(entry.date)}</div>
+            <div className="mt-1 font-mono text-text-primary">{formatCurrency(entry.revenue)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }) {
+  const maxRevenue = Math.max(...sellers.map((seller) => seller.revenue), 1);
+
+  return (
+    <div className="space-y-3">
+      {sellers.map((seller) => {
+        const width = Math.max((seller.revenue / maxRevenue) * 100, 6);
+        return (
+          <div key={seller.item_id} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-text-primary">{seller.item_name}</div>
+                <div className="text-xs text-text-muted">{seller.quantity_sold} sold</div>
+              </div>
+              <div className="text-sm font-mono text-text-primary">{formatCurrency(seller.revenue)}</div>
+            </div>
+            <div className="h-3 rounded-full bg-bg-page">
+              <div
+                className="h-3 rounded-full bg-accent-indigo transition-[width] duration-300 ease-out"
+                style={{ width: `${width}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatChartDate(value: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

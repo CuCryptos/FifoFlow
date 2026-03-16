@@ -1556,6 +1556,30 @@ function InventoryItemSidePanel({
     qty_per_unit: string;
     order_unit_price: string;
   };
+  type DraftField = keyof InventoryItemPanelDraft;
+  type FieldSaveState = 'idle' | 'saving' | 'saved' | 'rolled_back';
+  const emptyFieldStates = (): Record<DraftField, FieldSaveState> => ({
+    category: 'idle',
+    vendor_id: 'idle',
+    venue_id: 'idle',
+    storage_area_id: 'idle',
+    reorder_level: 'idle',
+    reorder_qty: 'idle',
+    order_unit: 'idle',
+    qty_per_unit: 'idle',
+    order_unit_price: 'idle',
+  });
+  const emptySavedAt = (): Record<DraftField, number | null> => ({
+    category: null,
+    vendor_id: null,
+    venue_id: null,
+    storage_area_id: null,
+    reorder_level: null,
+    reorder_qty: null,
+    order_unit: null,
+    qty_per_unit: null,
+    order_unit_price: null,
+  });
 
   const updateItem = useUpdateItem();
   const { toast } = useToast();
@@ -1570,6 +1594,8 @@ function InventoryItemSidePanel({
     qty_per_unit: item.qty_per_unit == null ? '' : String(item.qty_per_unit),
     order_unit_price: item.order_unit_price == null ? '' : String(item.order_unit_price),
   });
+  const [fieldStates, setFieldStates] = useState<Record<DraftField, FieldSaveState>>(emptyFieldStates);
+  const [fieldSavedAt, setFieldSavedAt] = useState<Record<DraftField, number | null>>(emptySavedAt);
 
   useEffect(() => {
     setDraft({
@@ -1583,6 +1609,8 @@ function InventoryItemSidePanel({
       qty_per_unit: item.qty_per_unit == null ? '' : String(item.qty_per_unit),
       order_unit_price: item.order_unit_price == null ? '' : String(item.order_unit_price),
     });
+    setFieldStates(emptyFieldStates());
+    setFieldSavedAt(emptySavedAt());
   }, [item]);
 
   const vendorName = vendors.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Unassigned';
@@ -1590,7 +1618,43 @@ function InventoryItemSidePanel({
   const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
   const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
   const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
+  const changedFields = (Object.entries(draft) as Array<[DraftField, string]>)
+    .filter(([field, value]) => {
+      switch (field) {
+        case 'category':
+          return value !== item.category;
+        case 'vendor_id':
+          return value !== (item.vendor_id == null ? '' : String(item.vendor_id));
+        case 'venue_id':
+          return value !== (item.venue_id == null ? '' : String(item.venue_id));
+        case 'storage_area_id':
+          return value !== (item.storage_area_id == null ? '' : String(item.storage_area_id));
+        case 'reorder_level':
+          return value !== (item.reorder_level == null ? '' : String(item.reorder_level));
+        case 'reorder_qty':
+          return value !== (item.reorder_qty == null ? '' : String(item.reorder_qty));
+        case 'order_unit':
+          return value !== (item.order_unit ?? '');
+        case 'qty_per_unit':
+          return value !== (item.qty_per_unit == null ? '' : String(item.qty_per_unit));
+        case 'order_unit_price':
+          return value !== (item.order_unit_price == null ? '' : String(item.order_unit_price));
+        default:
+          return false;
+      }
+    })
+    .map(([field]) => field);
   const saveQuickEdits = () => {
+    if (changedFields.length === 0) {
+      return;
+    }
+    setFieldStates((current) => {
+      const next = { ...current };
+      changedFields.forEach((field) => {
+        next[field] = 'saving';
+      });
+      return next;
+    });
     updateItem.mutate(
       {
         id: item.id,
@@ -1607,8 +1671,56 @@ function InventoryItemSidePanel({
         },
       },
       {
-        onSuccess: () => toast('Inventory item updated', 'success'),
-        onError: (error) => toast(error.message, 'error'),
+        onSuccess: () => {
+          const savedAt = Date.now();
+          setFieldStates((current) => {
+            const next = { ...current };
+            changedFields.forEach((field) => {
+              next[field] = 'saved';
+            });
+            return next;
+          });
+          setFieldSavedAt((current) => {
+            const next = { ...current };
+            changedFields.forEach((field) => {
+              next[field] = savedAt;
+            });
+            return next;
+          });
+          window.setTimeout(() => {
+            setFieldStates((current) => {
+              const next = { ...current };
+              changedFields.forEach((field) => {
+                if (next[field] === 'saved') {
+                  next[field] = 'idle';
+                }
+              });
+              return next;
+            });
+          }, 1800);
+          toast('Inventory item updated', 'success');
+        },
+        onError: (error) => {
+          setFieldStates((current) => {
+            const next = { ...current };
+            changedFields.forEach((field) => {
+              next[field] = 'rolled_back';
+            });
+            return next;
+          });
+          window.setTimeout(() => {
+            setFieldStates((current) => {
+              const next = { ...current };
+              changedFields.forEach((field) => {
+                if (next[field] === 'rolled_back') {
+                  next[field] = 'idle';
+                }
+              });
+              return next;
+            });
+          }, 2200);
+          toast(error.message, 'error');
+        },
       },
     );
   };
@@ -1627,14 +1739,17 @@ function InventoryItemSidePanel({
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Quick actions</div>
-          <button
-            type="button"
-            onClick={saveQuickEdits}
-            disabled={updateItem.isPending}
-            className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            {updateItem.isPending ? 'Saving...' : 'Save edits'}
-          </button>
+          <div className="flex items-center gap-3">
+            <FieldStateSummary changedCount={changedFields.length} fieldStates={fieldStates} />
+            <button
+              type="button"
+              onClick={saveQuickEdits}
+              disabled={updateItem.isPending || changedFields.length === 0}
+              className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {updateItem.isPending ? 'Saving...' : changedFields.length === 0 ? 'No changes' : 'Save edits'}
+            </button>
+          </div>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
@@ -1642,51 +1757,55 @@ function InventoryItemSidePanel({
             <select
               value={draft.category}
               onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as Item['category'] }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.category)}`}
             >
               {CATEGORIES.map((categoryOption) => (
                 <option key={categoryOption} value={categoryOption}>{categoryOption}</option>
               ))}
             </select>
+            <FieldStateHint state={fieldStates.category} dirty={changedFields.includes('category')} savedAt={fieldSavedAt.category} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Vendor</span>
             <select
               value={draft.vendor_id}
               onChange={(event) => setDraft((current) => ({ ...current, vendor_id: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.vendor_id)}`}
             >
               <option value="">Unassigned</option>
               {vendors.map((vendor) => (
                 <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
               ))}
             </select>
+            <FieldStateHint state={fieldStates.vendor_id} dirty={changedFields.includes('vendor_id')} savedAt={fieldSavedAt.vendor_id} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Venue</span>
             <select
               value={draft.venue_id}
               onChange={(event) => setDraft((current) => ({ ...current, venue_id: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.venue_id)}`}
             >
               <option value="">Unassigned</option>
               {venues.map((venue) => (
                 <option key={venue.id} value={venue.id}>{venue.name}</option>
               ))}
             </select>
+            <FieldStateHint state={fieldStates.venue_id} dirty={changedFields.includes('venue_id')} savedAt={fieldSavedAt.venue_id} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Storage area</span>
             <select
               value={draft.storage_area_id}
               onChange={(event) => setDraft((current) => ({ ...current, storage_area_id: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.storage_area_id)}`}
             >
               <option value="">Unassigned</option>
               {areas.map((area) => (
                 <option key={area.id} value={area.id}>{area.name}</option>
               ))}
             </select>
+            <FieldStateHint state={fieldStates.storage_area_id} dirty={changedFields.includes('storage_area_id')} savedAt={fieldSavedAt.storage_area_id} />
           </label>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1698,8 +1817,9 @@ function InventoryItemSidePanel({
               step="any"
               value={draft.reorder_level}
               onChange={(event) => setDraft((current) => ({ ...current, reorder_level: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_level)}`}
             />
+            <FieldStateHint state={fieldStates.reorder_level} dirty={changedFields.includes('reorder_level')} savedAt={fieldSavedAt.reorder_level} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder qty</span>
@@ -1709,21 +1829,23 @@ function InventoryItemSidePanel({
               step="any"
               value={draft.reorder_qty}
               onChange={(event) => setDraft((current) => ({ ...current, reorder_qty: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_qty)}`}
             />
+            <FieldStateHint state={fieldStates.reorder_qty} dirty={changedFields.includes('reorder_qty')} savedAt={fieldSavedAt.reorder_qty} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Order unit</span>
             <select
               value={draft.order_unit}
               onChange={(event) => setDraft((current) => ({ ...current, order_unit: event.target.value as '' | Unit }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit)}`}
             >
               <option value="">Missing</option>
               {UNITS.map((unitOption) => (
                 <option key={unitOption} value={unitOption}>{unitOption}</option>
               ))}
             </select>
+            <FieldStateHint state={fieldStates.order_unit} dirty={changedFields.includes('order_unit')} savedAt={fieldSavedAt.order_unit} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pack qty</span>
@@ -1733,8 +1855,9 @@ function InventoryItemSidePanel({
               step="any"
               value={draft.qty_per_unit}
               onChange={(event) => setDraft((current) => ({ ...current, qty_per_unit: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.qty_per_unit)}`}
             />
+            <FieldStateHint state={fieldStates.qty_per_unit} dirty={changedFields.includes('qty_per_unit')} savedAt={fieldSavedAt.qty_per_unit} />
           </label>
           <label className="space-y-1 text-sm md:col-span-2">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Case price</span>
@@ -1744,8 +1867,9 @@ function InventoryItemSidePanel({
               step="0.01"
               value={draft.order_unit_price}
               onChange={(event) => setDraft((current) => ({ ...current, order_unit_price: event.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit_price)}`}
             />
+            <FieldStateHint state={fieldStates.order_unit_price} dirty={changedFields.includes('order_unit_price')} savedAt={fieldSavedAt.order_unit_price} />
           </label>
         </div>
       </div>
@@ -1803,5 +1927,78 @@ function DetailTile({ label, value }: { label: string; value: string | number | 
       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-1 text-sm font-medium text-slate-900">{value == null ? '—' : String(value)}</div>
     </div>
+  );
+}
+
+function fieldClassName(state: 'idle' | 'saving' | 'saved' | 'rolled_back'): string {
+  if (state === 'saving') return 'border-amber-300 bg-amber-50';
+  if (state === 'saved') return 'border-emerald-300 bg-emerald-50';
+  if (state === 'rolled_back') return 'border-rose-300 bg-rose-50';
+  return 'border-slate-200 bg-slate-50';
+}
+
+function FieldStateHint({
+  state,
+  dirty,
+  savedAt,
+}: {
+  state: 'idle' | 'saving' | 'saved' | 'rolled_back';
+  dirty: boolean;
+  savedAt: number | null;
+}) {
+  if (state === 'idle' && !dirty && savedAt == null) return null;
+  const text = state === 'saving'
+    ? 'Saving...'
+    : state === 'saved'
+      ? 'Saved'
+      : state === 'rolled_back'
+        ? 'Rolled back'
+        : dirty
+          ? 'Unsaved change'
+          : `Last saved ${formatFieldSavedAt(savedAt)}`;
+  const className = state === 'saving'
+    ? 'text-amber-700'
+    : state === 'saved'
+      ? 'text-emerald-700'
+      : state === 'rolled_back'
+        ? 'text-rose-700'
+        : dirty
+          ? 'text-slate-600'
+          : 'text-slate-500';
+
+  return <div className={`text-[11px] font-medium ${className}`}>{text}</div>;
+}
+
+function formatFieldSavedAt(savedAt: number | null): string {
+  if (savedAt == null) {
+    return 'recently';
+  }
+  return new Date(savedAt).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function FieldStateSummary({
+  changedCount,
+  fieldStates,
+}: {
+  changedCount: number;
+  fieldStates: Record<string, 'idle' | 'saving' | 'saved' | 'rolled_back'>;
+}) {
+  const states = Object.values(fieldStates);
+  if (states.includes('saving')) {
+    return <span className="text-xs font-medium text-amber-700">Saving updated fields...</span>;
+  }
+  if (states.includes('rolled_back')) {
+    return <span className="text-xs font-medium text-rose-700">Some fields rolled back after a failed save.</span>;
+  }
+  if (states.includes('saved')) {
+    return <span className="text-xs font-medium text-emerald-700">Updated fields saved.</span>;
+  }
+  return (
+    <span className="text-xs text-slate-500">
+      {changedCount > 0 ? `${changedCount} unsaved field${changedCount === 1 ? '' : 's'}` : 'No unsaved changes'}
+    </span>
   );
 }
