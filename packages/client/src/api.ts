@@ -292,6 +292,16 @@ export interface OperationalRecipeIngredientRowPayload {
   vendor_cost_lineage: Record<string, unknown> | null;
 }
 
+export interface RecipeWorkflowIngredientDiffPayload {
+  comparison_key: string;
+  change_type: 'ADDED' | 'REMOVED' | 'QUANTITY_CHANGED' | 'RESOLUTION_CHANGED' | 'UNCHANGED';
+  current_row: OperationalRecipeIngredientRowPayload | null;
+  previous_row: OperationalRecipeIngredientRowPayload | null;
+  summary: string;
+  quantity_changed: boolean;
+  resolution_changed: boolean;
+}
+
 export interface RecipeWorkflowDetailPayload {
   generated_at: string;
   summary: OperationalRecipeWorkflowSummaryPayload;
@@ -304,6 +314,12 @@ export interface RecipeWorkflowDetailPayload {
     recipe_version_id: number | null;
     version_number: number | null;
   }>;
+  comparison_version: (OperationalRecipeWorkflowSummaryPayload & {
+    status: string;
+    created_at: string | null;
+    updated_at: string | null;
+  }) | null;
+  ingredient_diffs: RecipeWorkflowIngredientDiffPayload[];
   ingredient_rows: OperationalRecipeIngredientRowPayload[];
 }
 

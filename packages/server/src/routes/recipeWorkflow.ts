@@ -99,30 +99,31 @@ export function createRecipeWorkflowRoutes(db: Database.Database) {
       const summary = buildOperationalRecipeSummary(recipe, bridged, latestSnapshot, versionNumber);
       const versionHistory = await buildRecipeVersionHistory(db, recipe.recipe_id, context, operationalRepository, inventoryRepository, vendorRepository);
       const snapshotHistory = getRecipeSnapshotHistory(db, recipe.recipe_id);
+      const ingredientRows = bridged.source_rows.map(mapIngredientWorkflowRow);
+      const comparisonVersion = versionHistory.find((candidate) => candidate.recipe_version_id !== summary.recipe_version_id) ?? null;
+      const comparisonRecipe = comparisonVersion
+        ? await getPromotedRecipeVersionRecord(db, comparisonVersion.recipe_version_id)
+        : null;
+      const comparisonBridged = comparisonRecipe
+        ? await resolvePromotedRecipeForCosting(comparisonRecipe, context, {
+          operationalRepository,
+          inventoryRepository,
+          vendorRepository,
+        })
+        : null;
+      const ingredientDiffs = buildIngredientWorkflowDiffs(
+        ingredientRows,
+        comparisonBridged?.source_rows.map(mapIngredientWorkflowRow) ?? [],
+      );
 
       res.json({
         generated_at: context.now,
         summary,
         version_history: versionHistory,
         snapshot_history: snapshotHistory,
-        ingredient_rows: bridged.source_rows.map((row) => ({
-          recipe_item_id: row.recipe_item_id,
-          line_index: row.line_index,
-          raw_ingredient_text: row.raw_ingredient_text,
-          canonical_ingredient_id: row.canonical_ingredient_id,
-          canonical_ingredient_name: row.canonical_ingredient_name,
-          inventory_item_id: row.inventory_item_id,
-          inventory_item_name: row.inventory_item_name,
-          quantity: row.quantity,
-          unit: row.unit,
-          base_unit: row.base_unit,
-          preparation_note: row.preparation_note,
-          costability_status: row.costability_status,
-          resolution_explanation: row.resolution_explanation,
-          inventory_mapping_resolution: row.inventory_mapping_resolution,
-          vendor_mapping_resolution: row.vendor_mapping_resolution,
-          vendor_cost_lineage: row.vendor_cost_lineage,
-        })),
+        comparison_version: comparisonVersion,
+        ingredient_diffs: ingredientDiffs,
+        ingredient_rows: ingredientRows,
       });
     } catch (error) {
       next(error);
@@ -184,6 +185,40 @@ interface RecipeVersionHistoryEntry extends OperationalRecipeSummary {
 interface RecipeSnapshotHistoryEntry extends WorkflowSnapshotSummary {
   recipe_version_id: number | null;
   version_number: number | null;
+}
+
+interface IngredientWorkflowRow {
+  recipe_item_id: number | string;
+  line_index: number | null;
+  raw_ingredient_text: string;
+  canonical_ingredient_id: number | string | null;
+  canonical_ingredient_name: string | null;
+  inventory_item_id: number | null;
+  inventory_item_name: string;
+  quantity: number;
+  unit: string;
+  base_unit: string;
+  preparation_note: string | null;
+  costability_status:
+    | 'RESOLVED_FOR_COSTING'
+    | 'MISSING_CANONICAL_INGREDIENT'
+    | 'MISSING_SCOPED_INVENTORY_MAPPING'
+    | 'MISSING_SCOPED_VENDOR_MAPPING'
+    | 'MISSING_VENDOR_COST_LINEAGE';
+  resolution_explanation: string;
+  inventory_mapping_resolution: Record<string, unknown> | null;
+  vendor_mapping_resolution: Record<string, unknown> | null;
+  vendor_cost_lineage: Record<string, unknown> | null;
+}
+
+interface IngredientWorkflowDiff {
+  comparison_key: string;
+  change_type: 'ADDED' | 'REMOVED' | 'QUANTITY_CHANGED' | 'RESOLUTION_CHANGED' | 'UNCHANGED';
+  current_row: IngredientWorkflowRow | null;
+  previous_row: IngredientWorkflowRow | null;
+  summary: string;
+  quantity_changed: boolean;
+  resolution_changed: boolean;
 }
 
 function getRecipeIdForVersion(db: Database.Database, recipeVersionId: number): number | null {
@@ -286,6 +321,250 @@ async function buildRecipeVersionHistory(
   }
 
   return history;
+}
+
+async function getPromotedRecipeVersionRecord(
+  db: Database.Database,
+  recipeVersionId: number,
+): Promise<Awaited<ReturnType<SQLiteOperationalRecipeCostReadRepository['listPromotedRecipes']>>[number] | null> {
+  const row = db.prepare(
+    `
+      SELECT
+        rv.id AS recipe_version_id,
+        rv.recipe_id,
+        rv.yield_quantity AS yield_qty,
+        rv.yield_unit,
+        rv.source_builder_job_id,
+        rv.source_builder_draft_recipe_id,
+        rv.source_template_id,
+        rv.source_template_version_id,
+        r.name AS recipe_name,
+        r.type AS recipe_type
+      FROM recipe_versions rv
+      INNER JOIN recipes r ON r.id = rv.recipe_id
+      WHERE rv.id = ?
+      LIMIT 1
+    `,
+  ).get(recipeVersionId) as {
+    recipe_version_id: number;
+    recipe_id: number;
+    yield_qty: number | null;
+    yield_unit: string | null;
+    source_builder_job_id: number | null;
+    source_builder_draft_recipe_id: number | null;
+    source_template_id: number | null;
+    source_template_version_id: number | null;
+    recipe_name: string;
+    recipe_type: RecipeType;
+  } | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    recipe_id: row.recipe_id,
+    recipe_version_id: row.recipe_version_id,
+    recipe_name: row.recipe_name,
+    recipe_type: row.recipe_type,
+    yield_qty: row.yield_qty,
+    yield_unit: row.yield_unit,
+    serving_count: null,
+    source_builder_job_id: row.source_builder_job_id,
+    source_builder_draft_recipe_id: row.source_builder_draft_recipe_id,
+    source_template_id: row.source_template_id,
+    source_template_version_id: row.source_template_version_id,
+  };
+}
+
+function mapIngredientWorkflowRow(
+  row: Awaited<ReturnType<typeof resolvePromotedRecipeForCosting>>['source_rows'][number],
+): IngredientWorkflowRow {
+  return {
+    recipe_item_id: row.recipe_item_id,
+    line_index: row.line_index,
+    raw_ingredient_text: row.raw_ingredient_text,
+    canonical_ingredient_id: row.canonical_ingredient_id,
+    canonical_ingredient_name: row.canonical_ingredient_name,
+    inventory_item_id: row.inventory_item_id,
+    inventory_item_name: row.inventory_item_name,
+    quantity: row.quantity,
+    unit: row.unit,
+    base_unit: row.base_unit,
+    preparation_note: row.preparation_note,
+    costability_status: row.costability_status,
+    resolution_explanation: row.resolution_explanation,
+    inventory_mapping_resolution: row.inventory_mapping_resolution as unknown as Record<string, unknown> | null,
+    vendor_mapping_resolution: row.vendor_mapping_resolution as unknown as Record<string, unknown> | null,
+    vendor_cost_lineage: row.vendor_cost_lineage as unknown as Record<string, unknown> | null,
+  };
+}
+
+function buildIngredientWorkflowDiffs(
+  currentRows: IngredientWorkflowRow[],
+  previousRows: IngredientWorkflowRow[],
+): IngredientWorkflowDiff[] {
+  const currentBuckets = groupIngredientRowsForDiff(currentRows);
+  const previousBuckets = groupIngredientRowsForDiff(previousRows);
+  const keys = Array.from(new Set([...currentBuckets.keys(), ...previousBuckets.keys()]))
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+  const diffs: IngredientWorkflowDiff[] = [];
+
+  for (const key of keys) {
+    const currentBucket = currentBuckets.get(key) ?? [];
+    const previousBucket = previousBuckets.get(key) ?? [];
+    const pairCount = Math.max(currentBucket.length, previousBucket.length);
+
+    for (let index = 0; index < pairCount; index += 1) {
+      diffs.push(buildIngredientWorkflowDiff(
+        key,
+        currentBucket[index] ?? null,
+        previousBucket[index] ?? null,
+      ));
+    }
+  }
+
+  return diffs.sort((left, right) => {
+    const rank = ingredientChangeRank(left.change_type) - ingredientChangeRank(right.change_type);
+    if (rank !== 0) {
+      return rank;
+    }
+    const leftLine = left.current_row?.line_index ?? left.previous_row?.line_index ?? Number.MAX_SAFE_INTEGER;
+    const rightLine = right.current_row?.line_index ?? right.previous_row?.line_index ?? Number.MAX_SAFE_INTEGER;
+    if (leftLine !== rightLine) {
+      return leftLine - rightLine;
+    }
+    return left.comparison_key.localeCompare(right.comparison_key, undefined, { sensitivity: 'base' });
+  });
+}
+
+function groupIngredientRowsForDiff(rows: IngredientWorkflowRow[]): Map<string, IngredientWorkflowRow[]> {
+  const buckets = new Map<string, IngredientWorkflowRow[]>();
+
+  for (const row of rows) {
+    const key = buildIngredientComparisonKey(row);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(row);
+    buckets.set(key, bucket);
+  }
+
+  for (const bucket of buckets.values()) {
+    bucket.sort((left, right) => {
+      const leftLine = left.line_index ?? Number.MAX_SAFE_INTEGER;
+      const rightLine = right.line_index ?? Number.MAX_SAFE_INTEGER;
+      if (leftLine !== rightLine) {
+        return leftLine - rightLine;
+      }
+      return left.raw_ingredient_text.localeCompare(right.raw_ingredient_text, undefined, { sensitivity: 'base' });
+    });
+  }
+
+  return buckets;
+}
+
+function buildIngredientComparisonKey(row: IngredientWorkflowRow): string {
+  if (row.canonical_ingredient_id != null) {
+    return `canonical:${row.canonical_ingredient_id}`;
+  }
+  return `raw:${row.raw_ingredient_text.trim().toLowerCase()}`;
+}
+
+function buildIngredientWorkflowDiff(
+  comparisonKey: string,
+  currentRow: IngredientWorkflowRow | null,
+  previousRow: IngredientWorkflowRow | null,
+): IngredientWorkflowDiff {
+  if (currentRow && !previousRow) {
+    return {
+      comparison_key: comparisonKey,
+      change_type: 'ADDED',
+      current_row: currentRow,
+      previous_row: null,
+      summary: 'This ingredient row is present in the current promoted version but was not present in the comparison version.',
+      quantity_changed: false,
+      resolution_changed: false,
+    };
+  }
+
+  if (!currentRow && previousRow) {
+    return {
+      comparison_key: comparisonKey,
+      change_type: 'REMOVED',
+      current_row: null,
+      previous_row: previousRow,
+      summary: 'This ingredient row existed in the comparison version but is not present in the current promoted version.',
+      quantity_changed: false,
+      resolution_changed: false,
+    };
+  }
+
+  const quantityChanged = currentRow!.quantity !== previousRow!.quantity
+    || currentRow!.unit !== previousRow!.unit
+    || currentRow!.base_unit !== previousRow!.base_unit;
+  const resolutionChanged = currentRow!.costability_status !== previousRow!.costability_status
+    || currentRow!.inventory_item_id !== previousRow!.inventory_item_id
+    || getVendorItemId(currentRow!) !== getVendorItemId(previousRow!)
+    || getNormalizedCost(currentRow!) !== getNormalizedCost(previousRow!);
+
+  if (quantityChanged) {
+    return {
+      comparison_key: comparisonKey,
+      change_type: 'QUANTITY_CHANGED',
+      current_row: currentRow,
+      previous_row: previousRow,
+      summary: `Quantity changed from ${previousRow!.quantity} ${previousRow!.unit} to ${currentRow!.quantity} ${currentRow!.unit}.`,
+      quantity_changed: true,
+      resolution_changed: resolutionChanged,
+    };
+  }
+
+  if (resolutionChanged) {
+    return {
+      comparison_key: comparisonKey,
+      change_type: 'RESOLUTION_CHANGED',
+      current_row: currentRow,
+      previous_row: previousRow,
+      summary: 'Fulfillment or vendor cost lineage changed between promoted versions.',
+      quantity_changed: false,
+      resolution_changed: true,
+    };
+  }
+
+  return {
+    comparison_key: comparisonKey,
+    change_type: 'UNCHANGED',
+    current_row: currentRow,
+    previous_row: previousRow,
+    summary: 'Ingredient quantity and fulfillment path match the comparison version.',
+    quantity_changed: false,
+    resolution_changed: false,
+  };
+}
+
+function ingredientChangeRank(changeType: IngredientWorkflowDiff['change_type']): number {
+  switch (changeType) {
+    case 'ADDED':
+      return 0;
+    case 'REMOVED':
+      return 1;
+    case 'QUANTITY_CHANGED':
+      return 2;
+    case 'RESOLUTION_CHANGED':
+      return 3;
+    case 'UNCHANGED':
+    default:
+      return 4;
+  }
+}
+
+function getVendorItemId(row: IngredientWorkflowRow): number | null {
+  const value = row.vendor_mapping_resolution?.vendor_item_id;
+  return typeof value === 'number' ? value : null;
+}
+
+function getNormalizedCost(row: IngredientWorkflowRow): number | null {
+  const value = row.vendor_cost_lineage?.normalized_unit_cost;
+  return typeof value === 'number' ? value : null;
 }
 
 function getRecipeSnapshotHistory(db: Database.Database, recipeId: number): RecipeSnapshotHistoryEntry[] {

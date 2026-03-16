@@ -87,7 +87,7 @@ describe('Recipe workflow routes', () => {
     `).run();
     db.prepare(`
       INSERT INTO recipe_ingredients (recipe_version_id, line_index, raw_ingredient_text, canonical_ingredient_id, inventory_item_id, quantity_normalized, unit_normalized)
-      VALUES (3, 1, '8 oz ahi tuna archived', 1, NULL, 0.8, 'lb')
+      VALUES (3, 1, '10 oz ahi tuna archived', 1, NULL, 1, 'lb')
     `).run();
     await recipeCostRepository.upsertSnapshot({
       id: 'snapshot-2',
@@ -132,6 +132,9 @@ describe('Recipe workflow routes', () => {
     expect(res.body.version_history[0].version_number).toBe(3);
     expect(res.body.snapshot_history).toHaveLength(2);
     expect(res.body.snapshot_history.map((snapshot: any) => snapshot.version_number)).toEqual([3, 2]);
+    expect(res.body.comparison_version.version_number).toBe(2);
+    expect(res.body.ingredient_diffs).toHaveLength(1);
+    expect(res.body.ingredient_diffs[0].change_type).toBe('QUANTITY_CHANGED');
   });
 });
 

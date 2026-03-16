@@ -1541,11 +1541,73 @@ function InventoryItemSidePanel({
   vendors: Array<{ id: number; name: string }>;
   venues: Array<{ id: number; name: string }>;
 }) {
+  type InventoryItemPanelDraft = {
+    category: Item['category'];
+    vendor_id: string;
+    venue_id: string;
+    storage_area_id: string;
+    reorder_level: string;
+    reorder_qty: string;
+    order_unit: '' | Unit;
+    qty_per_unit: string;
+    order_unit_price: string;
+  };
+
+  const updateItem = useUpdateItem();
+  const { toast } = useToast();
+  const [draft, setDraft] = useState<InventoryItemPanelDraft>({
+    category: item.category,
+    vendor_id: item.vendor_id == null ? '' : String(item.vendor_id),
+    venue_id: item.venue_id == null ? '' : String(item.venue_id),
+    storage_area_id: item.storage_area_id == null ? '' : String(item.storage_area_id),
+    reorder_level: item.reorder_level == null ? '' : String(item.reorder_level),
+    reorder_qty: item.reorder_qty == null ? '' : String(item.reorder_qty),
+    order_unit: item.order_unit ?? '',
+    qty_per_unit: item.qty_per_unit == null ? '' : String(item.qty_per_unit),
+    order_unit_price: item.order_unit_price == null ? '' : String(item.order_unit_price),
+  });
+
+  useEffect(() => {
+    setDraft({
+      category: item.category,
+      vendor_id: item.vendor_id == null ? '' : String(item.vendor_id),
+      venue_id: item.venue_id == null ? '' : String(item.venue_id),
+      storage_area_id: item.storage_area_id == null ? '' : String(item.storage_area_id),
+      reorder_level: item.reorder_level == null ? '' : String(item.reorder_level),
+      reorder_qty: item.reorder_qty == null ? '' : String(item.reorder_qty),
+      order_unit: item.order_unit ?? '',
+      qty_per_unit: item.qty_per_unit == null ? '' : String(item.qty_per_unit),
+      order_unit_price: item.order_unit_price == null ? '' : String(item.order_unit_price),
+    });
+  }, [item]);
+
   const vendorName = vendors.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Unassigned';
   const venueName = venues.find((venue) => venue.id === item.venue_id)?.name ?? 'Unassigned';
   const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
   const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
   const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
+  const saveQuickEdits = () => {
+    updateItem.mutate(
+      {
+        id: item.id,
+        data: {
+          category: draft.category as typeof item.category,
+          vendor_id: draft.vendor_id ? Number(draft.vendor_id) : null,
+          venue_id: draft.venue_id ? Number(draft.venue_id) : null,
+          storage_area_id: draft.storage_area_id ? Number(draft.storage_area_id) : null,
+          reorder_level: draft.reorder_level === '' ? null : Number(draft.reorder_level),
+          reorder_qty: draft.reorder_qty === '' ? null : Number(draft.reorder_qty),
+          order_unit: draft.order_unit === '' ? null : draft.order_unit as Unit,
+          qty_per_unit: draft.qty_per_unit === '' ? null : Number(draft.qty_per_unit),
+          order_unit_price: draft.order_unit_price === '' ? null : Number(draft.order_unit_price),
+        },
+      },
+      {
+        onSuccess: () => toast('Inventory item updated', 'success'),
+        onError: (error) => toast(error.message, 'error'),
+      },
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -1556,6 +1618,132 @@ function InventoryItemSidePanel({
         <DetailTile label="Venue" value={venueName} />
         <DetailTile label="Storage Area" value={areaName} />
         <DetailTile label="Reorder Status" value={reorderStatus} />
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Quick actions</div>
+          <button
+            type="button"
+            onClick={saveQuickEdits}
+            disabled={updateItem.isPending}
+            className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            {updateItem.isPending ? 'Saving...' : 'Save edits'}
+          </button>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Category</span>
+            <select
+              value={draft.category}
+              onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as Item['category'] }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            >
+              {CATEGORIES.map((categoryOption) => (
+                <option key={categoryOption} value={categoryOption}>{categoryOption}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Vendor</span>
+            <select
+              value={draft.vendor_id}
+              onChange={(event) => setDraft((current) => ({ ...current, vendor_id: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            >
+              <option value="">Unassigned</option>
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Venue</span>
+            <select
+              value={draft.venue_id}
+              onChange={(event) => setDraft((current) => ({ ...current, venue_id: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            >
+              <option value="">Unassigned</option>
+              {venues.map((venue) => (
+                <option key={venue.id} value={venue.id}>{venue.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Storage area</span>
+            <select
+              value={draft.storage_area_id}
+              onChange={(event) => setDraft((current) => ({ ...current, storage_area_id: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            >
+              <option value="">Unassigned</option>
+              {areas.map((area) => (
+                <option key={area.id} value={area.id}>{area.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder level</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={draft.reorder_level}
+              onChange={(event) => setDraft((current) => ({ ...current, reorder_level: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder qty</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={draft.reorder_qty}
+              onChange={(event) => setDraft((current) => ({ ...current, reorder_qty: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Order unit</span>
+            <select
+              value={draft.order_unit}
+              onChange={(event) => setDraft((current) => ({ ...current, order_unit: event.target.value as '' | Unit }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            >
+              <option value="">Missing</option>
+              {UNITS.map((unitOption) => (
+                <option key={unitOption} value={unitOption}>{unitOption}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pack qty</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={draft.qty_per_unit}
+              onChange={(event) => setDraft((current) => ({ ...current, qty_per_unit: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+          </label>
+          <label className="space-y-1 text-sm md:col-span-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Case price</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={draft.order_unit_price}
+              onChange={(event) => setDraft((current) => ({ ...current, order_unit_price: event.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+            />
+          </label>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">

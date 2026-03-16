@@ -21,7 +21,11 @@ import {
 } from '../components/workflow/WorkflowPrimitives';
 import { UNITS } from '@fifoflow/shared';
 import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult } from '@fifoflow/shared';
-import type { OperationalRecipeIngredientRowPayload, OperationalRecipeWorkflowSummaryPayload } from '../api';
+import type {
+  OperationalRecipeIngredientRowPayload,
+  OperationalRecipeWorkflowSummaryPayload,
+  RecipeWorkflowIngredientDiffPayload,
+} from '../api';
 
 type RecipeTab = 'operational' | 'recipes' | 'menus' | 'calculate' | 'weekly';
 
@@ -354,6 +358,28 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
       </div>
 
       <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-text-primary">Ingredient diff vs prior promoted version</h4>
+        {!detail?.comparison_version ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            No prior promoted version is available for row-level comparison yet.
+          </div>
+        ) : !detail.ingredient_diffs.length ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            No ingredient diff rows were produced for this comparison.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+              Comparing current version {summary.version_number} against version {detail.comparison_version.version_number}.
+            </div>
+            {detail.ingredient_diffs.map((diff) => (
+              <IngredientDiffCard key={`${diff.comparison_key}-${diff.current_row?.recipe_item_id ?? 'none'}-${diff.previous_row?.recipe_item_id ?? 'none'}`} diff={diff} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
         <h4 className="text-sm font-semibold text-text-primary">Snapshot history</h4>
         {!detail?.snapshot_history.length ? (
           <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
@@ -382,6 +408,81 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayload }) {
+  const rowLabel = diff.current_row?.raw_ingredient_text ?? diff.previous_row?.raw_ingredient_text ?? diff.comparison_key;
+  const changeTone = diff.change_type === 'ADDED'
+    ? 'blue'
+    : diff.change_type === 'REMOVED'
+      ? 'red'
+      : diff.change_type === 'QUANTITY_CHANGED'
+        ? 'amber'
+        : diff.change_type === 'RESOLUTION_CHANGED'
+          ? 'blue'
+          : 'slate';
+
+  return (
+    <div className="rounded-xl border border-border bg-white p-3 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-text-primary">{rowLabel}</div>
+          <div className="text-xs text-text-secondary">{diff.summary}</div>
+        </div>
+        <WorkflowStatusPill tone={changeTone}>
+          {diff.change_type.replaceAll('_', ' ')}
+        </WorkflowStatusPill>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg bg-bg-page px-3 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">Current version</div>
+          {diff.current_row ? (
+            <DiffRowDetail row={diff.current_row} />
+          ) : (
+            <div className="mt-2 text-sm text-text-secondary">Not present in the current promoted version.</div>
+          )}
+        </div>
+        <div className="rounded-lg bg-bg-page px-3 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">Compared version</div>
+          {diff.previous_row ? (
+            <DiffRowDetail row={diff.previous_row} />
+          ) : (
+            <div className="mt-2 text-sm text-text-secondary">Not present in the comparison version.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DiffRowDetail({ row }: { row: OperationalRecipeIngredientRowPayload }) {
+  const vendorLineage = row.vendor_cost_lineage as {
+    vendor_item_name?: string | null;
+    vendor_name?: string | null;
+    normalized_unit_cost?: number | null;
+    base_unit?: string | null;
+  } | null;
+
+  return (
+    <div className="mt-2 space-y-1.5 text-sm">
+      <div className="text-text-primary">{row.quantity} {row.unit}</div>
+      <div className="text-text-secondary">
+        {row.inventory_item_id != null ? row.inventory_item_name : 'No trusted inventory item'}
+      </div>
+      <div className="text-text-secondary">
+        {vendorLineage?.vendor_item_name
+          ? `${vendorLineage.vendor_name ?? 'Vendor'} • ${vendorLineage.vendor_item_name}`
+          : 'No trusted vendor lineage'}
+      </div>
+      {vendorLineage?.normalized_unit_cost != null && (
+        <div className="font-mono text-text-primary">
+          {formatRecipeCurrency(vendorLineage.normalized_unit_cost)} / {vendorLineage.base_unit ?? row.base_unit}
+        </div>
+      )}
+      <div className="text-xs text-text-secondary">{row.costability_status.replaceAll('_', ' ')}</div>
     </div>
   );
 }

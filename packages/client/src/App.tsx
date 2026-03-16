@@ -1,20 +1,22 @@
+import { Suspense, lazy, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './contexts/ToastContext';
 import { VenueProvider } from './contexts/VenueContext';
 import { Layout } from './components/Layout';
-import { OperatingMemo } from './pages/OperatingMemo';
-import { Dashboard } from './pages/Dashboard';
-import { Inventory } from './pages/Inventory';
-import { ItemDetail } from './pages/ItemDetail';
-import { Activity } from './pages/Activity';
-import { Counts } from './pages/Counts';
-import { Orders } from './pages/Orders';
-import { Recipes } from './pages/Recipes';
-import { Reports } from './pages/Reports';
-import SnackBar from './pages/SnackBar';
-import { SignalDetail } from './pages/SignalDetail';
-import { RecommendationsPage } from './pages/Recommendations';
+
+const OperatingMemo = lazy(async () => ({ default: (await import('./pages/OperatingMemo')).OperatingMemo }));
+const Dashboard = lazy(async () => ({ default: (await import('./pages/Dashboard')).Dashboard }));
+const Inventory = lazy(async () => ({ default: (await import('./pages/Inventory')).Inventory }));
+const ItemDetail = lazy(async () => ({ default: (await import('./pages/ItemDetail')).ItemDetail }));
+const Activity = lazy(async () => ({ default: (await import('./pages/Activity')).Activity }));
+const Counts = lazy(async () => ({ default: (await import('./pages/Counts')).Counts }));
+const Orders = lazy(async () => ({ default: (await import('./pages/Orders')).Orders }));
+const Recipes = lazy(async () => ({ default: (await import('./pages/Recipes')).Recipes }));
+const Reports = lazy(async () => ({ default: (await import('./pages/Reports')).Reports }));
+const SnackBar = lazy(() => import('./pages/SnackBar'));
+const SignalDetail = lazy(async () => ({ default: (await import('./pages/SignalDetail')).SignalDetail }));
+const RecommendationsPage = lazy(async () => ({ default: (await import('./pages/Recommendations')).RecommendationsPage }));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,24 +32,44 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route element={<Layout />}>
-                <Route path="/" element={<OperatingMemo />} />
-                <Route path="/intelligence/signals/:signalId" element={<SignalDetail />} />
-                <Route path="/intelligence/recommendations" element={<RecommendationsPage />} />
-                <Route path="/intelligence/recommendations/:recommendationId" element={<RecommendationsPage />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/inventory/:id" element={<ItemDetail />} />
-                <Route path="/orders" element={<Orders />} />
-                <Route path="/recipes" element={<Recipes />} />
-                <Route path="/activity" element={<Activity />} />
-                <Route path="/counts" element={<Counts />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/snack-bar" element={<SnackBar />} />
+                <Route path="/" element={<RoutedPage><OperatingMemo /></RoutedPage>} />
+                <Route path="/intelligence/signals/:signalId" element={<RoutedPage><SignalDetail /></RoutedPage>} />
+                <Route path="/intelligence/recommendations" element={<RoutedPage><RecommendationsPage /></RoutedPage>} />
+                <Route path="/intelligence/recommendations/:recommendationId" element={<RoutedPage><RecommendationsPage /></RoutedPage>} />
+                <Route path="/dashboard" element={<RoutedPage><Dashboard /></RoutedPage>} />
+                <Route path="/inventory" element={<RoutedPage><Inventory /></RoutedPage>} />
+                <Route path="/inventory/:id" element={<RoutedPage><ItemDetail /></RoutedPage>} />
+                <Route path="/orders" element={<RoutedPage><Orders /></RoutedPage>} />
+                <Route path="/recipes" element={<RoutedPage><Recipes /></RoutedPage>} />
+                <Route path="/activity" element={<RoutedPage><Activity /></RoutedPage>} />
+                <Route path="/counts" element={<RoutedPage><Counts /></RoutedPage>} />
+                <Route path="/reports" element={<RoutedPage><Reports /></RoutedPage>} />
+                <Route path="/snack-bar" element={<RoutedPage><SnackBar /></RoutedPage>} />
               </Route>
             </Routes>
           </BrowserRouter>
         </VenueProvider>
       </ToastProvider>
     </QueryClientProvider>
+  );
+}
+
+function RoutedPage({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<RouteLoadingState />}>
+      {children}
+    </Suspense>
+  );
+}
+
+function RouteLoadingState() {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Loading workspace</div>
+      <div className="mt-3 text-lg font-semibold text-slate-950">Preparing the next operator view.</div>
+      <div className="mt-2 text-sm text-slate-600">
+        Route-level loading is now split so the app does not ship every workflow upfront.
+      </div>
+    </div>
   );
 }
