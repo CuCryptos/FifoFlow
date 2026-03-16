@@ -259,6 +259,14 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
 
   const comparisonOptions = detail?.version_history.filter((version) => version.recipe_version_id !== summary.recipe_version_id) ?? [];
   const activeComparisonVersionNumber = detail?.comparison_version?.version_number ?? comparisonOptions[0]?.version_number ?? null;
+  const diffCounts = {
+    all: detail?.ingredient_diffs.length ?? 0,
+    changed: detail?.ingredient_diffs.filter((diff) => diff.change_type !== 'UNCHANGED').length ?? 0,
+    QUANTITY_CHANGED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'QUANTITY_CHANGED').length ?? 0,
+    RESOLUTION_CHANGED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'RESOLUTION_CHANGED').length ?? 0,
+    ADDED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'ADDED').length ?? 0,
+    REMOVED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'REMOVED').length ?? 0,
+  };
   const filteredDiffs = detail?.ingredient_diffs.filter((diff) => {
     const matchesVisibility = diffFilter === 'all' || diff.change_type !== 'UNCHANGED';
     const matchesType = diffTypeFilter === 'all' || diff.change_type === diffTypeFilter;
@@ -412,20 +420,20 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
                 </div>
                 <div className="flex items-center gap-2">
                   <WorkflowChip active={diffFilter === 'changed'} onClick={() => setDiffFilter('changed')}>
-                    Changed only
+                    Changed only ({diffCounts.changed})
                   </WorkflowChip>
                   <WorkflowChip active={diffFilter === 'all'} onClick={() => setDiffFilter('all')}>
-                    All rows
+                    All rows ({diffCounts.all})
                   </WorkflowChip>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {([
-                  ['all', 'All change types'],
-                  ['QUANTITY_CHANGED', 'Quantity'],
-                  ['RESOLUTION_CHANGED', 'Resolution'],
-                  ['ADDED', 'Added'],
-                  ['REMOVED', 'Removed'],
+                  ['all', `All change types (${diffCounts.changed})`],
+                  ['QUANTITY_CHANGED', `Quantity (${diffCounts.QUANTITY_CHANGED})`],
+                  ['RESOLUTION_CHANGED', `Resolution (${diffCounts.RESOLUTION_CHANGED})`],
+                  ['ADDED', `Added (${diffCounts.ADDED})`],
+                  ['REMOVED', `Removed (${diffCounts.REMOVED})`],
                 ] as const).map(([value, label]) => (
                   <WorkflowChip key={value} active={diffTypeFilter === value} onClick={() => setDiffTypeFilter(value)}>
                     {label}

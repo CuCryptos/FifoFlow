@@ -1618,6 +1618,8 @@ function InventoryItemSidePanel({
   const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
   const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
   const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
+  const assignmentFields: DraftField[] = ['category', 'vendor_id', 'venue_id', 'storage_area_id'];
+  const orderingFields: DraftField[] = ['reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'order_unit_price'];
   const changedFields = (Object.entries(draft) as Array<[DraftField, string]>)
     .filter(([field, value]) => {
       switch (field) {
@@ -1644,13 +1646,55 @@ function InventoryItemSidePanel({
       }
     })
     .map(([field]) => field);
-  const saveQuickEdits = () => {
-    if (changedFields.length === 0) {
+  const assignmentChangedFields = assignmentFields.filter((field) => changedFields.includes(field));
+  const orderingChangedFields = orderingFields.filter((field) => changedFields.includes(field));
+  const assignmentFieldStates = Object.fromEntries(assignmentFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
+  const orderingFieldStates = Object.fromEntries(orderingFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
+
+  const buildPatchForFields = (fields: DraftField[]) => {
+    const patch: Record<string, string | number | null> = {};
+    fields.forEach((field) => {
+      switch (field) {
+        case 'category':
+          patch.category = draft.category;
+          break;
+        case 'vendor_id':
+          patch.vendor_id = draft.vendor_id ? Number(draft.vendor_id) : null;
+          break;
+        case 'venue_id':
+          patch.venue_id = draft.venue_id ? Number(draft.venue_id) : null;
+          break;
+        case 'storage_area_id':
+          patch.storage_area_id = draft.storage_area_id ? Number(draft.storage_area_id) : null;
+          break;
+        case 'reorder_level':
+          patch.reorder_level = draft.reorder_level === '' ? null : Number(draft.reorder_level);
+          break;
+        case 'reorder_qty':
+          patch.reorder_qty = draft.reorder_qty === '' ? null : Number(draft.reorder_qty);
+          break;
+        case 'order_unit':
+          patch.order_unit = draft.order_unit === '' ? null : draft.order_unit;
+          break;
+        case 'qty_per_unit':
+          patch.qty_per_unit = draft.qty_per_unit === '' ? null : Number(draft.qty_per_unit);
+          break;
+        case 'order_unit_price':
+          patch.order_unit_price = draft.order_unit_price === '' ? null : Number(draft.order_unit_price);
+          break;
+      }
+    });
+    return patch;
+  };
+
+  const saveFieldGroup = (fields: DraftField[], label: string) => {
+    const fieldsToSave = fields.filter((field) => changedFields.includes(field));
+    if (fieldsToSave.length === 0) {
       return;
     }
     setFieldStates((current) => {
       const next = { ...current };
-      changedFields.forEach((field) => {
+      fieldsToSave.forEach((field) => {
         next[field] = 'saving';
       });
       return next;
@@ -1658,31 +1702,21 @@ function InventoryItemSidePanel({
     updateItem.mutate(
       {
         id: item.id,
-        data: {
-          category: draft.category as typeof item.category,
-          vendor_id: draft.vendor_id ? Number(draft.vendor_id) : null,
-          venue_id: draft.venue_id ? Number(draft.venue_id) : null,
-          storage_area_id: draft.storage_area_id ? Number(draft.storage_area_id) : null,
-          reorder_level: draft.reorder_level === '' ? null : Number(draft.reorder_level),
-          reorder_qty: draft.reorder_qty === '' ? null : Number(draft.reorder_qty),
-          order_unit: draft.order_unit === '' ? null : draft.order_unit as Unit,
-          qty_per_unit: draft.qty_per_unit === '' ? null : Number(draft.qty_per_unit),
-          order_unit_price: draft.order_unit_price === '' ? null : Number(draft.order_unit_price),
-        },
+        data: buildPatchForFields(fieldsToSave),
       },
       {
         onSuccess: () => {
           const savedAt = Date.now();
           setFieldStates((current) => {
             const next = { ...current };
-            changedFields.forEach((field) => {
+            fieldsToSave.forEach((field) => {
               next[field] = 'saved';
             });
             return next;
           });
           setFieldSavedAt((current) => {
             const next = { ...current };
-            changedFields.forEach((field) => {
+            fieldsToSave.forEach((field) => {
               next[field] = savedAt;
             });
             return next;
@@ -1690,7 +1724,7 @@ function InventoryItemSidePanel({
           window.setTimeout(() => {
             setFieldStates((current) => {
               const next = { ...current };
-              changedFields.forEach((field) => {
+              fieldsToSave.forEach((field) => {
                 if (next[field] === 'saved') {
                   next[field] = 'idle';
                 }
@@ -1698,12 +1732,12 @@ function InventoryItemSidePanel({
               return next;
             });
           }, 1800);
-          toast('Inventory item updated', 'success');
+          toast(`${label} saved`, 'success');
         },
         onError: (error) => {
           setFieldStates((current) => {
             const next = { ...current };
-            changedFields.forEach((field) => {
+            fieldsToSave.forEach((field) => {
               next[field] = 'rolled_back';
             });
             return next;
@@ -1711,7 +1745,7 @@ function InventoryItemSidePanel({
           window.setTimeout(() => {
             setFieldStates((current) => {
               const next = { ...current };
-              changedFields.forEach((field) => {
+              fieldsToSave.forEach((field) => {
                 if (next[field] === 'rolled_back') {
                   next[field] = 'idle';
                 }
@@ -1738,16 +1772,19 @@ function InventoryItemSidePanel({
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Quick actions</div>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Assignments</div>
+            <div className="mt-1 text-sm text-slate-600">Save ownership and stocking assignments separately from ordering setup.</div>
+          </div>
           <div className="flex items-center gap-3">
-            <FieldStateSummary changedCount={changedFields.length} fieldStates={fieldStates} />
+            <FieldStateSummary changedCount={assignmentChangedFields.length} fieldStates={assignmentFieldStates} />
             <button
               type="button"
-              onClick={saveQuickEdits}
-              disabled={updateItem.isPending || changedFields.length === 0}
+              onClick={() => saveFieldGroup(assignmentFields, 'Assignments')}
+              disabled={updateItem.isPending || assignmentChangedFields.length === 0}
               className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
-              {updateItem.isPending ? 'Saving...' : changedFields.length === 0 ? 'No changes' : 'Save edits'}
+              {updateItem.isPending ? 'Saving...' : assignmentChangedFields.length === 0 ? 'No changes' : 'Save assignments'}
             </button>
           </div>
         </div>
@@ -1807,6 +1844,26 @@ function InventoryItemSidePanel({
             </select>
             <FieldStateHint state={fieldStates.storage_area_id} dirty={changedFields.includes('storage_area_id')} savedAt={fieldSavedAt.storage_area_id} />
           </label>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ordering setup</div>
+            <div className="mt-1 text-sm text-slate-600">Save pack, price, and reorder controls as a separate operator action.</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <FieldStateSummary changedCount={orderingChangedFields.length} fieldStates={orderingFieldStates} />
+            <button
+              type="button"
+              onClick={() => saveFieldGroup(orderingFields, 'Ordering setup')}
+              disabled={updateItem.isPending || orderingChangedFields.length === 0}
+              className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {updateItem.isPending ? 'Saving...' : orderingChangedFields.length === 0 ? 'No changes' : 'Save ordering'}
+            </button>
+          </div>
         </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
@@ -1875,7 +1932,7 @@ function InventoryItemSidePanel({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ordering setup</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current ordering setup</div>
         <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
           <DetailTile label="Order Unit" value={item.order_unit ?? 'Missing'} />
           <DetailTile label="Pack Qty" value={item.qty_per_unit ?? 'Missing'} />

@@ -137,6 +137,7 @@ export function AnalyticsTab() {
 }
 
 function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
+  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; revenue: number; itemsSold: number; saleCount: number } | null>(null);
   const chart = useMemo(() => {
     const revenueMax = Math.max(...daily.map((entry) => entry.revenue), 1);
     const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
@@ -160,7 +161,7 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
 
   return (
     <div className="space-y-3">
-      <div className="h-[240px] w-full">
+      <div className="relative h-[240px] w-full">
         <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-full w-full overflow-visible">
           <defs>
             <linearGradient id="revenue-fill" x1="0" x2="0" y1="0" y2="1">
@@ -203,11 +204,39 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
 
           {chart.points.map((point) => (
             <g key={point.date}>
-              <circle cx={point.x} cy={point.y} r="4" fill="#0F172A" />
-              <circle cx={point.x} cy={point.y} r="2.5" fill="#34D399" />
+              <circle
+                cx={point.x}
+                cy={point.y}
+                r="10"
+                fill="transparent"
+                onMouseEnter={() => setHoveredPoint({
+                  x: point.x,
+                  y: point.y,
+                  date: point.date,
+                  revenue: point.revenue,
+                  itemsSold: point.items_sold,
+                  saleCount: point.sale_count,
+                })}
+                onMouseLeave={() => setHoveredPoint(null)}
+              />
+              <circle cx={point.x} cy={point.y} r="4" fill="#0F172A" pointerEvents="none" />
+              <circle cx={point.x} cy={point.y} r="2.5" fill="#34D399" pointerEvents="none" />
             </g>
           ))}
         </svg>
+        {hoveredPoint && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
+            style={{
+              left: `${(hoveredPoint.x / CHART_WIDTH) * 100}%`,
+              top: `${(hoveredPoint.y / CHART_HEIGHT) * 100}%`,
+            }}
+          >
+            <div className="font-semibold">{formatChartDate(hoveredPoint.date)}</div>
+            <div className="mt-1 font-mono">{formatCurrency(hoveredPoint.revenue)}</div>
+            <div className="text-slate-300">{hoveredPoint.saleCount} sales • {hoveredPoint.itemsSold} items</div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs text-text-muted sm:grid-cols-4">
@@ -223,14 +252,21 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
 }
 
 function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }) {
+  const [hoveredSellerId, setHoveredSellerId] = useState<number | null>(null);
   const maxRevenue = Math.max(...sellers.map((seller) => seller.revenue), 1);
 
   return (
     <div className="space-y-3">
       {sellers.map((seller) => {
         const width = Math.max((seller.revenue / maxRevenue) * 100, 6);
+        const hovered = hoveredSellerId === seller.item_id;
         return (
-          <div key={seller.item_id} className="space-y-1.5">
+          <div
+            key={seller.item_id}
+            className="relative space-y-1.5"
+            onMouseEnter={() => setHoveredSellerId(seller.item_id)}
+            onMouseLeave={() => setHoveredSellerId(null)}
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-text-primary">{seller.item_name}</div>
@@ -244,6 +280,13 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
                 style={{ width: `${width}%` }}
               />
             </div>
+            {hovered && (
+              <div className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl">
+                <div className="font-semibold">{seller.item_name}</div>
+                <div className="mt-1 font-mono">{formatCurrency(seller.revenue)}</div>
+                <div className="text-slate-300">{seller.quantity_sold} sold</div>
+              </div>
+            )}
           </div>
         );
       })}
