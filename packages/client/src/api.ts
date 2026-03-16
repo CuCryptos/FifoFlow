@@ -61,6 +61,130 @@ import type {
 
 const BASE = '/api';
 
+export interface IntelligenceScopeSummary {
+  organization_id: number | null;
+  location_id: number | null;
+  operation_unit_id: number | null;
+  storage_area_id: number | null;
+  inventory_item_id?: number | null;
+  recipe_id?: number | null;
+  vendor_id?: number | null;
+}
+
+export interface MemoRankingExplanationPayload {
+  total_score: number;
+  components: {
+    severity: number;
+    urgency: number;
+    confidence: number;
+    recurrence: number;
+    freshness: number;
+    impact: number;
+    evidence: number;
+    fallback_penalty: number;
+  };
+  factors: string[];
+}
+
+export interface MemoItemPayload {
+  source_signal_id: number | string;
+  signal_type: string;
+  title: string;
+  subject_label: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  urgency: 'IMMEDIATE' | 'THIS_WEEK' | 'MONITOR';
+  confidence: 'Early signal' | 'Emerging pattern' | 'Stable pattern';
+  likely_owner: 'Unit Manager' | 'Purchasing Owner' | 'Executive Approver';
+  scope_summary: IntelligenceScopeSummary;
+  short_explanation: string;
+  ranking_explanation: MemoRankingExplanationPayload;
+  evidence_references: Array<{
+    source_table: string;
+    source_primary_key: string;
+    source_type?: string | null;
+    observed_at?: string | null;
+    payload?: Record<string, unknown>;
+  }>;
+  policy_fallback_used: boolean;
+  observed_at: string;
+}
+
+export interface MemoSectionPayload {
+  key: string;
+  title: string;
+  order: number;
+  max_items: number;
+  items: MemoItemPayload[];
+}
+
+export interface RecommendationCardPayload {
+  id: number | string;
+  recommendation_type: string;
+  summary: string;
+  status: string;
+  severity_label: 'low' | 'medium' | 'high' | 'critical';
+  confidence_label: 'Early signal' | 'Emerging pattern' | 'Stable pattern';
+  urgency_label: 'IMMEDIATE' | 'THIS_WEEK' | 'MONITOR';
+  likely_owner: string;
+  due_at: string | null;
+  opened_at: string;
+  updated_at: string;
+  scope_summary: IntelligenceScopeSummary;
+  subject_summary: Record<string, unknown>;
+  evidence_count: number;
+  expected_benefit_payload: Record<string, unknown>;
+  operator_action_payload: Record<string, unknown>;
+  evidence: Array<{
+    evidence_type: string;
+    evidence_ref_table: string;
+    evidence_ref_id: string;
+    explanation_text: string;
+    evidence_weight: number;
+  }>;
+}
+
+export interface OperatorBriefPayload {
+  generated_at: string;
+  memo_window: {
+    start: string;
+    end: string;
+    generated_at: string;
+  };
+  scope: {
+    venue_id: number | null;
+    organization_id: number | null;
+    operation_unit_id: number | null;
+  };
+  counts: {
+    signal_count: number;
+    active_recommendation_count: number;
+    top_priority_count: number;
+    needs_review_count: number;
+  };
+  routing_summary: Array<{
+    owner: string;
+    item_count: number;
+    signal_types: string[];
+  }>;
+  top_priority_items: MemoItemPayload[];
+  sections: MemoSectionPayload[];
+  active_recommendations: RecommendationCardPayload[];
+  recent_signal_items: MemoItemPayload[];
+  notes: string[];
+}
+
+export interface IntelligenceRefreshPayload {
+  refreshed_at: string;
+  jobs: Record<string, {
+    status: 'ok' | 'error';
+    job: string;
+    notes: string[];
+    run_summary: Record<string, unknown> | null;
+    extra: Record<string, unknown> | null;
+  }>;
+  operator_brief: OperatorBriefPayload;
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -330,5 +454,19 @@ export const api = {
       const query = qs.toString();
       return fetchJson<SalesSummary>(`/sales/summary${query ? `?${query}` : ''}`);
     },
+  },
+  intelligence: {
+    operatorBrief: (params?: { venue_id?: number; days?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      if (params?.days) qs.set('days', String(params.days));
+      const query = qs.toString();
+      return fetchJson<OperatorBriefPayload>(`/intelligence/operator-brief${query ? `?${query}` : ''}`);
+    },
+    refresh: (data?: { venue_id?: number; signal_lookback_days?: number; memo_window_days?: number }) =>
+      fetchJson<IntelligenceRefreshPayload>('/intelligence/refresh', {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      }),
   },
 };

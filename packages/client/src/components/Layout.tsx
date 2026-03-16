@@ -14,13 +14,15 @@ import {
   Menu,
   X,
   Settings,
+  NotebookText,
 } from 'lucide-react';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useVenues } from '../hooks/useVenues';
 import { ManageVenuesModal } from './ManageVenuesModal';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/', label: 'Operating Memo', icon: NotebookText },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/inventory', label: 'Inventory', icon: Package },
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/recipes', label: 'Recipes', icon: UtensilsCrossed },

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './contexts/ToastContext';
 import { VenueProvider } from './contexts/VenueContext';
 import { Layout } from './components/Layout';
+import { OperatingMemo } from './pages/OperatingMemo';
 import { Dashboard } from './pages/Dashboard';
 import { Inventory } from './pages/Inventory';
 import { ItemDetail } from './pages/ItemDetail';
@@ -27,7 +28,8 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route element={<Layout />}>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/" element={<OperatingMemo />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/inventory/:id" element={<ItemDetail />} />
                 <Route path="/orders" element={<Orders />} />
