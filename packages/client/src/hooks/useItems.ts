@@ -1,6 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import type { CreateItemInput, MergeItemsInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
+import type { CreateItemInput, Item, MergeItemsInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
+
+function applyItemPatch(item: Item, patch: UpdateItemInput): Item {
+  return {
+    ...item,
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+}
 
 export function useItems(params?: { search?: string; category?: string; venue_id?: number }) {
   return useQuery({
@@ -36,7 +44,46 @@ export function useUpdateItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateItemInput }) => api.items.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
+    onMutate: async ({ id, data }) => {
+      await qc.cancelQueries({ queryKey: ['items'] });
+      const previousLists = qc.getQueriesData<Item[]>({ queryKey: ['items'] });
+      const previousDetail = qc.getQueryData<{ item: Item; transactions: any[] }>(['items', id]);
+
+      for (const [queryKey, items] of previousLists) {
+        if (!Array.isArray(items)) {
+          continue;
+        }
+        qc.setQueryData<Item[]>(queryKey, items.map((item) => (
+          item.id === id ? applyItemPatch(item, data) : item
+        )));
+      }
+
+      if (previousDetail?.item) {
+        qc.setQueryData(['items', id], {
+          ...previousDetail,
+          item: applyItemPatch(previousDetail.item, data),
+        });
+      }
+
+      return { previousLists, previousDetail, id };
+    },
+    onError: (_error, variables, context) => {
+      context?.previousLists?.forEach(([queryKey, data]) => {
+        qc.setQueryData(queryKey, data);
+      });
+      if (context?.previousDetail) {
+        qc.setQueryData(['items', variables.id], context.previousDetail);
+      }
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(['items', updated.id], (current: { item: Item; transactions: any[] } | undefined) => (
+        current ? { ...current, item: updated } : current
+      ));
+    },
+    onSettled: (_data, _error, variables) => {
+      qc.invalidateQueries({ queryKey: ['items'] });
+      qc.invalidateQueries({ queryKey: ['items', variables.id] });
+    },
   });
 }
 

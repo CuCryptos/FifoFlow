@@ -1,17 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useItems, useItem, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
 import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
-import { exportToExcel, exportToPdf } from '../utils/exportInventory';
 import type { GroupBy } from '../utils/exportInventory';
 import type { Item, Transaction, Unit, ItemStorage } from '@fifoflow/shared';
-import { AddItemModal } from '../components/AddItemModal';
-import { ManageAreasModal } from '../components/ManageAreasModal';
-import { ManageVendorsModal } from '../components/ManageVendorsModal';
-import { ManageVenuesModal } from '../components/ManageVenuesModal';
-import { InvoiceUpload } from '../components/InvoiceUpload';
 import { SlideOver } from '../components/intelligence/SlideOver';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
@@ -25,6 +19,12 @@ import {
   WorkflowPanel,
   WorkflowStatusPill,
 } from '../components/workflow/WorkflowPrimitives';
+
+const AddItemModal = lazy(async () => ({ default: (await import('../components/AddItemModal')).AddItemModal }));
+const ManageAreasModal = lazy(async () => ({ default: (await import('../components/ManageAreasModal')).ManageAreasModal }));
+const ManageVendorsModal = lazy(async () => ({ default: (await import('../components/ManageVendorsModal')).ManageVendorsModal }));
+const ManageVenuesModal = lazy(async () => ({ default: (await import('../components/ManageVenuesModal')).ManageVenuesModal }));
+const InvoiceUpload = lazy(async () => ({ default: (await import('../components/InvoiceUpload')).InvoiceUpload }));
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '—';
@@ -621,10 +621,11 @@ export function Inventory() {
             <option value="vendor">Group by Vendor</option>
           </select>
           <button
-            onClick={() => {
+            onClick={async () => {
               const aLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
               const venueLookup = new Map((venues ?? []).map((v) => [v.id, v.name]));
               const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
+              const { exportToPdf } = await import('../utils/exportInventory');
               exportToPdf({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy, format: 'pdf' });
             }}
             className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
@@ -632,10 +633,11 @@ export function Inventory() {
             Export PDF
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               const aLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
               const venueLookup = new Map((venues ?? []).map((v) => [v.id, v.name]));
               const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
+              const { exportToExcel } = await import('../utils/exportInventory');
               exportToExcel({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy, format: 'xlsx' });
             }}
             className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
@@ -1431,21 +1433,23 @@ export function Inventory() {
         </SlideOver>
       )}
 
-      {showAddModal && (
-        <AddItemModal onClose={() => setShowAddModal(false)} />
-      )}
-      {showAreasModal && (
-        <ManageAreasModal onClose={() => setShowAreasModal(false)} />
-      )}
-      {showVendorsModal && (
-        <ManageVendorsModal onClose={() => setShowVendorsModal(false)} />
-      )}
-      {showVenuesModal && (
-        <ManageVenuesModal onClose={() => setShowVenuesModal(false)} />
-      )}
-      {showInvoiceUpload && (
-        <InvoiceUpload onClose={() => setShowInvoiceUpload(false)} />
-      )}
+      <Suspense fallback={null}>
+        {showAddModal && (
+          <AddItemModal onClose={() => setShowAddModal(false)} />
+        )}
+        {showAreasModal && (
+          <ManageAreasModal onClose={() => setShowAreasModal(false)} />
+        )}
+        {showVendorsModal && (
+          <ManageVendorsModal onClose={() => setShowVendorsModal(false)} />
+        )}
+        {showVenuesModal && (
+          <ManageVenuesModal onClose={() => setShowVenuesModal(false)} />
+        )}
+        {showInvoiceUpload && (
+          <InvoiceUpload onClose={() => setShowInvoiceUpload(false)} />
+        )}
+      </Suspense>
 
       {/* Merge Modal */}
       {showMergeModal && (() => {

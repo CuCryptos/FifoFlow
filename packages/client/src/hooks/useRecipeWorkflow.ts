@@ -8,10 +8,14 @@ export function useOperationalRecipeWorkflow(venueId?: number | null) {
   });
 }
 
-export function useOperationalRecipeWorkflowDetail(recipeVersionId?: number | null, venueId?: number | null) {
+export function useOperationalRecipeWorkflowDetail(
+  recipeVersionId?: number | null,
+  venueId?: number | null,
+  compareRecipeVersionId?: number | null,
+) {
   return useQuery({
-    queryKey: ['recipe-workflow', 'operational-detail', recipeVersionId ?? 'none', venueId ?? 'all'],
-    queryFn: () => api.recipeWorkflow.operationalDetail(Number(recipeVersionId), venueId ?? undefined),
+    queryKey: ['recipe-workflow', 'operational-detail', recipeVersionId ?? 'none', venueId ?? 'all', compareRecipeVersionId ?? 'default'],
+    queryFn: () => api.recipeWorkflow.operationalDetail(Number(recipeVersionId), venueId ?? undefined, compareRecipeVersionId),
     enabled: recipeVersionId != null && recipeVersionId > 0,
   });
 }

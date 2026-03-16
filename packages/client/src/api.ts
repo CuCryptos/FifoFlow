@@ -594,9 +594,14 @@ export const api = {
       const qs = venueId ? `?venue_id=${venueId}` : '';
       return fetchJson<RecipeWorkflowPayload>(`/recipe-workflow/operational-summary${qs}`);
     },
-    operationalDetail: (recipeVersionId: number, venueId?: number) => {
-      const qs = venueId ? `?venue_id=${venueId}` : '';
-      return fetchJson<RecipeWorkflowDetailPayload>(`/recipe-workflow/operational-summary/${recipeVersionId}${qs}`);
+    operationalDetail: (recipeVersionId: number, venueId?: number, compareRecipeVersionId?: number | null) => {
+      const qs = new URLSearchParams();
+      if (venueId) qs.set('venue_id', String(venueId));
+      if (compareRecipeVersionId != null && compareRecipeVersionId > 0) {
+        qs.set('compare_recipe_version_id', String(compareRecipeVersionId));
+      }
+      const query = qs.toString();
+      return fetchJson<RecipeWorkflowDetailPayload>(`/recipe-workflow/operational-summary/${recipeVersionId}${query ? `?${query}` : ''}`);
     },
   },
   productRecipes: {

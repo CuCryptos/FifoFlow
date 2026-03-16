@@ -86,8 +86,16 @@ describe('Recipe workflow routes', () => {
       VALUES (3, 1, 2, 'archived', 1, 'each')
     `).run();
     db.prepare(`
+      INSERT INTO recipe_versions (id, recipe_id, version_number, status, yield_quantity, yield_unit)
+      VALUES (4, 1, 1, 'archived', 1, 'each')
+    `).run();
+    db.prepare(`
       INSERT INTO recipe_ingredients (recipe_version_id, line_index, raw_ingredient_text, canonical_ingredient_id, inventory_item_id, quantity_normalized, unit_normalized)
       VALUES (3, 1, '10 oz ahi tuna archived', 1, NULL, 1, 'lb')
+    `).run();
+    db.prepare(`
+      INSERT INTO recipe_ingredients (recipe_version_id, line_index, raw_ingredient_text, canonical_ingredient_id, inventory_item_id, quantity_normalized, unit_normalized)
+      VALUES (4, 1, '12 oz ahi tuna archived', 1, NULL, 1.2, 'lb')
     `).run();
     await recipeCostRepository.upsertSnapshot({
       id: 'snapshot-2',
@@ -121,18 +129,18 @@ describe('Recipe workflow routes', () => {
       updated_at: '2026-03-10T10:00:00.000Z',
     });
 
-    const res = await request(app).get('/api/recipe-workflow/operational-summary/1');
+    const res = await request(app).get('/api/recipe-workflow/operational-summary/1?compare_recipe_version_id=4');
 
     expect(res.status).toBe(200);
     expect(res.body.summary.recipe_id).toBe(1);
     expect(res.body.ingredient_rows).toHaveLength(1);
     expect(res.body.ingredient_rows[0].costability_status).toBe('RESOLVED_FOR_COSTING');
     expect(res.body.ingredient_rows[0].vendor_cost_lineage.normalized_unit_cost).toBe(12.5);
-    expect(res.body.version_history).toHaveLength(2);
+    expect(res.body.version_history).toHaveLength(3);
     expect(res.body.version_history[0].version_number).toBe(3);
     expect(res.body.snapshot_history).toHaveLength(2);
     expect(res.body.snapshot_history.map((snapshot: any) => snapshot.version_number)).toEqual([3, 2]);
-    expect(res.body.comparison_version.version_number).toBe(2);
+    expect(res.body.comparison_version.version_number).toBe(1);
     expect(res.body.ingredient_diffs).toHaveLength(1);
     expect(res.body.ingredient_diffs[0].change_type).toBe('QUANTITY_CHANGED');
   });

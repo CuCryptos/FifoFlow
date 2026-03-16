@@ -245,8 +245,16 @@ function WorkflowStatusBadge({
 
 function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkflowSummaryPayload }) {
   const { selectedVenueId } = useVenueContext();
-  const { data: detail, isLoading } = useOperationalRecipeWorkflowDetail(summary.recipe_version_id, selectedVenueId);
+  const [comparisonRecipeVersionId, setComparisonRecipeVersionId] = useState<number | null>(null);
+  const { data: detail, isLoading } = useOperationalRecipeWorkflowDetail(summary.recipe_version_id, selectedVenueId, comparisonRecipeVersionId);
   const blockers = summary.blocker_messages.length > 0 ? summary.blocker_messages : ['No active blockers. This recipe is ready to cost in the current scope.'];
+
+  useEffect(() => {
+    setComparisonRecipeVersionId(null);
+  }, [summary.recipe_version_id]);
+
+  const comparisonOptions = detail?.version_history.filter((version) => version.recipe_version_id !== summary.recipe_version_id) ?? [];
+  const activeComparisonVersionNumber = detail?.comparison_version?.version_number ?? comparisonOptions[0]?.version_number ?? null;
 
   return (
     <div className="bg-bg-page rounded-xl border border-border p-4 space-y-4">
@@ -331,6 +339,25 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
 
       <div className="space-y-2">
         <h4 className="text-sm font-semibold text-text-primary">Version comparison</h4>
+        {comparisonOptions.length > 0 && (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border">
+            <label className="flex flex-col gap-2 text-sm text-text-secondary">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">Compare against</span>
+              <select
+                value={comparisonRecipeVersionId ?? ''}
+                onChange={(event) => setComparisonRecipeVersionId(event.target.value ? Number(event.target.value) : null)}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              >
+                <option value="">Nearest prior promoted version</option>
+                {comparisonOptions.map((version) => (
+                  <option key={version.recipe_version_id} value={version.recipe_version_id}>
+                    Version {version.version_number} • {version.status}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
         {!detail?.version_history.length ? (
           <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
             No additional version history is available for this recipe yet.
@@ -370,7 +397,7 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
         ) : (
           <div className="space-y-3">
             <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
-              Comparing current version {summary.version_number} against version {detail.comparison_version.version_number}.
+              Comparing current version {summary.version_number} against version {activeComparisonVersionNumber}.
             </div>
             {detail.ingredient_diffs.map((diff) => (
               <IngredientDiffCard key={`${diff.comparison_key}-${diff.current_row?.recipe_item_id ?? 'none'}-${diff.previous_row?.recipe_item_id ?? 'none'}`} diff={diff} />

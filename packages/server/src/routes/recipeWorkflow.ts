@@ -100,7 +100,10 @@ export function createRecipeWorkflowRoutes(db: Database.Database) {
       const versionHistory = await buildRecipeVersionHistory(db, recipe.recipe_id, context, operationalRepository, inventoryRepository, vendorRepository);
       const snapshotHistory = getRecipeSnapshotHistory(db, recipe.recipe_id);
       const ingredientRows = bridged.source_rows.map(mapIngredientWorkflowRow);
-      const comparisonVersion = versionHistory.find((candidate) => candidate.recipe_version_id !== summary.recipe_version_id) ?? null;
+      const requestedComparisonVersionId = positiveNumber((req.query as Record<string, unknown>)['compare_recipe_version_id']);
+      const comparisonVersion = requestedComparisonVersionId != null
+        ? versionHistory.find((candidate) => candidate.recipe_version_id === requestedComparisonVersionId) ?? null
+        : versionHistory.find((candidate) => candidate.recipe_version_id !== summary.recipe_version_id) ?? null;
       const comparisonRecipe = comparisonVersion
         ? await getPromotedRecipeVersionRecord(db, comparisonVersion.recipe_version_id)
         : null;
