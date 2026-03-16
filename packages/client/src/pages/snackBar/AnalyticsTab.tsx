@@ -254,15 +254,27 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
             id={tooltipId}
             role="status"
             aria-live="polite"
-            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
+            className="absolute z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
             style={{
               left: `${(hoveredPoint.x / CHART_WIDTH) * 100}%`,
               top: `${(hoveredPoint.y / CHART_HEIGHT) * 100}%`,
             }}
           >
-            <div className="font-semibold">{formatChartDate(hoveredPoint.date)}</div>
-            <div className="mt-1 font-mono">{formatCurrency(hoveredPoint.revenue)}</div>
-            <div className="text-slate-300">{hoveredPoint.saleCount} sales • {hoveredPoint.itemsSold} items</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold">{formatChartDate(hoveredPoint.date)}</div>
+                <div className="mt-1 font-mono">{formatCurrency(hoveredPoint.revenue)}</div>
+                <div className="text-slate-300">{hoveredPoint.saleCount} sales • {hoveredPoint.itemsSold} items</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHoveredPoint(null)}
+                className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-white/10"
+                aria-label="Close revenue details"
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -336,11 +348,23 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
                 id={tooltipId}
                 role="status"
                 aria-live="polite"
-                className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
+                className="absolute right-0 top-0 rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
               >
-                <div className="font-semibold">{seller.item_name}</div>
-                <div className="mt-1 font-mono">{formatCurrency(seller.revenue)}</div>
-                <div className="text-slate-300">{seller.quantity_sold} sold</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{seller.item_name}</div>
+                    <div className="mt-1 font-mono">{formatCurrency(seller.revenue)}</div>
+                    <div className="text-slate-300">{seller.quantity_sold} sold</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHoveredSellerId(null)}
+                    className="rounded-full border border-white/15 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-white/10"
+                    aria-label="Close seller details"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             )}
           </div>

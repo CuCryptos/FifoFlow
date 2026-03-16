@@ -571,13 +571,35 @@ function isResolutionBlockedDiff(diff: RecipeWorkflowIngredientDiffPayload): boo
 function DiffRowLegend({ row }: { row: OperationalRecipeIngredientRowPayload }) {
   const blocked = row.costability_status !== 'RESOLVED_FOR_COSTING';
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-      <WorkflowStatusPill tone={blocked ? 'red' : 'green'}>
-        {blocked ? 'Resolution blocked' : 'Resolved for costing'}
-      </WorkflowStatusPill>
-      <span className="text-text-secondary">{row.costability_status.replaceAll('_', ' ')}</span>
+    <div className="mt-2 space-y-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <WorkflowStatusPill tone={blocked ? 'red' : 'green'}>
+          {blocked ? 'Resolution blocked' : 'Resolved for costing'}
+        </WorkflowStatusPill>
+        <span className="text-text-secondary">{row.costability_status.replaceAll('_', ' ')}</span>
+      </div>
+      {blocked && (
+        <div className="text-text-secondary">
+          {getCostabilityBlockerReason(row.costability_status)}
+        </div>
+      )}
     </div>
   );
+}
+
+function getCostabilityBlockerReason(status: OperationalRecipeIngredientRowPayload['costability_status']): string {
+  switch (status) {
+    case 'MISSING_CANONICAL_INGREDIENT':
+      return 'Semantic ingredient identity is still missing for this row.';
+    case 'MISSING_SCOPED_INVENTORY_MAPPING':
+      return 'Scoped inventory mapping is missing, so the recipe row cannot reach stocked item fulfillment.';
+    case 'MISSING_SCOPED_VENDOR_MAPPING':
+      return 'Scoped vendor mapping is missing, so the stocked item cannot reach a trusted supplier item.';
+    case 'MISSING_VENDOR_COST_LINEAGE':
+      return 'Vendor cost lineage is missing, so FIFOFlow cannot attach a trusted normalized supplier cost.';
+    default:
+      return 'This row is not fully resolved for costing in the current scope.';
+  }
 }
 
 function DiffRowDetail({ row }: { row: OperationalRecipeIngredientRowPayload }) {

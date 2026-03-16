@@ -1646,6 +1646,25 @@ function InventoryItemSidePanel({
     });
   }, [item]);
 
+  useEffect(() => {
+    const timers: number[] = [];
+    (['assignments', 'ordering'] as const).forEach((key) => {
+      if (groupBanner[key]?.tone === 'success') {
+        const timer = window.setTimeout(() => {
+          setGroupBanner((current) => (
+            current[key]?.tone === 'success'
+              ? { ...current, [key]: null }
+              : current
+          ));
+        }, 5000);
+        timers.push(timer);
+      }
+    });
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [groupBanner]);
+
   const vendorName = vendors.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Unassigned';
   const venueName = venues.find((venue) => venue.id === item.venue_id)?.name ?? 'Unassigned';
   const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
