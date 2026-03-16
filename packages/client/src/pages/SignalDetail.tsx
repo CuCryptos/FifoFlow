@@ -8,9 +8,10 @@ export function SignalDetail() {
   const params = useParams();
   const signalId = Number(params.signalId);
   const { selectedVenueId } = useVenueContext();
-  const query = useSignalDetail(Number.isFinite(signalId) ? signalId : null, selectedVenueId, 7);
+  const safeSignalId = Number.isFinite(signalId) && signalId > 0 ? signalId : null;
+  const query = useSignalDetail(safeSignalId, selectedVenueId, 7);
 
-  if (!Number.isFinite(signalId)) {
+  if (safeSignalId == null) {
     return <InvalidState message="Signal id is invalid." />;
   }
 

@@ -30,8 +30,12 @@ export function OperatingMemo() {
   const freshnessQuery = useIntelligenceFreshness(selectedVenueId, 7);
   const runPackMutation = useRunIntelligencePack(selectedVenueId, 30, 7);
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedSignalId = Number(searchParams.get('signal'));
-  const signalQuery = useSignalDetail(Number.isFinite(selectedSignalId) ? selectedSignalId : null, selectedVenueId, 7);
+  const rawSignalParam = searchParams.get('signal');
+  const parsedSignalId = rawSignalParam == null ? null : Number(rawSignalParam);
+  const selectedSignalId = parsedSignalId != null && Number.isFinite(parsedSignalId) && parsedSignalId > 0
+    ? parsedSignalId
+    : null;
+  const signalQuery = useSignalDetail(selectedSignalId, selectedVenueId, 7);
 
   const topNotes = useMemo(() => {
     const refreshNotes = refreshMutation.data
@@ -284,7 +288,7 @@ export function OperatingMemo() {
         )}
       </div>
 
-      {Number.isFinite(selectedSignalId) ? (
+      {selectedSignalId != null ? (
         <SlideOver
           title={signalQuery.data?.memo_item.title ?? 'Signal detail'}
           subtitle={signalQuery.data?.memo_item.subject_label ?? 'Loading signal detail'}

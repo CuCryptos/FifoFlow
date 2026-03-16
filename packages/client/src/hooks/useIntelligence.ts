@@ -49,7 +49,7 @@ export function useSignalDetail(signalId?: number | null, venueId?: number | nul
   return useQuery({
     queryKey: ['intelligence', 'signal', signalId ?? 'none', venueId ?? 'all', days],
     queryFn: () => api.intelligence.signalDetail(Number(signalId), { venue_id: venueId ?? undefined, days }),
-    enabled: signalId != null,
+    enabled: signalId != null && signalId > 0,
   });
 }
 
@@ -68,7 +68,7 @@ export function useRecommendationDetail(recommendationId?: number | null) {
   return useQuery({
     queryKey: ['intelligence', 'recommendation', recommendationId ?? 'none'],
     queryFn: () => api.intelligence.recommendationDetail(Number(recommendationId)),
-    enabled: recommendationId != null,
+    enabled: recommendationId != null && recommendationId > 0,
   });
 }
 
