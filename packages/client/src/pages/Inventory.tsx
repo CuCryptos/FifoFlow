@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect, useRef, useMemo } from 'react';
+import { Suspense, lazy, useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useItems, useItem, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
 import { useToast } from '../contexts/ToastContext';
@@ -10,8 +10,10 @@ import { SlideOver } from '../components/intelligence/SlideOver';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
+import { InventoryUnitEconomicsSummary, deriveInventoryUnitEconomics } from '../components/inventory/InventoryUnitEconomicsSummary';
 import {
   WorkflowChip,
+  WorkflowEmptyState,
   WorkflowFocusBar,
   WorkflowMetricCard,
   WorkflowMetricGrid,
@@ -83,253 +85,20 @@ const INVENTORY_FOCUS_COPY: Record<InventoryWorkflowFocus, { title: string; body
   },
 };
 
-/* ------------------------------------------------------------------ */
-/*  InlineEdit – spreadsheet-style editable cell                      */
-/* ------------------------------------------------------------------ */
-
-function InlineEdit({
-  value,
-  field,
-  itemId,
-  type = 'text',
-  placeholder = '—',
-}: {
-  value: string | number | null;
-  field: string;
-  itemId: number;
-  type?: 'text' | 'number';
-  placeholder?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [localValue, setLocalValue] = useState(value ?? '');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const updateItem = useUpdateItem();
-
-  // Sync local state when the prop changes (e.g. after mutation invalidation)
-  useEffect(() => {
-    if (!editing) {
-      setLocalValue(value ?? '');
-    }
-  }, [value, editing]);
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
-
-  const handleSave = () => {
-    setEditing(false);
-    const original = value ?? '';
-    const next = String(localValue).trim();
-
-    if (next === String(original)) return;
-
-    let parsed: string | number | null;
-    if (next === '') {
-      parsed = null;
-    } else if (type === 'number') {
-      parsed = Number(next);
-      if (Number.isNaN(parsed)) return;
-    } else {
-      parsed = next;
-    }
-
-    updateItem.mutate({ id: itemId, data: { [field]: parsed } });
-  };
-
-  if (!editing) {
-    return (
-      <span
-        tabIndex={0}
-        onFocus={() => setEditing(true)}
-        onClick={() => setEditing(true)}
-        className="block w-full cursor-text px-2 py-1 rounded-lg border border-transparent hover:bg-bg-hover text-text-primary min-h-[1.75rem] leading-[1.75rem] truncate"
-        title={String(value ?? '')}
-      >
-        {value !== null && value !== '' ? String(value) : (
-          <span className="text-text-muted">{placeholder}</span>
-        )}
-      </span>
-    );
-  }
-
-  return (
-    <input
-      ref={inputRef}
-      type={type}
-      step={type === 'number' ? 'any' : undefined}
-      min={type === 'number' ? '0' : undefined}
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={handleSave}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') inputRef.current?.blur();
-        if (e.key === 'Escape') {
-          setLocalValue(value ?? '');
-          setEditing(false);
-        }
-      }}
-      className="w-full bg-white border border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-    />
-  );
-}
-
-function InlineInsidePrice({
-  orderUnitPrice,
-  qtyPerUnit,
-  itemId,
-  innerUnitLabel,
-}: {
-  orderUnitPrice: number | null;
-  qtyPerUnit: number | null;
-  itemId: number;
-  innerUnitLabel: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const multiplier = qtyPerUnit && qtyPerUnit > 0 ? qtyPerUnit : 1;
-  const derivedInside = orderUnitPrice == null ? null : orderUnitPrice / multiplier;
-  const [localValue, setLocalValue] = useState(
-    derivedInside == null ? '' : String(Math.round(derivedInside * 10000) / 10000),
-  );
-  const inputRef = useRef<HTMLInputElement>(null);
-  const updateItem = useUpdateItem();
-
-  useEffect(() => {
-    if (!editing) {
-      setLocalValue(
-        derivedInside == null ? '' : String(Math.round(derivedInside * 10000) / 10000),
-      );
-    }
-  }, [derivedInside, editing]);
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
-
-  const handleSave = () => {
-    setEditing(false);
-    const nextRaw = localValue.trim();
-    const nextInside = nextRaw === '' ? null : Number(nextRaw);
-    if (nextInside !== null && (Number.isNaN(nextInside) || nextInside < 0)) return;
-    const nextOrder = nextInside == null ? null : Math.round(nextInside * multiplier * 10000) / 10000;
-    const currentOrder = orderUnitPrice == null ? null : Math.round(orderUnitPrice * 10000) / 10000;
-    if (nextOrder === currentOrder) return;
-    updateItem.mutate({ id: itemId, data: { order_unit_price: nextOrder } });
-  };
-
-  if (!editing) {
-    return (
-      <span
-        tabIndex={0}
-        onFocus={() => setEditing(true)}
-        onClick={() => setEditing(true)}
-        className="block w-full cursor-text px-2 py-1 rounded-lg border border-transparent hover:bg-bg-hover text-text-primary min-h-[1.75rem] leading-[1.75rem] truncate"
-      >
-        {derivedInside == null ? (
-          <span className="text-text-muted">—</span>
-        ) : (
-          `${formatCurrency(derivedInside)} / ${innerUnitLabel}`
-        )}
-      </span>
-    );
-  }
-
-  return (
-    <input
-      ref={inputRef}
-      type="number"
-      step="0.01"
-      min="0"
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={handleSave}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') inputRef.current?.blur();
-        if (e.key === 'Escape') {
-          setLocalValue(
-            derivedInside == null ? '' : String(Math.round(derivedInside * 10000) / 10000),
-          );
-          setEditing(false);
-        }
-      }}
-      className="w-full bg-white border border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-      placeholder={`0.00 / ${innerUnitLabel}`}
-    />
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  ReorderBadge                                                      */
-/* ------------------------------------------------------------------ */
-
-function ReorderBadge({
-  stockQty,
-  reorderLevel,
-}: {
-  stockQty: number;
-  reorderLevel: number | null;
-}) {
-  if (reorderLevel === null) {
-    return <span className="text-text-muted">—</span>;
-  }
-  if (stockQty > reorderLevel) {
-    return (
-      <span className="text-xs px-2 py-0.5 rounded-md bg-badge-green-bg text-badge-green-text font-medium">
-        OK
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs px-2 py-0.5 rounded-md bg-badge-red-bg text-badge-red-text font-medium">
-      REORDER
-    </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Sortable column helpers                                           */
-/* ------------------------------------------------------------------ */
-
 type SortField = 'name' | 'category' | 'current_qty' | 'unit' | 'reorder_level' | 'reorder_qty' | 'order_unit' | 'order_unit_price' | 'qty_per_unit' | 'storage_area_id';
 type SortDir = 'asc' | 'desc';
 
-function SortHeader({
-  label,
-  field,
-  activeField,
-  dir,
-  onToggle,
-  className = '',
-}: {
-  label: string;
-  field: SortField;
-  activeField: SortField;
-  dir: SortDir;
-  onToggle: (field: SortField) => void;
-  className?: string;
-}) {
-  const isActive = field === activeField;
-  return (
-    <th
-      className={`px-3 py-2.5 font-medium text-xs uppercase tracking-wide cursor-pointer select-none hover:text-text-primary transition-colors ${className}`}
-      onClick={() => onToggle(field)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {isActive ? (
-          <span className="text-accent-indigo">{dir === 'asc' ? '▲' : '▼'}</span>
-        ) : (
-          <span className="text-text-muted/40">▲</span>
-        )}
-      </span>
-    </th>
-  );
-}
+const SORT_FIELD_OPTIONS: Array<{ value: SortField; label: string }> = [
+  { value: 'name', label: 'Name' },
+  { value: 'category', label: 'Category' },
+  { value: 'current_qty', label: 'On hand quantity' },
+  { value: 'reorder_level', label: 'Reorder level' },
+  { value: 'reorder_qty', label: 'Reorder quantity' },
+  { value: 'storage_area_id', label: 'Storage area' },
+  { value: 'order_unit', label: 'Order unit' },
+  { value: 'qty_per_unit', label: 'Pack quantity' },
+  { value: 'order_unit_price', label: 'Case price' },
+];
 
 function getPageNumbers(current: number, total: number): (number | '...')[] {
   if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
@@ -378,17 +147,7 @@ export function Inventory() {
   const [workflowFocus, setWorkflowFocus] = useState<InventoryWorkflowFocus>('all');
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortField(field);
-      setSortDir('asc');
-    }
-  };
-
   const { selectedVenueId } = useVenueContext();
-  const updateItem = useUpdateItem();
   const { data: areas } = useStorageAreas();
   const { data: allItemStorage } = useAllItemStorage();
   const { data: vendors } = useVendors();
@@ -546,14 +305,6 @@ export function Inventory() {
 
   const allOnPageSelected = paginatedItems.length > 0 && paginatedItems.every((item) => selectedIds.has(item.id));
 
-  const toggleSelectAll = () => {
-    if (allOnPageSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(paginatedItems.map((item) => item.id)));
-    }
-  };
-
   const toggleSelectOne = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -562,8 +313,6 @@ export function Inventory() {
       return next;
     });
   };
-
-  const colSpanTotal = 1 + 9 + (showOrdering ? 5 : 1) + 3;
 
   const reorderSpend = (reorderSuggestions ?? []).reduce(
     (sum, suggestion) => sum + (suggestion.estimated_total_cost ?? 0),
@@ -594,7 +343,11 @@ export function Inventory() {
     );
   };
 
-  const selectVisibleLaneItems = () => {
+  const toggleVisibleLaneSelection = () => {
+    if (allOnPageSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
     setSelectedIds(new Set(paginatedItems.map((item) => item.id)));
   };
 
@@ -731,10 +484,10 @@ export function Inventory() {
             <>
               <button
                 type="button"
-                onClick={selectVisibleLaneItems}
+                onClick={toggleVisibleLaneSelection}
                 className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
               >
-                Select Visible Lane Items
+                {allOnPageSelected ? 'Clear Visible Lane Selection' : 'Select Visible Lane Items'}
               </button>
               {selectedIds.size > 0 && (
                 <button
@@ -949,424 +702,302 @@ export function Inventory() {
         </WorkflowPanel>
       )}
 
-      {/* Spreadsheet table */}
-      {isLoading ? (
-        <div className="text-text-secondary text-sm">Loading...</div>
-      ) : itemsToRender.length > 0 ? (
-        <div className="bg-bg-card rounded-xl shadow-sm overflow-x-auto max-h-[calc(100vh-16rem)] overflow-y-auto">
-          <table className="min-w-[1200px] w-full text-sm whitespace-nowrap">
-            <thead>
-              {/* Row 1 — Group headers */}
-              <tr className="bg-bg-page sticky top-0 z-20">
-                <th className="w-10" />
-                <th colSpan={8} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
-                  Stock
-                </th>
-                <th colSpan={showOrdering ? 5 : 1} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
-                  <button
-                    type="button"
-                    onClick={() => setShowOrdering((v) => !v)}
-                    className="cursor-pointer hover:text-text-secondary transition-colors inline-flex items-center gap-1"
-                  >
-                    {showOrdering ? '\u25BE' : '\u25B8'} Ordering
-                  </button>
-                </th>
-                <th colSpan={3} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-text-muted font-medium text-left">
-                  Pricing
-                </th>
-              </tr>
-              {/* Row 2 — Column headers */}
-              <tr className="bg-bg-table-header text-text-secondary text-left sticky top-[29px] z-20 shadow-[0_1px_0_0_var(--color-border)]">
-                <th className="px-3 py-2.5 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allOnPageSelected}
-                    onChange={toggleSelectAll}
-                    className="rounded border-border text-accent-indigo focus:ring-accent-indigo/20 cursor-pointer"
-                  />
-                </th>
-                <SortHeader label="Name" field="name" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
-                <SortHeader label="Category" field="category" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Vendor</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Venue</th>
-                <SortHeader label="Storage Area" field="storage_area_id" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
-                <SortHeader label="In Stock" field="current_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Unit</th>
-                <SortHeader label="Reorder Level" field="reorder_level" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                <SortHeader label="Reorder Qty" field="reorder_qty" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Reorder</th>
-                {showOrdering ? (
-                  <>
-                    <SortHeader label="Order Unit" field="order_unit" activeField={sortField} dir={sortDir} onToggle={toggleSort} />
-                    <SortHeader label="Pack Qty" field="qty_per_unit" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Inner Unit</th>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Size Value</th>
-                    <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide">Size Unit</th>
-                  </>
-                ) : (
-                  <th />
-                )}
-                <SortHeader label="Unit Price" field="order_unit_price" activeField={sortField} dir={sortDir} onToggle={toggleSort} className="text-right" />
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Case Price</th>
-                <th className="px-3 py-2.5 font-medium text-xs uppercase tracking-wide text-right">Total Value</th>
-              </tr>
-            </thead>
-            <tbody>
+      <WorkflowPanel
+        title="Inventory Queue"
+        description="The catalog is now condensed into operator cards. Each card keeps stocking, assignment, and purchasing readiness visible without forcing horizontal scroll."
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-600">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sort</span>
+              <select
+                value={sortField}
+                onChange={(event) => setSortField(event.target.value as SortField)}
+                className="bg-transparent text-sm text-slate-900 focus:outline-none"
+                aria-label="Sort inventory cards by"
+              >
+                {SORT_FIELD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => setSortDir((value) => (value === 'asc' ? 'desc' : 'asc'))}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-white"
+            >
+              {sortDir === 'asc' ? 'Ascending' : 'Descending'}
+            </button>
+            <WorkflowChip active={showOrdering} onClick={() => setShowOrdering((value) => !value)}>
+              {showOrdering ? 'Hide purchasing detail' : 'Show purchasing detail'}
+            </WorkflowChip>
+          </div>
+        )}
+      >
+        {isLoading ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-600">
+            Loading the live inventory queue...
+          </div>
+        ) : sortedItems.length > 0 ? (
+          <div className="space-y-5">
+            <div className="grid gap-4 xl:grid-cols-2">
               {paginatedItems.map((item) => {
                 const itemAreas = storageByItem.get(item.id) ?? [];
                 const hasAreas = itemAreas.length > 0;
+                const reorderNeeded = item.reorder_level != null && item.current_qty <= item.reorder_level;
+                const missingVendor = workflowCounts.missingVendor.has(item.id);
+                const missingVenue = workflowCounts.missingVenue.has(item.id);
+                const missingStorageArea = workflowCounts.missingStorageArea.has(item.id);
+                const orderingIncomplete = workflowCounts.orderingIncomplete.has(item.id);
+                const totalValue = item.order_unit_price != null && item.current_qty > 0
+                  ? item.order_unit_price * item.current_qty
+                  : null;
+                const unitCost = item.order_unit_price != null && item.qty_per_unit && item.qty_per_unit > 0
+                  ? item.order_unit_price / item.qty_per_unit
+                  : null;
+                const economics = deriveInventoryUnitEconomics({
+                  baseUnit: item.unit,
+                  orderUnit: item.order_unit,
+                  orderUnitPrice: item.order_unit_price,
+                  qtyPerUnit: item.qty_per_unit,
+                  innerUnit: item.inner_unit,
+                  itemSizeValue: item.item_size_value,
+                  itemSizeUnit: item.item_size_unit,
+                });
+                const vendorName = vendors?.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Vendor missing';
+                const venueName = venues?.find((venue) => venue.id === item.venue_id)?.name ?? 'Venue missing';
+                const storageName = item.storage_area_id != null
+                  ? areaNameLookup.get(item.storage_area_id) ?? 'Area assigned'
+                  : hasAreas
+                    ? `${itemAreas.length} area balance${itemAreas.length === 1 ? '' : 's'}`
+                    : 'Storage area missing';
                 const insideUnitLabel = item.inner_unit ?? item.order_unit ?? item.unit;
-                const totalValue =
-                  item.order_unit_price != null && item.current_qty > 0
-                    ? item.order_unit_price * item.current_qty
-                    : null;
+                const issuePills = [
+                  missingVendor ? { label: 'Missing vendor', tone: 'blue' as const } : null,
+                  missingVenue ? { label: 'Missing venue', tone: 'blue' as const } : null,
+                  missingStorageArea ? { label: 'Missing area', tone: 'blue' as const } : null,
+                  orderingIncomplete ? { label: 'Ordering incomplete', tone: 'amber' as const } : null,
+                ].filter((value): value is { label: string; tone: 'blue' | 'amber' } => value !== null);
 
                 return (
-                <React.Fragment key={item.id}>
-                  <tr
-                    className="border-b border-border hover:bg-bg-hover transition-colors"
+                  <article
+                    key={item.id}
+                    className="flex h-full flex-col rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
                   >
-                    <td className="px-3 py-2 w-10">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(item.id)}
-                        onChange={() => toggleSelectOne(item.id)}
-                        className="rounded border-border text-accent-indigo focus:ring-accent-indigo/20 cursor-pointer"
-                      />
-                    </td>
-                    {/* Name – link to detail with expand toggle */}
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpand(item.id)}
-                          className={`text-xs w-4 h-4 flex items-center justify-center rounded hover:bg-bg-hover transition-colors ${
-                            hasAreas ? 'text-text-muted hover:text-text-primary' : 'text-transparent cursor-default'
-                          }`}
-                          tabIndex={hasAreas ? 0 : -1}
-                          aria-label={expandedItems.has(item.id) ? 'Collapse' : 'Expand'}
-                        >
-                          {expandedItems.has(item.id) ? '\u25BE' : '\u25B8'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedItemId(item.id)}
-                          className="text-left text-accent-indigo hover:underline"
-                        >
-                          {item.name}
-                        </button>
-                      </div>
-                    </td>
-
-                    {/* Category – editable */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.category}
-                        onChange={(e) => {
-                          updateItem.mutate({ id: item.id, data: { category: e.target.value as typeof item.category } });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        {CATEGORIES.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* Vendor – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.vendor_id ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : null;
-                          updateItem.mutate({ id: item.id, data: { vendor_id: val } });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {(vendors ?? []).map((v) => (
-                          <option key={v.id} value={v.id}>{v.name}</option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* Venue – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.venue_id ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : null;
-                          updateItem.mutate({ id: item.id, data: { venue_id: val } });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {(venues ?? []).map((v) => (
-                          <option key={v.id} value={v.id}>{v.name}</option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* Storage Area – inline select */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.storage_area_id ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : null;
-                          updateItem.mutate({ id: item.id, data: { storage_area_id: val } });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        <option value="">—</option>
-                        {(areas ?? []).map((a) => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* Stock Qty – inline edit */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.current_qty}
-                        field="current_qty"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
-
-                    {/* Unit – editable */}
-                    <td className="px-3 py-2">
-                      <select
-                        value={item.unit}
-                        onChange={(e) => {
-                          updateItem.mutate({ id: item.id, data: { unit: e.target.value as Unit } });
-                        }}
-                        className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                      >
-                        {UNITS.map((u) => (
-                          <option key={u} value={u}>{u}</option>
-                        ))}
-                      </select>
-                    </td>
-
-                    {/* Reorder Level – inline edit number */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.reorder_level}
-                        field="reorder_level"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
-
-                    {/* Reorder Qty – inline edit number */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.reorder_qty}
-                        field="reorder_qty"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
-
-                    {/* Reorder – auto badge */}
-                    <td className="px-3 py-2">
-                      <ReorderBadge
-                        stockQty={item.current_qty}
-                        reorderLevel={item.reorder_level}
-                      />
-                    </td>
-
-                    {/* ORDERING columns */}
-                    {showOrdering ? (
-                      <>
-                        {/* Order Unit – inline select */}
-                        <td className="px-3 py-2">
-                          <select
-                            value={item.order_unit ?? ''}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const val: Unit | null = raw ? (raw as Unit) : null;
-                              updateItem.mutate({
-                                id: item.id,
-                                data: { order_unit: val },
-                              });
-                            }}
-                            className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                          >
-                            <option value="">—</option>
-                            {UNITS.map((u) => (
-                              <option key={u} value={u}>
-                                {u}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Pack Qty – inline edit number */}
-                        <td className="px-3 py-2 text-right">
-                          <InlineEdit
-                            value={item.qty_per_unit}
-                            field="qty_per_unit"
-                            itemId={item.id}
-                            type="number"
-                          />
-                        </td>
-
-                        {/* Inner Unit – inline select */}
-                        <td className="px-3 py-2">
-                          <select
-                            value={item.inner_unit ?? ''}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const val: Unit | null = raw ? (raw as Unit) : null;
-                              updateItem.mutate({
-                                id: item.id,
-                                data: { inner_unit: val },
-                              });
-                            }}
-                            className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                          >
-                            <option value="">—</option>
-                            {UNITS.map((u) => (
-                              <option key={u} value={u}>
-                                {u}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Size Value – inline edit number */}
-                        <td className="px-3 py-2 text-right">
-                          <InlineEdit
-                            value={item.item_size_value}
-                            field="item_size_value"
-                            itemId={item.id}
-                            type="number"
-                          />
-                        </td>
-
-                        {/* Size Unit – inline select */}
-                        <td className="px-3 py-2">
-                          <select
-                            value={item.item_size_unit ?? ''}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const val: Unit | null = raw ? (raw as Unit) : null;
-                              updateItem.mutate({
-                                id: item.id,
-                                data: { item_size_unit: val },
-                              });
-                            }}
-                            className="bg-white border border-transparent hover:border-border focus:border-accent-indigo rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none cursor-pointer"
-                          >
-                            <option value="">—</option>
-                            {UNITS.map((u) => (
-                              <option key={u} value={u}>
-                                {u}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      </>
-                    ) : (
-                      <td />
-                    )}
-
-                    {/* PRICING columns – always visible */}
-                    {/* Unit Price – computed from order price / qty per unit */}
-                    <td className="px-3 py-2 text-right text-text-primary">
-                      <InlineInsidePrice
-                        orderUnitPrice={item.order_unit_price}
-                        qtyPerUnit={item.qty_per_unit}
-                        itemId={item.id}
-                        innerUnitLabel={insideUnitLabel}
-                      />
-                    </td>
-
-                    {/* Case Price – inline edit number */}
-                    <td className="px-3 py-2 text-right">
-                      <InlineEdit
-                        value={item.order_unit_price}
-                        field="order_unit_price"
-                        itemId={item.id}
-                        type="number"
-                      />
-                    </td>
-
-                    {/* Total Value – current_qty × unit price */}
-                    <td className="px-3 py-2 text-right text-text-primary font-mono tabular-nums">
-                      {formatCurrency(totalValue)}
-                    </td>
-                  </tr>
-                  {expandedItems.has(item.id) && hasAreas && (
-                    <tr className="bg-bg-area-row">
-                      <td colSpan={colSpanTotal} className="px-3 py-2 pl-10">
-                        <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
-                          {itemAreas.map((is) => (
-                            <span key={is.area_id}>
-                              {is.area_name}: <span className="text-text-primary font-mono font-medium">{is.quantity}</span>
-                            </span>
-                          ))}
+                    <div className="flex items-start gap-4">
+                      <label className="mt-1 flex min-h-6 min-w-6 items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => toggleSelectOne(item.id)}
+                          aria-label={`Select ${item.name}`}
+                          className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
+                        />
+                      </label>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedItemId(item.id)}
+                              className="truncate text-left text-lg font-semibold text-slate-950 transition hover:text-slate-700"
+                            >
+                              {item.name}
+                            </button>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
+                              <span>{item.category}</span>
+                              <span className="text-slate-300">•</span>
+                              <span>{item.current_qty} {item.unit} on hand</span>
+                              <span className="text-slate-300">•</span>
+                              <span>{selectedIds.has(item.id) ? 'Selected for workflow actions' : 'Available in queue'}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <WorkflowStatusPill tone={reorderNeeded ? 'amber' : 'green'}>
+                              {reorderNeeded ? 'Needs reorder' : 'In range'}
+                            </WorkflowStatusPill>
+                            <WorkflowStatusPill tone={orderingIncomplete ? 'amber' : 'slate'}>
+                              {orderingIncomplete ? 'Setup gap' : 'Setup complete'}
+                            </WorkflowStatusPill>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+
+                        {issuePills.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {issuePills.map((issue) => (
+                              <WorkflowStatusPill key={issue.label} tone={issue.tone}>
+                                {issue.label}
+                              </WorkflowStatusPill>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <InventoryKeyStat
+                            label="On hand"
+                            value={`${item.current_qty} ${item.unit}`}
+                            note={reorderNeeded && item.reorder_level != null ? `Threshold ${item.reorder_level} ${item.unit}` : 'Current stocked quantity'}
+                          />
+                          <InventoryKeyStat
+                            label="Vendor"
+                            value={vendorName}
+                            note={item.vendor_id == null ? 'Assign purchasing ownership' : 'Current purchasing owner'}
+                            tone={missingVendor ? 'blue' : 'default'}
+                          />
+                          <InventoryKeyStat
+                            label="Storage"
+                            value={storageName}
+                            note={missingStorageArea ? 'Storage routing incomplete' : hasAreas ? 'Area balances available below' : 'Primary area assignment'}
+                            tone={missingStorageArea ? 'blue' : 'default'}
+                          />
+                          <InventoryKeyStat
+                            label="Value"
+                            value={formatCurrency(totalValue)}
+                            note={item.order_unit_price != null ? `${formatCurrency(item.order_unit_price)} case price` : 'Cost not set'}
+                            tone={item.order_unit_price == null ? 'amber' : 'default'}
+                          />
+                        </div>
+
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Unit chain</div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-700">
+                            {economics.packLine && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{economics.packLine}</span>}
+                            {economics.eachLine && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{economics.eachLine}</span>}
+                            {economics.costLine && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{economics.costLine}</span>}
+                            {!economics.packLine && !economics.eachLine && !economics.costLine && (
+                              <span className="text-slate-600">Pack math is still incomplete for this item.</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.95fr)]">
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-4">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Operational ownership</div>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              <InventoryDetailRow label="Venue" value={venueName} />
+                              <InventoryDetailRow label="Reorder target" value={item.reorder_qty != null ? `${item.reorder_qty} ${item.unit}` : 'Missing'} />
+                              <InventoryDetailRow label="Primary area" value={item.storage_area_id != null ? areaNameLookup.get(item.storage_area_id) ?? 'Assigned' : 'Missing'} />
+                              <InventoryDetailRow label="Pack base unit" value={insideUnitLabel} />
+                            </div>
+                          </div>
+
+                          {showOrdering ? (
+                            <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(180deg,#f7fbff_0%,#ffffff_100%)] px-4 py-4">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Purchasing detail</div>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <InventoryDetailRow label="Order unit" value={item.order_unit ?? 'Missing'} />
+                                <InventoryDetailRow label="Pack quantity" value={item.qty_per_unit ?? 'Missing'} />
+                                <InventoryDetailRow label="Unit cost" value={formatCurrency(unitCost)} />
+                                <InventoryDetailRow label="Case cost" value={formatCurrency(item.order_unit_price)} />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Purchasing detail</div>
+                              <p className="mt-2 text-sm leading-6 text-slate-600">
+                                Keep this panel collapsed when you are triaging the queue quickly. Turn it on when you need pack and cost setup while resolving ordering gaps.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {hasAreas && (
+                          <div className="mt-4">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(item.id)}
+                              aria-expanded={expandedItems.has(item.id)}
+                              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+                            >
+                              {expandedItems.has(item.id) ? 'Hide area balances' : `Show area balances (${itemAreas.length})`}
+                            </button>
+                            {expandedItems.has(item.id) && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {itemAreas.map((area) => (
+                                  <div key={area.area_id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                    <span className="font-medium text-slate-900">{area.area_name}</span>
+                                    <span className="mx-2 text-slate-300">•</span>
+                                    <span>{area.quantity} {item.unit}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                          <div className="text-sm text-slate-600">
+                            {reorderNeeded
+                              ? 'This item is below its reorder threshold and should be reviewed in the current operating cycle.'
+                              : 'This item is stocked within range. Use the side panel for assignment or pack corrections.'}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedItemId(item.id)}
+                            className="inline-flex min-h-11 items-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                          >
+                            Open item workflow
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
                 );
               })}
-            </tbody>
-            <tfoot>
-              <tr className="bg-bg-page">
-                <td colSpan={colSpanTotal} className="px-4 py-3 text-sm text-text-secondary">
-                  <div className="flex items-center justify-between">
-                    <span>
-                      Showing {showingStart}–{showingEnd} of {sortedItems.length} items
-                    </span>
-                    {totalPages > 1 && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                          disabled={currentPage === 1}
-                          className="px-2 py-1 rounded text-xs border border-border hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Previous
-                        </button>
-                        {getPageNumbers(currentPage, totalPages).map((p, i) =>
-                          p === '...' ? (
-                            <span key={`ellipsis-${i}`} className="px-1 text-text-muted">…</span>
-                          ) : (
-                            <button
-                              key={p}
-                              onClick={() => setCurrentPage(p as number)}
-                              className={`px-2 py-1 rounded text-xs border ${
-                                p === currentPage
-                                  ? 'bg-accent-indigo text-white border-accent-indigo'
-                                  : 'border-border hover:bg-bg-hover'
-                              }`}
-                            >
-                              {p}
-                            </button>
-                          )
-                        )}
-                        <button
-                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                          disabled={currentPage === totalPages}
-                          className="px-2 py-1 rounded text-xs border border-border hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-slate-900">
+                    Showing {showingStart}–{showingEnd} of {sortedItems.length} items
                   </div>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      ) : (
-        <div className="text-text-secondary text-sm">No items found.</div>
-      )}
+                  <div className="text-sm text-slate-600">
+                    Page {currentPage} of {Math.max(totalPages, 1)}. Bulk actions only apply to the visible selected cards.
+                  </div>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950 disabled:opacity-40 disabled:hover:border-slate-300"
+                    >
+                      Previous
+                    </button>
+                    {getPageNumbers(currentPage, totalPages).map((pageNumber, index) => (
+                      pageNumber === '...' ? (
+                        <span key={`ellipsis-${index}`} className="px-1 text-sm text-slate-400">…</span>
+                      ) : (
+                        <button
+                          key={pageNumber}
+                          onClick={() => setCurrentPage(pageNumber)}
+                          className={pageNumber === currentPage
+                            ? 'rounded-full bg-slate-950 px-3 py-1.5 text-sm font-semibold text-white'
+                            : 'rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950'}
+                        >
+                          {pageNumber}
+                        </button>
+                      )
+                    ))}
+                    <button
+                      onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950 disabled:opacity-40 disabled:hover:border-slate-300"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <WorkflowEmptyState
+            title="No inventory items match this lane."
+            body="Adjust the queue filters or switch workflow lanes to bring items back into view."
+          />
+        )}
+      </WorkflowPanel>
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
@@ -1550,10 +1181,14 @@ function InventoryItemSidePanel({
     vendor_id: string;
     venue_id: string;
     storage_area_id: string;
+    unit: '' | Unit;
     reorder_level: string;
     reorder_qty: string;
     order_unit: '' | Unit;
     qty_per_unit: string;
+    inner_unit: '' | Unit;
+    item_size_value: string;
+    item_size_unit: '' | Unit;
     order_unit_price: string;
   };
   type DraftField = keyof InventoryItemPanelDraft;
@@ -1563,10 +1198,14 @@ function InventoryItemSidePanel({
     vendor_id: 'idle',
     venue_id: 'idle',
     storage_area_id: 'idle',
+    unit: 'idle',
     reorder_level: 'idle',
     reorder_qty: 'idle',
     order_unit: 'idle',
     qty_per_unit: 'idle',
+    inner_unit: 'idle',
+    item_size_value: 'idle',
+    item_size_unit: 'idle',
     order_unit_price: 'idle',
   });
   const emptySavedAt = (): Record<DraftField, number | null> => ({
@@ -1574,10 +1213,14 @@ function InventoryItemSidePanel({
     vendor_id: null,
     venue_id: null,
     storage_area_id: null,
+    unit: null,
     reorder_level: null,
     reorder_qty: null,
     order_unit: null,
     qty_per_unit: null,
+    inner_unit: null,
+    item_size_value: null,
+    item_size_unit: null,
     order_unit_price: null,
   });
 
@@ -1588,10 +1231,14 @@ function InventoryItemSidePanel({
     vendor_id: item.vendor_id == null ? '' : String(item.vendor_id),
     venue_id: item.venue_id == null ? '' : String(item.venue_id),
     storage_area_id: item.storage_area_id == null ? '' : String(item.storage_area_id),
+    unit: item.unit,
     reorder_level: item.reorder_level == null ? '' : String(item.reorder_level),
     reorder_qty: item.reorder_qty == null ? '' : String(item.reorder_qty),
     order_unit: item.order_unit ?? '',
     qty_per_unit: item.qty_per_unit == null ? '' : String(item.qty_per_unit),
+    inner_unit: item.inner_unit ?? '',
+    item_size_value: item.item_size_value == null ? '' : String(item.item_size_value),
+    item_size_unit: item.item_size_unit ?? '',
     order_unit_price: item.order_unit_price == null ? '' : String(item.order_unit_price),
   });
   const [fieldStates, setFieldStates] = useState<Record<DraftField, FieldSaveState>>(emptyFieldStates);
@@ -1608,10 +1255,14 @@ function InventoryItemSidePanel({
     vendor_id: null,
     venue_id: null,
     storage_area_id: null,
+    unit: null,
     reorder_level: null,
     reorder_qty: null,
     order_unit: null,
     qty_per_unit: null,
+    inner_unit: null,
+    item_size_value: null,
+    item_size_unit: null,
     order_unit_price: null,
   });
 
@@ -1621,10 +1272,14 @@ function InventoryItemSidePanel({
       vendor_id: item.vendor_id == null ? '' : String(item.vendor_id),
       venue_id: item.venue_id == null ? '' : String(item.venue_id),
       storage_area_id: item.storage_area_id == null ? '' : String(item.storage_area_id),
+      unit: item.unit,
       reorder_level: item.reorder_level == null ? '' : String(item.reorder_level),
       reorder_qty: item.reorder_qty == null ? '' : String(item.reorder_qty),
       order_unit: item.order_unit ?? '',
       qty_per_unit: item.qty_per_unit == null ? '' : String(item.qty_per_unit),
+      inner_unit: item.inner_unit ?? '',
+      item_size_value: item.item_size_value == null ? '' : String(item.item_size_value),
+      item_size_unit: item.item_size_unit ?? '',
       order_unit_price: item.order_unit_price == null ? '' : String(item.order_unit_price),
     });
     setFieldStates(emptyFieldStates());
@@ -1638,10 +1293,14 @@ function InventoryItemSidePanel({
       vendor_id: null,
       venue_id: null,
       storage_area_id: null,
+      unit: null,
       reorder_level: null,
       reorder_qty: null,
       order_unit: null,
       qty_per_unit: null,
+      inner_unit: null,
+      item_size_value: null,
+      item_size_unit: null,
       order_unit_price: null,
     });
   }, [item]);
@@ -1670,8 +1329,17 @@ function InventoryItemSidePanel({
   const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
   const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
   const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
+  const currentEconomics = deriveInventoryUnitEconomics({
+    baseUnit: item.unit,
+    orderUnit: item.order_unit,
+    orderUnitPrice: item.order_unit_price,
+    qtyPerUnit: item.qty_per_unit,
+    innerUnit: item.inner_unit,
+    itemSizeValue: item.item_size_value,
+    itemSizeUnit: item.item_size_unit,
+  });
   const assignmentFields: DraftField[] = ['category', 'vendor_id', 'venue_id', 'storage_area_id'];
-  const orderingFields: DraftField[] = ['reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'order_unit_price'];
+  const orderingFields: DraftField[] = ['unit', 'reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'inner_unit', 'item_size_value', 'item_size_unit', 'order_unit_price'];
   const changedFields = (Object.entries(draft) as Array<[DraftField, string]>)
     .filter(([field, value]) => {
       switch (field) {
@@ -1683,6 +1351,8 @@ function InventoryItemSidePanel({
           return value !== (item.venue_id == null ? '' : String(item.venue_id));
         case 'storage_area_id':
           return value !== (item.storage_area_id == null ? '' : String(item.storage_area_id));
+        case 'unit':
+          return value !== item.unit;
         case 'reorder_level':
           return value !== (item.reorder_level == null ? '' : String(item.reorder_level));
         case 'reorder_qty':
@@ -1691,6 +1361,12 @@ function InventoryItemSidePanel({
           return value !== (item.order_unit ?? '');
         case 'qty_per_unit':
           return value !== (item.qty_per_unit == null ? '' : String(item.qty_per_unit));
+        case 'inner_unit':
+          return value !== (item.inner_unit ?? '');
+        case 'item_size_value':
+          return value !== (item.item_size_value == null ? '' : String(item.item_size_value));
+        case 'item_size_unit':
+          return value !== (item.item_size_unit ?? '');
         case 'order_unit_price':
           return value !== (item.order_unit_price == null ? '' : String(item.order_unit_price));
         default:
@@ -1719,6 +1395,9 @@ function InventoryItemSidePanel({
         case 'storage_area_id':
           patch.storage_area_id = draft.storage_area_id ? Number(draft.storage_area_id) : null;
           break;
+        case 'unit':
+          patch.unit = draft.unit as Unit;
+          break;
         case 'reorder_level':
           patch.reorder_level = draft.reorder_level === '' ? null : Number(draft.reorder_level);
           break;
@@ -1730,6 +1409,15 @@ function InventoryItemSidePanel({
           break;
         case 'qty_per_unit':
           patch.qty_per_unit = draft.qty_per_unit === '' ? null : Number(draft.qty_per_unit);
+          break;
+        case 'inner_unit':
+          patch.inner_unit = draft.inner_unit === '' ? null : draft.inner_unit;
+          break;
+        case 'item_size_value':
+          patch.item_size_value = draft.item_size_value === '' ? null : Number(draft.item_size_value);
+          break;
+        case 'item_size_unit':
+          patch.item_size_unit = draft.item_size_unit === '' ? null : draft.item_size_unit;
           break;
         case 'order_unit_price':
           patch.order_unit_price = draft.order_unit_price === '' ? null : Number(draft.order_unit_price);
@@ -1949,18 +1637,18 @@ function InventoryItemSidePanel({
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ordering setup</div>
-            <div className="mt-1 text-sm text-slate-600">Save pack, price, and reorder controls as a separate operator action.</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Tracking and purchasing setup</div>
+            <div className="mt-1 text-sm text-slate-600">Set the counted unit, the purchase pack, and the measurable content recipes rely on. Save this separately from ownership assignments.</div>
           </div>
           <div className="flex items-center gap-3">
             <FieldStateSummary changedCount={orderingChangedFields.length} fieldStates={orderingFieldStates} />
             <button
               type="button"
-              onClick={() => saveFieldGroup(orderingFields, 'Ordering setup', 'ordering')}
+              onClick={() => saveFieldGroup(orderingFields, 'Tracking and purchasing setup', 'ordering')}
               disabled={updateItem.isPending || orderingChangedFields.length === 0}
               className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
-              {updateItem.isPending ? 'Saving...' : orderingChangedFields.length === 0 ? 'No changes' : 'Save ordering'}
+              {updateItem.isPending ? 'Saving...' : orderingChangedFields.length === 0 ? 'No changes' : 'Save unit economics'}
             </button>
           </div>
         </div>
@@ -1971,81 +1659,177 @@ function InventoryItemSidePanel({
             onDismiss={() => setGroupBanner((current) => ({ ...current, ordering: null }))}
           />
         )}
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder level</span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={draft.reorder_level}
-              onChange={(event) => setDraft((current) => ({ ...current, reorder_level: event.target.value }))}
-              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_level)}`}
-            />
-            <FieldStateHint state={fieldStates.reorder_level} dirty={changedFields.includes('reorder_level')} savedAt={fieldSavedAt.reorder_level} rollbackReason={fieldRollbackReasons.reorder_level} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder qty</span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={draft.reorder_qty}
-              onChange={(event) => setDraft((current) => ({ ...current, reorder_qty: event.target.value }))}
-              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_qty)}`}
-            />
-            <FieldStateHint state={fieldStates.reorder_qty} dirty={changedFields.includes('reorder_qty')} savedAt={fieldSavedAt.reorder_qty} rollbackReason={fieldRollbackReasons.reorder_qty} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Order unit</span>
-            <select
-              value={draft.order_unit}
-              onChange={(event) => setDraft((current) => ({ ...current, order_unit: event.target.value as '' | Unit }))}
-              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit)}`}
-            >
-              <option value="">Missing</option>
-              {UNITS.map((unitOption) => (
-                <option key={unitOption} value={unitOption}>{unitOption}</option>
-              ))}
-            </select>
-            <FieldStateHint state={fieldStates.order_unit} dirty={changedFields.includes('order_unit')} savedAt={fieldSavedAt.order_unit} rollbackReason={fieldRollbackReasons.order_unit} />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pack qty</span>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              value={draft.qty_per_unit}
-              onChange={(event) => setDraft((current) => ({ ...current, qty_per_unit: event.target.value }))}
-              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.qty_per_unit)}`}
-            />
-            <FieldStateHint state={fieldStates.qty_per_unit} dirty={changedFields.includes('qty_per_unit')} savedAt={fieldSavedAt.qty_per_unit} rollbackReason={fieldRollbackReasons.qty_per_unit} />
-          </label>
-          <label className="space-y-1 text-sm md:col-span-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Case price</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={draft.order_unit_price}
-              onChange={(event) => setDraft((current) => ({ ...current, order_unit_price: event.target.value }))}
-              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit_price)}`}
-            />
-            <FieldStateHint state={fieldStates.order_unit_price} dirty={changedFields.includes('order_unit_price')} savedAt={fieldSavedAt.order_unit_price} rollbackReason={fieldRollbackReasons.order_unit_price} />
-          </label>
+        <div className="mt-3">
+          <InventoryUnitEconomicsSummary
+            compact
+            input={{
+              baseUnit: draft.unit,
+              orderUnit: draft.order_unit,
+              orderUnitPrice: draft.order_unit_price,
+              qtyPerUnit: draft.qty_per_unit,
+              innerUnit: draft.inner_unit,
+              itemSizeValue: draft.item_size_value,
+              itemSizeUnit: draft.item_size_unit,
+            }}
+          />
+        </div>
+        <div className="mt-4 grid gap-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Count and reorder controls</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Tracking unit</span>
+                <select
+                  value={draft.unit}
+                  onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value as Unit }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.unit)}`}
+                >
+                  {UNITS.map((unitOption) => (
+                    <option key={unitOption} value={unitOption}>{unitOption}</option>
+                  ))}
+                </select>
+                <FieldStateHint state={fieldStates.unit} dirty={changedFields.includes('unit')} savedAt={fieldSavedAt.unit} rollbackReason={fieldRollbackReasons.unit} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder level</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={draft.reorder_level}
+                  onChange={(event) => setDraft((current) => ({ ...current, reorder_level: event.target.value }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_level)}`}
+                />
+                <FieldStateHint state={fieldStates.reorder_level} dirty={changedFields.includes('reorder_level')} savedAt={fieldSavedAt.reorder_level} rollbackReason={fieldRollbackReasons.reorder_level} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder qty</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={draft.reorder_qty}
+                  onChange={(event) => setDraft((current) => ({ ...current, reorder_qty: event.target.value }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_qty)}`}
+                />
+                <FieldStateHint state={fieldStates.reorder_qty} dirty={changedFields.includes('reorder_qty')} savedAt={fieldSavedAt.reorder_qty} rollbackReason={fieldRollbackReasons.reorder_qty} />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Purchase pack</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Purchase unit</span>
+                <select
+                  value={draft.order_unit}
+                  onChange={(event) => setDraft((current) => ({ ...current, order_unit: event.target.value as '' | Unit }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit)}`}
+                >
+                  <option value="">Missing</option>
+                  {UNITS.map((unitOption) => (
+                    <option key={unitOption} value={unitOption}>{unitOption}</option>
+                  ))}
+                </select>
+                <FieldStateHint state={fieldStates.order_unit} dirty={changedFields.includes('order_unit')} savedAt={fieldSavedAt.order_unit} rollbackReason={fieldRollbackReasons.order_unit} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Case / pack price</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.order_unit_price}
+                  onChange={(event) => setDraft((current) => ({ ...current, order_unit_price: event.target.value }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit_price)}`}
+                />
+                <FieldStateHint state={fieldStates.order_unit_price} dirty={changedFields.includes('order_unit_price')} savedAt={fieldSavedAt.order_unit_price} rollbackReason={fieldRollbackReasons.order_unit_price} />
+              </label>
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Counted units in each purchase</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={draft.qty_per_unit}
+                  onChange={(event) => setDraft((current) => ({ ...current, qty_per_unit: event.target.value }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.qty_per_unit)}`}
+                />
+                <FieldStateHint state={fieldStates.qty_per_unit} dirty={changedFields.includes('qty_per_unit')} savedAt={fieldSavedAt.qty_per_unit} rollbackReason={fieldRollbackReasons.qty_per_unit} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Individual counted unit</span>
+                <select
+                  value={draft.inner_unit}
+                  onChange={(event) => setDraft((current) => ({ ...current, inner_unit: event.target.value as '' | Unit }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.inner_unit)}`}
+                >
+                  <option value="">Use tracking unit</option>
+                  {UNITS.map((unitOption) => (
+                    <option key={unitOption} value={unitOption}>{unitOption}</option>
+                  ))}
+                </select>
+                <FieldStateHint state={fieldStates.inner_unit} dirty={changedFields.includes('inner_unit')} savedAt={fieldSavedAt.inner_unit} rollbackReason={fieldRollbackReasons.inner_unit} />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Measurable content for recipes and usage</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Content per counted unit</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={draft.item_size_value}
+                  onChange={(event) => setDraft((current) => ({ ...current, item_size_value: event.target.value }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.item_size_value)}`}
+                />
+                <FieldStateHint state={fieldStates.item_size_value} dirty={changedFields.includes('item_size_value')} savedAt={fieldSavedAt.item_size_value} rollbackReason={fieldRollbackReasons.item_size_value} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Measurable unit</span>
+                <select
+                  value={draft.item_size_unit}
+                  onChange={(event) => setDraft((current) => ({ ...current, item_size_unit: event.target.value as '' | Unit }))}
+                  className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.item_size_unit)}`}
+                >
+                  <option value="">Missing</option>
+                  {UNITS.map((unitOption) => (
+                    <option key={unitOption} value={unitOption}>{unitOption}</option>
+                  ))}
+                </select>
+                <FieldStateHint state={fieldStates.item_size_unit} dirty={changedFields.includes('item_size_unit')} savedAt={fieldSavedAt.item_size_unit} rollbackReason={fieldRollbackReasons.item_size_unit} />
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current ordering setup</div>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-          <DetailTile label="Order Unit" value={item.order_unit ?? 'Missing'} />
-          <DetailTile label="Pack Qty" value={item.qty_per_unit ?? 'Missing'} />
-          <DetailTile label="Case Price" value={formatCurrency(item.order_unit_price)} />
-          <DetailTile label="Estimated Value" value={formatCurrency(totalValue)} />
-          <DetailTile label="Reorder Level" value={item.reorder_level ?? 'Missing'} />
-          <DetailTile label="Reorder Qty" value={item.reorder_qty ?? 'Missing'} />
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current live unit economics</div>
+        <div className="mt-3">
+          <InventoryUnitEconomicsSummary
+            compact
+            input={{
+              baseUnit: item.unit,
+              orderUnit: item.order_unit,
+              orderUnitPrice: item.order_unit_price,
+              qtyPerUnit: item.qty_per_unit,
+              innerUnit: item.inner_unit,
+              itemSizeValue: item.item_size_value,
+              itemSizeUnit: item.item_size_unit,
+            }}
+          />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <DetailTile label="Tracked in" value={item.unit} />
+          <DetailTile label="Reorder status" value={reorderStatus} />
+          <DetailTile label="Estimated inventory value" value={formatCurrency(totalValue)} />
+          <DetailTile label="Recipe usage support" value={currentEconomics.measurableUnit ? `Yes • ${currentEconomics.measurableUnit}` : 'Limited'} />
         </div>
         <div className="mt-4">
           <Link
@@ -2080,6 +1864,47 @@ function InventoryItemSidePanel({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function InventoryKeyStat({
+  label,
+  value,
+  note,
+  tone = 'default',
+}: {
+  label: string;
+  value: string;
+  note: string;
+  tone?: 'default' | 'amber' | 'blue';
+}) {
+  const className = tone === 'amber'
+    ? 'border-amber-200 bg-amber-50/70'
+    : tone === 'blue'
+      ? 'border-sky-200 bg-sky-50/70'
+      : 'border-slate-200 bg-white';
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${className}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-2 text-base font-semibold text-slate-950">{value}</div>
+      <div className="mt-1 text-sm leading-5 text-slate-600">{note}</div>
+    </div>
+  );
+}
+
+function InventoryDetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-xl bg-white/80 px-3 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-900">{String(value)}</div>
     </div>
   );
 }

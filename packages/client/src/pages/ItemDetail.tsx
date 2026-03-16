@@ -7,6 +7,7 @@ import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
 import type { Category, Unit } from '@fifoflow/shared';
 import { TransactionForm } from '../components/TransactionForm';
 import { VendorPricesSection } from '../components/VendorPricesSection';
+import { InventoryUnitEconomicsSummary } from '../components/inventory/InventoryUnitEconomicsSummary';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '\u2014';
@@ -223,10 +224,24 @@ export function ItemDetail() {
               </select>
             </div>
 
-            {/* New fields */}
-            <div className="grid grid-cols-2 gap-3">
+            <InventoryUnitEconomicsSummary
+              compact
+              input={{
+                baseUnit: editUnit,
+                orderUnit: editOrderUnit,
+                orderUnitPrice: editInsideUnitPrice || editOrderUnitPrice,
+                qtyPerUnit: editQtyPerUnit,
+                innerUnit: editInnerUnit,
+                itemSizeValue: editItemSizeValue,
+                itemSizeUnit: editItemSizeUnit,
+              }}
+            />
+
+            <div className="rounded-xl border border-border bg-bg-page p-4">
+              <div className="text-xs font-medium text-text-secondary">Tracking and purchasing setup</div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Order Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Purchase Unit</label>
                 <select
                   value={editOrderUnit}
                   onChange={(e) => setEditOrderUnit((e.target.value as Unit | '') ?? '')}
@@ -241,7 +256,7 @@ export function ItemDetail() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Qty per Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Units Inside Each Purchase</label>
                 <input
                   type="number"
                   step="any"
@@ -253,7 +268,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Order Unit Price</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Purchase Price</label>
                 <input
                   type="number"
                   step="0.01"
@@ -265,7 +280,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Inside Unit Price</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Derived Cost Per Counted Unit</label>
                 <input
                   type="number"
                   step="0.01"
@@ -280,7 +295,7 @@ export function ItemDetail() {
                 </p>
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Inner Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Individual Counted Unit</label>
                 <select
                   value={editInnerUnit}
                   onChange={(e) => setEditInnerUnit((e.target.value as Unit | '') ?? '')}
@@ -295,7 +310,7 @@ export function ItemDetail() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Item Size Value</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Content Per Counted Unit</label>
                 <input
                   type="number"
                   step="any"
@@ -307,7 +322,7 @@ export function ItemDetail() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Item Size Unit</label>
+                <label className="block text-xs font-medium text-text-muted mb-1">Measurable Unit</label>
                 <select
                   value={editItemSizeUnit}
                   onChange={(e) => setEditItemSizeUnit((e.target.value as Unit | '') ?? '')}
@@ -345,6 +360,7 @@ export function ItemDetail() {
                   className={`${inputClass} w-full`}
                 />
               </div>
+            </div>
             </div>
 
             <div className="flex gap-2 items-center">
@@ -415,52 +431,54 @@ export function ItemDetail() {
               </div>
 
               {/* Details grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 mt-4 pt-4 border-t border-border text-sm">
-                {packagingDescription && (
-                  <div className="sm:col-span-3">
-                    <span className="text-xs text-text-muted">Packaging</span>
-                    <p className="text-text-primary">{packagingDescription}</p>
+              <div className="mt-4 space-y-4 border-t border-border pt-4">
+                <InventoryUnitEconomicsSummary
+                  compact
+                  input={{
+                    baseUnit: item.unit,
+                    orderUnit: item.order_unit,
+                    orderUnitPrice: item.order_unit_price,
+                    qtyPerUnit: item.qty_per_unit,
+                    innerUnit: item.inner_unit,
+                    itemSizeValue: item.item_size_value,
+                    itemSizeUnit: item.item_size_unit,
+                  }}
+                />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+                  {packagingDescription && (
+                    <div className="sm:col-span-3">
+                      <span className="text-xs text-text-muted">Pack relationship</span>
+                      <p className="text-text-primary">{packagingDescription}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs text-text-muted">Tracked In</span>
+                    <p className="text-text-primary">{item.unit}</p>
                   </div>
-                )}
-                <div>
-                  <span className="text-xs text-text-muted">Order Unit</span>
-                  <p className="text-text-primary">{item.order_unit ?? '\u2014'}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Qty per Unit</span>
-                  <p className="text-text-primary">{item.qty_per_unit != null ? item.qty_per_unit : '\u2014'}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Order Unit Price</span>
-                  <p className="text-text-primary">{formatCurrency(item.order_unit_price)}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Inside Unit Price</span>
-                  <p className="text-text-primary">
-                    {insideUnitPrice == null
-                      ? '\u2014'
-                      : `${formatCurrency(insideUnitPrice)} / ${insideUnitLabel}`}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Item Size</span>
-                  <p className="text-text-primary">
-                    {item.item_size_value != null && item.item_size_unit
-                      ? `${item.item_size_value} ${item.item_size_unit}`
-                      : '\u2014'}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Inner Unit</span>
-                  <p className="text-text-primary">{item.inner_unit ?? '\u2014'}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Reorder Level</span>
-                  <p className="text-text-primary">{item.reorder_level != null ? item.reorder_level : '\u2014'}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-text-muted">Reorder Qty</span>
-                  <p className="text-text-primary">{item.reorder_qty != null ? item.reorder_qty : '\u2014'}</p>
+                  <div>
+                    <span className="text-xs text-text-muted">Counted Unit Cost</span>
+                    <p className="text-text-primary">
+                      {insideUnitPrice == null
+                        ? '\u2014'
+                        : `${formatCurrency(insideUnitPrice)} / ${insideUnitLabel}`}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted">Measurable Content</span>
+                    <p className="text-text-primary">
+                      {item.item_size_value != null && item.item_size_unit
+                        ? `${item.item_size_value} ${item.item_size_unit}`
+                        : '\u2014'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted">Reorder Level</span>
+                    <p className="text-text-primary">{item.reorder_level != null ? item.reorder_level : '\u2014'}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-muted">Reorder Qty</span>
+                    <p className="text-text-primary">{item.reorder_qty != null ? item.reorder_qty : '\u2014'}</p>
+                  </div>
                 </div>
               </div>
             </div>
