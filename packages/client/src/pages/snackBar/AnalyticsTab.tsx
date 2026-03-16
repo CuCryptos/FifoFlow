@@ -171,6 +171,7 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
 
   return (
     <div className="space-y-3">
+      <div className="text-xs text-text-muted">Hover, focus, or tap a point for exact revenue details.</div>
       <div className="relative h-[240px] w-full">
         <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="h-full w-full overflow-visible">
           <defs>
@@ -227,6 +228,7 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
                 onMouseLeave={() => setHoveredPoint(null)}
                 onFocus={() => setHoveredPoint(buildRevenueHoverPoint(point))}
                 onBlur={() => setHoveredPoint(null)}
+                onClick={() => setHoveredPoint((current) => current?.date === point.date ? null : buildRevenueHoverPoint(point))}
               />
               <circle cx={point.x} cy={point.y} r="4" fill="#0F172A" pointerEvents="none" />
               <circle cx={point.x} cy={point.y} r="2.5" fill="#34D399" pointerEvents="none" />
@@ -270,13 +272,14 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
 
   return (
     <div className="space-y-3">
+      <div className="text-xs text-text-muted">Hover, focus, or tap a row for exact seller totals.</div>
       {sellers.map((seller) => {
         const width = Math.max((seller.revenue / maxRevenue) * 100, 6);
         const hovered = hoveredSellerId === seller.item_id;
         return (
           <div
             key={seller.item_id}
-            className={`relative space-y-1.5 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent-indigo/40 ${hovered ? 'bg-slate-50' : ''}`}
+            className={`relative min-h-[44px] space-y-1.5 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-accent-indigo/40 ${hovered ? 'bg-slate-50' : ''}`}
             tabIndex={0}
             role="img"
             aria-label={`${seller.item_name}, ${formatCurrency(seller.revenue)} revenue, ${seller.quantity_sold} sold`}
@@ -285,6 +288,7 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
             onMouseLeave={() => setHoveredSellerId(null)}
             onFocus={() => setHoveredSellerId(seller.item_id)}
             onBlur={() => setHoveredSellerId(null)}
+            onClick={() => setHoveredSellerId((current) => current === seller.item_id ? null : seller.item_id)}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">

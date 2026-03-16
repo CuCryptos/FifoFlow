@@ -1596,6 +1596,13 @@ function InventoryItemSidePanel({
   });
   const [fieldStates, setFieldStates] = useState<Record<DraftField, FieldSaveState>>(emptyFieldStates);
   const [fieldSavedAt, setFieldSavedAt] = useState<Record<DraftField, number | null>>(emptySavedAt);
+  const [groupBanner, setGroupBanner] = useState<{
+    assignments: { tone: 'success' | 'error'; message: string } | null;
+    ordering: { tone: 'success' | 'error'; message: string } | null;
+  }>({
+    assignments: null,
+    ordering: null,
+  });
   const [fieldRollbackReasons, setFieldRollbackReasons] = useState<Record<DraftField, string | null>>({
     category: null,
     vendor_id: null,
@@ -1622,6 +1629,10 @@ function InventoryItemSidePanel({
     });
     setFieldStates(emptyFieldStates());
     setFieldSavedAt(emptySavedAt());
+    setGroupBanner({
+      assignments: null,
+      ordering: null,
+    });
     setFieldRollbackReasons({
       category: null,
       vendor_id: null,
@@ -1709,11 +1720,15 @@ function InventoryItemSidePanel({
     return patch;
   };
 
-  const saveFieldGroup = (fields: DraftField[], label: string) => {
+  const saveFieldGroup = (fields: DraftField[], label: string, groupKey: 'assignments' | 'ordering') => {
     const fieldsToSave = fields.filter((field) => changedFields.includes(field));
     if (fieldsToSave.length === 0) {
       return;
     }
+    setGroupBanner((current) => ({
+      ...current,
+      [groupKey]: null,
+    }));
     setFieldStates((current) => {
       const next = { ...current };
       fieldsToSave.forEach((field) => {
@@ -1768,6 +1783,13 @@ function InventoryItemSidePanel({
               return next;
             });
           }, 1800);
+          setGroupBanner((current) => ({
+            ...current,
+            [groupKey]: {
+              tone: 'success',
+              message: `${label} saved. The persisted item state now matches this panel.`,
+            },
+          }));
           toast(`${label} saved`, 'success');
         },
         onError: (error) => {
@@ -1797,6 +1819,13 @@ function InventoryItemSidePanel({
               return next;
             });
           }, 2200);
+          setGroupBanner((current) => ({
+            ...current,
+            [groupKey]: {
+              tone: 'error',
+              message: `${label} rolled back. ${reason}`,
+            },
+          }));
           toast(reason, 'error');
         },
       },
@@ -1824,7 +1853,7 @@ function InventoryItemSidePanel({
             <FieldStateSummary changedCount={assignmentChangedFields.length} fieldStates={assignmentFieldStates} />
             <button
               type="button"
-              onClick={() => saveFieldGroup(assignmentFields, 'Assignments')}
+              onClick={() => saveFieldGroup(assignmentFields, 'Assignments', 'assignments')}
               disabled={updateItem.isPending || assignmentChangedFields.length === 0}
               className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
@@ -1832,6 +1861,9 @@ function InventoryItemSidePanel({
             </button>
           </div>
         </div>
+        {groupBanner.assignments && (
+          <StickyGroupBanner tone={groupBanner.assignments.tone} message={groupBanner.assignments.message} />
+        )}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Category</span>
@@ -1901,7 +1933,7 @@ function InventoryItemSidePanel({
             <FieldStateSummary changedCount={orderingChangedFields.length} fieldStates={orderingFieldStates} />
             <button
               type="button"
-              onClick={() => saveFieldGroup(orderingFields, 'Ordering setup')}
+              onClick={() => saveFieldGroup(orderingFields, 'Ordering setup', 'ordering')}
               disabled={updateItem.isPending || orderingChangedFields.length === 0}
               className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
@@ -1909,6 +1941,9 @@ function InventoryItemSidePanel({
             </button>
           </div>
         </div>
+        {groupBanner.ordering && (
+          <StickyGroupBanner tone={groupBanner.ordering.tone} message={groupBanner.ordering.message} />
+        )}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder level</span>
@@ -2103,5 +2138,27 @@ function FieldStateSummary({
     <span className="text-xs text-slate-500">
       {changedCount > 0 ? `${changedCount} unsaved field${changedCount === 1 ? '' : 's'}` : 'No unsaved changes'}
     </span>
+  );
+}
+
+function StickyGroupBanner({
+  tone,
+  message,
+}: {
+  tone: 'success' | 'error';
+  message: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`mt-3 rounded-xl border px-3 py-2 text-sm ${
+        tone === 'success'
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          : 'border-rose-200 bg-rose-50 text-rose-800'
+      }`}
+    >
+      {message}
+    </div>
   );
 }

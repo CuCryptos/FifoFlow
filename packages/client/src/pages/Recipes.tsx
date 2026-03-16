@@ -443,6 +443,19 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
                   </WorkflowChip>
                 ))}
               </div>
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                <div className="font-semibold uppercase tracking-[0.18em] text-slate-500">Costability legend</div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <div>
+                    <span className="font-medium text-slate-900">Resolved for costing</span>
+                    {' '}means the ingredient row has trusted inventory, vendor, and cost lineage in scope.
+                  </div>
+                  <div>
+                    <span className="font-medium text-slate-900">Resolution blocked</span>
+                    {' '}means one side of the diff still has missing scoped inventory mapping, vendor mapping, or vendor cost lineage.
+                  </div>
+                </div>
+              </div>
             </div>
             {!filteredDiffs.length ? (
               <div className="rounded-lg border border-border bg-white px-3 py-3 text-sm text-text-secondary">
