@@ -2,6 +2,12 @@ import { useState } from 'react';
 import { useTransactions } from '../hooks/useTransactions';
 import { Link } from 'react-router-dom';
 import { useVenueContext } from '../contexts/VenueContext';
+import {
+  WorkflowChip,
+  WorkflowFocusBar,
+  WorkflowPage,
+  WorkflowPanel,
+} from '../components/workflow/WorkflowPrimitives';
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -24,25 +30,28 @@ export function Activity() {
   });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text-primary">Activity Log</h1>
-        <div className="inline-flex rounded-lg border border-border overflow-hidden">
+    <WorkflowPage
+      eyebrow="Movement Log"
+      title="Trace inventory movement with a cleaner operating log."
+      description="This page remains transaction-first, but it now uses the same workflow shell as the rest of the operator surface."
+    >
+      <WorkflowPanel
+        title="Activity Log"
+        description="Recent inventory movement, filtered by direction."
+        actions={(
+          <WorkflowFocusBar>
           {['', 'in', 'out'].map((t) => (
-            <button
+            <WorkflowChip
               key={t}
+              active={typeFilter === t}
               onClick={() => setTypeFilter(t)}
-              className={
-                typeFilter === t
-                  ? 'px-4 py-2 text-sm font-medium bg-accent-indigo text-white'
-                  : 'px-4 py-2 text-sm font-medium bg-bg-card text-text-secondary hover:bg-bg-hover transition-colors'
-              }
             >
               {t === '' ? 'All' : t === 'in' ? 'IN' : 'OUT'}
-            </button>
+            </WorkflowChip>
           ))}
-        </div>
-      </div>
+          </WorkflowFocusBar>
+        )}
+      >
 
       {isLoading ? (
         <div className="text-text-secondary text-sm">Loading...</div>
@@ -70,6 +79,7 @@ export function Activity() {
       ) : (
         <div className="text-text-secondary text-sm">No transactions found.</div>
       )}
-    </div>
+      </WorkflowPanel>
+    </WorkflowPage>
   );
 }

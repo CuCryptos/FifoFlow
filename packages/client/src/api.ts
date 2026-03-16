@@ -295,6 +295,15 @@ export interface OperationalRecipeIngredientRowPayload {
 export interface RecipeWorkflowDetailPayload {
   generated_at: string;
   summary: OperationalRecipeWorkflowSummaryPayload;
+  version_history: Array<OperationalRecipeWorkflowSummaryPayload & {
+    status: string;
+    created_at: string | null;
+    updated_at: string | null;
+  }>;
+  snapshot_history: Array<RecipeWorkflowSnapshotPayload & {
+    recipe_version_id: number | null;
+    version_number: number | null;
+  }>;
   ingredient_rows: OperationalRecipeIngredientRowPayload[];
 }
 

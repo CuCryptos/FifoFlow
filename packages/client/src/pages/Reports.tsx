@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useUsageReport, useWasteReport, useCostReport } from '../hooks/useReports';
 import { useVenueContext } from '../contexts/VenueContext';
+import {
+  WorkflowChip,
+  WorkflowFocusBar,
+  WorkflowPage,
+  WorkflowPanel,
+} from '../components/workflow/WorkflowPrimitives';
 
 type Tab = 'usage' | 'waste' | 'cost';
 type UsageGroupBy = 'day' | 'week';
@@ -52,10 +58,24 @@ export function Reports() {
   ];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-text-primary">Reports</h1>
-
-      {/* Date range picker */}
+    <WorkflowPage
+      eyebrow="Reporting"
+      title="Use reports as structured analysis views, not a separate visual system."
+      description="Usage, waste, and cost reporting retain their current logic while moving into the same workflow frame used across operations."
+    >
+      <WorkflowPanel
+        title="Reporting Workspace"
+        description="Choose a time window, then review usage, waste, or cost with a consistent operator shell."
+        actions={(
+          <WorkflowFocusBar>
+            {tabs.map((t) => (
+              <WorkflowChip key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>
+                {t.label}
+              </WorkflowChip>
+            ))}
+          </WorkflowFocusBar>
+        )}
+      >
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-1">
           {presets.map((p) => (
@@ -85,24 +105,6 @@ export function Reports() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-card-border">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key
-                ? 'border-accent-indigo text-accent-indigo'
-                : 'border-transparent text-text-muted hover:text-text-secondary'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
       {tab === 'usage' && (
         <UsageTab start={start} end={end} groupBy={usageGroupBy} setGroupBy={setUsageGroupBy} venueId={venueId} />
       )}
@@ -110,7 +112,8 @@ export function Reports() {
       {tab === 'cost' && (
         <CostTab start={start} end={end} groupBy={costGroupBy} setGroupBy={setCostGroupBy} venueId={venueId} />
       )}
-    </div>
+      </WorkflowPanel>
+    </WorkflowPage>
   );
 }
 

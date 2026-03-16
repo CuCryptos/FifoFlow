@@ -81,6 +81,46 @@ describe('Recipe workflow routes', () => {
   });
 
   it('returns ingredient-level resolution detail for a promoted recipe version', async () => {
+    db.prepare(`
+      INSERT INTO recipe_versions (id, recipe_id, version_number, status, yield_quantity, yield_unit)
+      VALUES (3, 1, 2, 'archived', 1, 'each')
+    `).run();
+    db.prepare(`
+      INSERT INTO recipe_ingredients (recipe_version_id, line_index, raw_ingredient_text, canonical_ingredient_id, inventory_item_id, quantity_normalized, unit_normalized)
+      VALUES (3, 1, '8 oz ahi tuna archived', 1, NULL, 0.8, 'lb')
+    `).run();
+    await recipeCostRepository.upsertSnapshot({
+      id: 'snapshot-2',
+      recipe_id: 1,
+      recipe_version_id: 3,
+      recipe_name: 'Poke Bowl',
+      recipe_type: 'dish',
+      yield_qty: 1,
+      yield_unit: 'each',
+      serving_count: 1,
+      total_cost: 13.2,
+      resolved_cost_subtotal: 13.2,
+      cost_per_yield_unit: 13.2,
+      cost_per_serving: 13.2,
+      completeness_status: 'partial',
+      confidence_label: 'medium',
+      ingredient_count: 1,
+      resolved_ingredient_count: 1,
+      missing_cost_count: 0,
+      stale_cost_count: 1,
+      ambiguous_cost_count: 0,
+      unit_mismatch_count: 0,
+      comparable_key: '1:3:2026-03-10',
+      source_run_id: null,
+      primary_driver_item_id: 1,
+      primary_driver_cost: 13.2,
+      driver_items: [],
+      components: [],
+      snapshot_at: '2026-03-10T10:00:00.000Z',
+      created_at: '2026-03-10T10:00:00.000Z',
+      updated_at: '2026-03-10T10:00:00.000Z',
+    });
+
     const res = await request(app).get('/api/recipe-workflow/operational-summary/1');
 
     expect(res.status).toBe(200);
@@ -88,6 +128,10 @@ describe('Recipe workflow routes', () => {
     expect(res.body.ingredient_rows).toHaveLength(1);
     expect(res.body.ingredient_rows[0].costability_status).toBe('RESOLVED_FOR_COSTING');
     expect(res.body.ingredient_rows[0].vendor_cost_lineage.normalized_unit_cost).toBe(12.5);
+    expect(res.body.version_history).toHaveLength(2);
+    expect(res.body.version_history[0].version_number).toBe(3);
+    expect(res.body.snapshot_history).toHaveLength(2);
+    expect(res.body.snapshot_history.map((snapshot: any) => snapshot.version_number)).toEqual([3, 2]);
   });
 });
 

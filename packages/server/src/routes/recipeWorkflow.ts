@@ -1,6 +1,6 @@
 import express from 'express';
 import type Database from 'better-sqlite3';
-import type { RecipeCostSnapshot } from '@fifoflow/shared';
+import type { RecipeCostSnapshot, RecipeType } from '@fifoflow/shared';
 import type { IntelligenceJobContext } from '../intelligence/types.js';
 import { SQLiteOperationalRecipeCostReadRepository } from '../intelligence/recipeCost/recipeCostRepositories.js';
 import { resolvePromotedRecipeForCosting } from '../intelligence/recipeCost/recipeCostabilityResolver.js';
@@ -97,10 +97,14 @@ export function createRecipeWorkflowRoutes(db: Database.Database) {
       const latestSnapshot = getLatestWorkflowSnapshot(db, recipe.recipe_id, recipeVersionId);
       const versionNumber = getRecipeVersionNumber(db, recipeVersionId);
       const summary = buildOperationalRecipeSummary(recipe, bridged, latestSnapshot, versionNumber);
+      const versionHistory = await buildRecipeVersionHistory(db, recipe.recipe_id, context, operationalRepository, inventoryRepository, vendorRepository);
+      const snapshotHistory = getRecipeSnapshotHistory(db, recipe.recipe_id);
 
       res.json({
         generated_at: context.now,
         summary,
+        version_history: versionHistory,
+        snapshot_history: snapshotHistory,
         ingredient_rows: bridged.source_rows.map((row) => ({
           recipe_item_id: row.recipe_item_id,
           line_index: row.line_index,
@@ -146,7 +150,7 @@ interface WorkflowSnapshotSummary {
 interface OperationalRecipeSummary {
   recipe_id: number;
   recipe_name: string;
-  recipe_type: string;
+  recipe_type: RecipeType;
   recipe_version_id: number;
   version_number: number;
   yield_qty: number | null;
@@ -171,6 +175,17 @@ interface OperationalRecipeSummary {
   latest_snapshot: WorkflowSnapshotSummary | null;
 }
 
+interface RecipeVersionHistoryEntry extends OperationalRecipeSummary {
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+interface RecipeSnapshotHistoryEntry extends WorkflowSnapshotSummary {
+  recipe_version_id: number | null;
+  version_number: number | null;
+}
+
 function getRecipeIdForVersion(db: Database.Database, recipeVersionId: number): number | null {
   const row = db.prepare(
     `
@@ -181,6 +196,125 @@ function getRecipeIdForVersion(db: Database.Database, recipeVersionId: number): 
     `,
   ).get(recipeVersionId) as { recipe_id: number } | undefined;
   return row?.recipe_id ?? null;
+}
+
+async function buildRecipeVersionHistory(
+  db: Database.Database,
+  recipeId: number,
+  context: IntelligenceJobContext,
+  operationalRepository: SQLiteOperationalRecipeCostReadRepository,
+  inventoryRepository: SQLiteCanonicalInventoryRepository,
+  vendorRepository: SQLiteInventoryVendorRepository,
+): Promise<RecipeVersionHistoryEntry[]> {
+  const rows = db.prepare(
+    `
+      SELECT
+        rv.id AS recipe_version_id,
+        rv.recipe_id,
+        rv.version_number,
+        rv.status,
+        rv.yield_quantity AS yield_qty,
+        rv.yield_unit,
+        rv.source_builder_job_id,
+        rv.source_builder_draft_recipe_id,
+        rv.source_template_id,
+        rv.source_template_version_id,
+        rv.created_at,
+        rv.updated_at,
+        r.name AS recipe_name,
+        r.type AS recipe_type
+      FROM recipe_versions rv
+      INNER JOIN recipes r ON r.id = rv.recipe_id
+      WHERE rv.recipe_id = ?
+      ORDER BY rv.version_number DESC, rv.id DESC
+    `,
+  ).all(recipeId) as Array<{
+    recipe_version_id: number;
+    recipe_id: number;
+    version_number: number;
+    status: string;
+    yield_qty: number | null;
+    yield_unit: string | null;
+    source_builder_job_id: number | null;
+    source_builder_draft_recipe_id: number | null;
+    source_template_id: number | null;
+    source_template_version_id: number | null;
+    created_at: string | null;
+    updated_at: string | null;
+    recipe_name: string;
+    recipe_type: RecipeType;
+  }>;
+
+  const history: RecipeVersionHistoryEntry[] = [];
+  for (const row of rows) {
+    const bridged = await resolvePromotedRecipeForCosting({
+      recipe_id: row.recipe_id,
+      recipe_version_id: row.recipe_version_id,
+      recipe_name: row.recipe_name,
+      recipe_type: row.recipe_type as OperationalRecipeSummary['recipe_type'],
+      yield_qty: row.yield_qty,
+      yield_unit: row.yield_unit,
+      serving_count: null,
+      source_builder_job_id: row.source_builder_job_id,
+      source_builder_draft_recipe_id: row.source_builder_draft_recipe_id,
+      source_template_id: row.source_template_id,
+      source_template_version_id: row.source_template_version_id,
+    }, context, {
+      operationalRepository,
+      inventoryRepository,
+      vendorRepository,
+    });
+    const latestSnapshot = getLatestWorkflowSnapshot(db, row.recipe_id, row.recipe_version_id);
+    history.push({
+      ...buildOperationalRecipeSummary({
+        recipe_id: row.recipe_id,
+        recipe_version_id: row.recipe_version_id,
+        recipe_name: row.recipe_name,
+        recipe_type: row.recipe_type as OperationalRecipeSummary['recipe_type'],
+        yield_qty: row.yield_qty,
+        yield_unit: row.yield_unit,
+        serving_count: null,
+        source_builder_job_id: row.source_builder_job_id,
+        source_builder_draft_recipe_id: row.source_builder_draft_recipe_id,
+        source_template_id: row.source_template_id,
+        source_template_version_id: row.source_template_version_id,
+      }, bridged, latestSnapshot, row.version_number),
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    });
+  }
+
+  return history;
+}
+
+function getRecipeSnapshotHistory(db: Database.Database, recipeId: number): RecipeSnapshotHistoryEntry[] {
+  const rows = db.prepare(
+    `
+      SELECT
+        s.id,
+        s.recipe_version_id,
+        rv.version_number,
+        s.snapshot_at,
+        s.total_cost,
+        s.cost_per_serving,
+        s.completeness_status,
+        s.confidence_label,
+        s.resolved_ingredient_count,
+        s.ingredient_count,
+        s.missing_cost_count,
+        s.stale_cost_count,
+        s.ambiguous_cost_count,
+        s.unit_mismatch_count
+      FROM recipe_cost_snapshots s
+      LEFT JOIN recipe_versions rv ON rv.id = s.recipe_version_id
+      WHERE s.recipe_id = ?
+      ORDER BY s.snapshot_at DESC, s.id DESC
+      LIMIT 12
+    `,
+  ).all(recipeId) as RecipeSnapshotHistoryEntry[];
+
+  return rows;
 }
 
 function buildOperationalRecipeSummary(

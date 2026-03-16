@@ -13,6 +13,7 @@ export function useItem(id: number) {
   return useQuery({
     queryKey: ['items', id],
     queryFn: () => api.items.get(id),
+    enabled: id > 0,
   });
 }
 

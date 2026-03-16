@@ -324,6 +324,64 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
           </div>
         )}
       </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-text-primary">Version comparison</h4>
+        {!detail?.version_history.length ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            No additional version history is available for this recipe yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {detail.version_history.map((version) => (
+              <div
+                key={version.recipe_version_id}
+                className={`rounded-xl border px-3 py-3 ${version.recipe_version_id === summary.recipe_version_id ? 'border-slate-900 bg-slate-50' : 'border-border bg-white'}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-text-primary">Version {version.version_number}</div>
+                    <div className="text-xs text-text-secondary">
+                      {version.status} • {version.resolved_row_count}/{version.ingredient_row_count} resolved • {version.costable_percent.toFixed(0)}% costable
+                    </div>
+                  </div>
+                  <WorkflowStatusBadge classification={version.costability_classification} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold text-text-primary">Snapshot history</h4>
+        {!detail?.snapshot_history.length ? (
+          <div className="rounded-lg bg-white px-3 py-3 border border-border text-sm text-text-secondary">
+            No recipe cost snapshots have been persisted for this recipe yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {detail.snapshot_history.map((snapshot) => (
+              <div key={snapshot.id} className="rounded-xl border border-border bg-white px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-text-primary">
+                      {snapshot.version_number != null ? `Version ${snapshot.version_number}` : 'Legacy snapshot'} • {new Date(snapshot.snapshot_at).toLocaleDateString()}
+                    </div>
+                    <div className="text-xs text-text-secondary">
+                      {snapshot.resolved_ingredient_count}/{snapshot.ingredient_count} resolved • {snapshot.completeness_status} • {snapshot.confidence_label} confidence
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-text-primary">{formatRecipeCurrency(snapshot.total_cost)}</div>
+                    <div className="text-xs text-text-secondary">{formatRecipeCurrency(snapshot.cost_per_serving)} / serving</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

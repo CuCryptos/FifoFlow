@@ -5,6 +5,12 @@ import { useOrders, useOrder, useCreateOrder, useUpdateOrderStatus, useDeleteOrd
 import { useToast } from '../contexts/ToastContext';
 import { ManageVendorsModal } from '../components/ManageVendorsModal';
 import type { Vendor, ReorderSuggestion } from '@fifoflow/shared';
+import {
+  WorkflowChip,
+  WorkflowFocusBar,
+  WorkflowPage,
+  WorkflowPanel,
+} from '../components/workflow/WorkflowPrimitives';
 
 type OrderTab = 'generate' | 'history';
 
@@ -13,48 +19,41 @@ export function Orders() {
   const [showVendorsModal, setShowVendorsModal] = useState(false);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text-primary">Orders</h1>
+    <WorkflowPage
+      eyebrow="Purchasing Workflow"
+      title="Generate and track orders from the reorder queue with a cleaner purchasing shell."
+      description="Vendor grouping and order history remain intact. This pass standardizes the page frame so purchasing does not feel like a separate generation of product."
+      actions={(
         <button
           onClick={() => setShowVendorsModal(true)}
-          className="bg-bg-card border border-border-emphasis text-text-secondary px-4 py-2 rounded-lg text-sm font-medium hover:bg-bg-hover transition-colors"
+          className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
         >
           Manage Vendors
         </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-bg-card rounded-lg p-1 w-fit">
-        <button
-          onClick={() => setActiveTab('generate')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'generate'
-              ? 'bg-accent-indigo text-white'
-              : 'text-text-secondary hover:text-text-primary'
-          }`}
-        >
-          Generate Orders
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'history'
-              ? 'bg-accent-indigo text-white'
-              : 'text-text-secondary hover:text-text-primary'
-          }`}
-        >
-          Order History
-        </button>
-      </div>
-
-      {activeTab === 'generate' && <OrderGenerator />}
-      {activeTab === 'history' && <OrderHistory />}
+      )}
+    >
+      <WorkflowPanel
+        title="Order Workspace"
+        description="Switch between live order generation and historical purchase review."
+        actions={(
+          <WorkflowFocusBar>
+            <WorkflowChip active={activeTab === 'generate'} onClick={() => setActiveTab('generate')}>
+              Generate Orders
+            </WorkflowChip>
+            <WorkflowChip active={activeTab === 'history'} onClick={() => setActiveTab('history')}>
+              Order History
+            </WorkflowChip>
+          </WorkflowFocusBar>
+        )}
+      >
+        {activeTab === 'generate' && <OrderGenerator />}
+        {activeTab === 'history' && <OrderHistory />}
+      </WorkflowPanel>
 
       {showVendorsModal && (
         <ManageVendorsModal onClose={() => setShowVendorsModal(false)} />
       )}
-    </div>
+    </WorkflowPage>
   );
 }
 

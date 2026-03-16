@@ -10,6 +10,12 @@ import {
   useOpenCountSession,
   useRecordCountEntry,
 } from '../hooks/useCountSessions';
+import {
+  WorkflowMetricCard,
+  WorkflowMetricGrid,
+  WorkflowPage,
+  WorkflowPanel,
+} from '../components/workflow/WorkflowPrimitives';
 
 function formatQty(value: number): string {
   if (Number.isInteger(value)) return String(value);
@@ -140,13 +146,23 @@ export function Counts() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-text-primary">Count Sessions</h1>
-      </div>
+    <WorkflowPage
+      eyebrow="Inventory Discipline"
+      title="Run count sessions with clearer progress, closure, and exception framing."
+      description="This page keeps the existing count logic, but it now sits inside the same workflow shell as variance and memo operations."
+    >
+      <WorkflowMetricGrid>
+        <WorkflowMetricCard label="Open Session" value={openSession ? 1 : 0} detail={openSession ? openSession.name : 'No active session'} tone={openSession ? 'green' : 'default'} />
+        <WorkflowMetricCard label="Checklist Items" value={totalChecklistItems} detail="Items scheduled in the current count." />
+        <WorkflowMetricCard label="Counted" value={countedItems} detail={`${progressPercent}% complete`} tone="green" />
+        <WorkflowMetricCard label="Remaining" value={remainingItems} detail="Still needs a counted quantity." tone={remainingItems > 0 ? 'amber' : 'green'} />
+      </WorkflowMetricGrid>
 
       {!openSession ? (
-        <div className="bg-bg-card rounded-xl shadow-sm p-5">
+        <WorkflowPanel
+          title="Open New Session"
+          description="Start a controlled count session against all items or a category template."
+        >
           <h2 className="text-base font-semibold text-text-primary mb-4">Open New Session</h2>
           <form onSubmit={submitCreateSession} className="grid md:grid-cols-[2fr_2fr_3fr_auto] gap-3 items-end">
             <div>
@@ -195,10 +211,14 @@ export function Counts() {
           {createSession.error && (
             <div className="text-accent-red text-xs mt-2">{createSession.error.message}</div>
           )}
-        </div>
+        </WorkflowPanel>
       ) : (
         <div className="space-y-4">
-          <div className="bg-bg-card rounded-xl shadow-sm p-5 border-l-4 border-accent-green flex flex-wrap gap-4 justify-between items-start">
+          <WorkflowPanel
+            title="Open Session"
+            description="Track progress and close the session when the checklist is complete."
+          >
+          <div className="rounded-xl border-l-4 border-accent-green bg-bg-card p-5 flex flex-wrap gap-4 justify-between items-start">
             <div>
               <h2 className="text-base font-semibold text-text-primary mb-4">Open Session</h2>
               <p className="text-text-primary font-medium">{openSession.name}</p>
@@ -228,6 +248,7 @@ export function Counts() {
               </div>
             </div>
           </div>
+          </WorkflowPanel>
 
           <div className="bg-bg-card rounded-xl shadow-sm p-5">
             <h3 className="text-base font-semibold text-text-primary mb-4">Record Item Count</h3>
@@ -424,7 +445,10 @@ export function Counts() {
         </div>
       )}
 
-      <div className="bg-bg-card rounded-xl shadow-sm p-5">
+      <WorkflowPanel
+        title="Session History"
+        description="Recent count sessions and their completion state."
+      >
         <h2 className="text-base font-semibold text-text-primary mb-4">Session History</h2>
         {sessions && sessions.length > 0 ? (
           <div className="overflow-x-auto">
@@ -472,7 +496,7 @@ export function Counts() {
         ) : (
           <div className="text-sm text-text-secondary">No sessions yet.</div>
         )}
-      </div>
-    </div>
+      </WorkflowPanel>
+    </WorkflowPage>
   );
 }

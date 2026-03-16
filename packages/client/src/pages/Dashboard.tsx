@@ -3,6 +3,12 @@ import { useDashboardStats } from '../hooks/useDashboard';
 import { useTransactions } from '../hooks/useTransactions';
 import { useReorderSuggestions } from '../hooks/useItems';
 import { useVenueContext } from '../contexts/VenueContext';
+import {
+  WorkflowMetricCard,
+  WorkflowMetricGrid,
+  WorkflowPage,
+  WorkflowPanel,
+} from '../components/workflow/WorkflowPrimitives';
 
 function timeAgo(dateStr: string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -29,40 +35,24 @@ export function Dashboard() {
   if (statsLoading) return <div className="text-text-secondary">Loading...</div>;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-text-primary">Dashboard</h1>
+    <WorkflowPage
+      eyebrow="Operations Snapshot"
+      title="Use the dashboard as a compact operational snapshot, not the primary control surface."
+      description="The memo remains the lead surface. This page is now framed as a quick summary of inventory pressure, recent movement, and reorder exposure."
+    >
+      <WorkflowMetricGrid>
+        <WorkflowMetricCard label="Total Items" value={stats?.total_items ?? 0} detail="Active stocked items in scope." />
+        <WorkflowMetricCard label="Low Stock" value={stats?.low_stock_count ?? 0} detail="Below par." tone="amber" />
+        <WorkflowMetricCard label="Out of Stock" value={stats?.out_of_stock_count ?? 0} detail="Immediate service risk." tone="red" />
+        <WorkflowMetricCard label="Today's Transactions" value={stats?.today_transaction_count ?? 0} detail="Stock movement logged today." tone="green" />
+        <WorkflowMetricCard label="Est. Reorder Spend" value={reorderSpend.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} detail="Current reorder queue exposure." tone="amber" />
+        <WorkflowMetricCard label="Inventory Value" value={(stats?.total_inventory_value ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} detail="Current book value from stored pricing." tone="green" />
+      </WorkflowMetricGrid>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard label="Total Items" value={stats?.total_items ?? 0} />
-        <StatCard
-          label="Low Stock"
-          value={stats?.low_stock_count ?? 0}
-          color="amber"
-          subtitle="below par"
-        />
-        <StatCard label="Out of Stock" value={stats?.out_of_stock_count ?? 0} color="red" />
-        <StatCard
-          label="Today's Transactions"
-          value={stats?.today_transaction_count ?? 0}
-          color="green"
-        />
-        <StatCard
-          label="Est. Reorder Spend"
-          value={reorderSpend}
-          color="amber"
-          format="currency"
-        />
-        <StatCard
-          label="Inventory Value"
-          value={stats?.total_inventory_value ?? 0}
-          color="green"
-          format="currency"
-        />
-      </div>
-
-      {/* Recent activity */}
-      <div className="bg-bg-card rounded-xl shadow-sm p-5">
+      <WorkflowPanel
+        title="Recent Activity"
+        description="Most recent inventory movements in the current operating scope."
+      >
         <h2 className="text-base font-semibold text-text-primary mb-4">Recent Activity</h2>
         {txLoading ? (
           <div className="text-text-secondary text-sm">Loading...</div>
@@ -102,11 +92,13 @@ export function Dashboard() {
         ) : (
           <div className="text-text-secondary text-sm">No transactions yet.</div>
         )}
-      </div>
+      </WorkflowPanel>
 
-      {/* Items needing reorder */}
       {!!reorderSuggestions?.length && (
-        <div className="bg-bg-card rounded-xl shadow-sm p-5">
+        <WorkflowPanel
+          title="Items Needing Reorder"
+          description="Items below reorder level from the live inventory dataset."
+        >
           <h2 className="text-base font-semibold text-text-primary mb-4">
             Items Needing Reorder
           </h2>
@@ -133,44 +125,8 @@ export function Dashboard() {
               </div>
             ))}
           </div>
-        </div>
+        </WorkflowPanel>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  color,
-  subtitle,
-  format,
-}: {
-  label: string;
-  value: number;
-  color?: 'green' | 'red' | 'amber';
-  subtitle?: string;
-  format?: 'currency';
-}) {
-  const borderClass =
-    color === 'green'
-      ? 'border-accent-green'
-      : color === 'red'
-        ? 'border-accent-red'
-        : color === 'amber'
-          ? 'border-accent-amber'
-          : 'border-accent-indigo';
-
-  const displayValue =
-    format === 'currency'
-      ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
-      : value;
-
-  return (
-    <div className={`bg-bg-card rounded-xl shadow-sm p-5 border-l-4 ${borderClass}`}>
-      <div className="text-xs font-medium text-text-muted uppercase tracking-wide">{label}</div>
-      <div className="text-2xl font-mono font-semibold text-text-primary">{displayValue}</div>
-      {subtitle && <div className="text-xs text-text-secondary mt-1">{subtitle}</div>}
-    </div>
+    </WorkflowPage>
   );
 }

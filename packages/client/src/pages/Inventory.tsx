@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useItems, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
+import { useItems, useItem, useReorderSuggestions, useUpdateItem, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
 import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { exportToExcel, exportToPdf } from '../utils/exportInventory';
 import type { GroupBy } from '../utils/exportInventory';
-import type { Unit, ItemStorage } from '@fifoflow/shared';
+import type { Item, Transaction, Unit, ItemStorage } from '@fifoflow/shared';
 import { AddItemModal } from '../components/AddItemModal';
 import { ManageAreasModal } from '../components/ManageAreasModal';
 import { ManageVendorsModal } from '../components/ManageVendorsModal';
 import { ManageVenuesModal } from '../components/ManageVenuesModal';
 import { InvoiceUpload } from '../components/InvoiceUpload';
+import { SlideOver } from '../components/intelligence/SlideOver';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
@@ -375,6 +376,7 @@ export function Inventory() {
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
   const [showInvoiceUpload, setShowInvoiceUpload] = useState(false);
   const [workflowFocus, setWorkflowFocus] = useState<InventoryWorkflowFocus>('all');
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -420,6 +422,7 @@ export function Inventory() {
     venue_id: selectedVenueId ?? undefined,
   });
   const { data: reorderSuggestions } = useReorderSuggestions();
+  const selectedItemQuery = useItem(selectedItemId ?? 0);
 
   const reorderIds = new Set((reorderSuggestions ?? []).map((r) => r.item_id));
   const workflowCounts = useMemo(() => {
@@ -591,6 +594,14 @@ export function Inventory() {
     );
   };
 
+  const selectVisibleLaneItems = () => {
+    setSelectedIds(new Set(paginatedItems.map((item) => item.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
   const currentFocus = INVENTORY_FOCUS_COPY[workflowFocus];
 
   return (
@@ -718,6 +729,22 @@ export function Inventory() {
             <>
               <button
                 type="button"
+                onClick={selectVisibleLaneItems}
+                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+              >
+                Select Visible Lane Items
+              </button>
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+                >
+                  Clear Selection
+                </button>
+              )}
+              <button
+                type="button"
                 onClick={() => setShowVendorsModal(true)}
                 className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
               >
@@ -760,6 +787,27 @@ export function Inventory() {
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
               Estimated reorder spend for the current view:
               <div className="mt-2 font-mono text-lg text-slate-950">{formatCurrency(reorderSpend)}</div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Batch shortcut</div>
+              <div className="text-sm text-slate-600">
+                {workflowFocus === 'missing_vendor' && 'Select the lane, then bulk-assign a vendor to clear purchasing ownership gaps.'}
+                {workflowFocus === 'missing_venue' && 'Select the lane, then bulk-assign the correct venue to restore scope accuracy.'}
+                {workflowFocus === 'missing_storage_area' && 'Select the lane, then bulk-assign a storage area to improve count discipline.'}
+                {workflowFocus === 'ordering_incomplete' && 'Select the lane, then fill reorder and pack fields directly from the ordering columns.'}
+                {workflowFocus === 'reorder' && 'Select the lane, review vendor ownership, and convert the queue into orders.'}
+                {(workflowFocus === 'all' || workflowFocus === 'needs_attention') && 'Use the lane filters first, then batch-correct the visible queue.'}
+              </div>
+              {workflowFocus === 'ordering_incomplete' && (
+                <button
+                  type="button"
+                  onClick={() => setShowOrdering(true)}
+                  className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
+                >
+                  Open Ordering Columns
+                </button>
+              )}
             </div>
           </div>
         </WorkflowPanel>
@@ -998,12 +1046,13 @@ export function Inventory() {
                         >
                           {expandedItems.has(item.id) ? '\u25BE' : '\u25B8'}
                         </button>
-                        <Link
-                          to={`/inventory/${item.id}`}
-                          className="text-accent-indigo hover:underline"
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItemId(item.id)}
+                          className="text-left text-accent-indigo hover:underline"
                         >
                           {item.name}
-                        </Link>
+                        </button>
                       </div>
                     </td>
 
@@ -1362,6 +1411,26 @@ export function Inventory() {
         </div>
       )}
 
+      {selectedItemId != null && (
+        <SlideOver
+          title={selectedItemQuery.data?.item.name ?? 'Inventory Item'}
+          subtitle="Operational item detail from the live inventory dataset."
+          onClose={() => setSelectedItemId(null)}
+        >
+          {selectedItemQuery.isLoading || !selectedItemQuery.data?.item ? (
+            <div className="text-sm text-text-secondary">Loading item detail...</div>
+          ) : (
+            <InventoryItemSidePanel
+              item={selectedItemQuery.data.item}
+              transactions={selectedItemQuery.data.transactions}
+              areas={areas ?? []}
+              vendors={vendors ?? []}
+              venues={venues ?? []}
+            />
+          )}
+        </SlideOver>
+      )}
+
       {showAddModal && (
         <AddItemModal onClose={() => setShowAddModal(false)} />
       )}
@@ -1456,5 +1525,91 @@ export function Inventory() {
         );
       })()}
     </WorkflowPage>
+  );
+}
+
+function InventoryItemSidePanel({
+  item,
+  transactions,
+  areas,
+  vendors,
+  venues,
+}: {
+  item: Item;
+  transactions: Transaction[];
+  areas: Array<{ id: number; name: string }>;
+  vendors: Array<{ id: number; name: string }>;
+  venues: Array<{ id: number; name: string }>;
+}) {
+  const vendorName = vendors.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Unassigned';
+  const venueName = venues.find((venue) => venue.id === item.venue_id)?.name ?? 'Unassigned';
+  const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
+  const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
+  const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <DetailTile label="Category" value={item.category} />
+        <DetailTile label="On Hand" value={`${item.current_qty} ${item.unit}`} />
+        <DetailTile label="Vendor" value={vendorName} />
+        <DetailTile label="Venue" value={venueName} />
+        <DetailTile label="Storage Area" value={areaName} />
+        <DetailTile label="Reorder Status" value={reorderStatus} />
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Ordering setup</div>
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+          <DetailTile label="Order Unit" value={item.order_unit ?? 'Missing'} />
+          <DetailTile label="Pack Qty" value={item.qty_per_unit ?? 'Missing'} />
+          <DetailTile label="Case Price" value={formatCurrency(item.order_unit_price)} />
+          <DetailTile label="Estimated Value" value={formatCurrency(totalValue)} />
+          <DetailTile label="Reorder Level" value={item.reorder_level ?? 'Missing'} />
+          <DetailTile label="Reorder Qty" value={item.reorder_qty ?? 'Missing'} />
+        </div>
+        <div className="mt-4">
+          <Link
+            to={`/inventory/${item.id}`}
+            className="inline-flex rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
+          >
+            Open full item page
+          </Link>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recent activity</div>
+        <div className="mt-3 space-y-2">
+          {transactions.length === 0 ? (
+            <div className="text-sm text-slate-600">No transactions recorded for this item yet.</div>
+          ) : (
+            transactions.slice(0, 8).map((transaction: Transaction) => (
+              <div key={transaction.id} className="rounded-xl bg-slate-50 px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-slate-900">
+                    {transaction.type === 'in' ? '+' : '-'}{transaction.quantity} {item.unit}
+                  </div>
+                  <div className="text-xs text-slate-500">{new Date(transaction.created_at).toLocaleString()}</div>
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {transaction.reason}
+                  {transaction.notes ? ` • ${transaction.notes}` : ''}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailTile({ label, value }: { label: string; value: string | number | null }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-900">{value == null ? '—' : String(value)}</div>
+    </div>
   );
 }
