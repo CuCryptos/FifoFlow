@@ -21,7 +21,7 @@ import {
   WorkflowStatusPill,
 } from '../components/workflow/WorkflowPrimitives';
 import { UNITS, tryConvertQuantity } from '@fifoflow/shared';
-import type { CalculatedIngredient, OrderCalculationResult, RecipeWithCost, ForecastParseResult, Unit } from '@fifoflow/shared';
+import type { CalculatedIngredient, Item, OrderCalculationResult, RecipeWithCost, ForecastParseResult, Unit } from '@fifoflow/shared';
 import type {
   OperationalRecipeIngredientRowPayload,
   OperationalRecipeWorkflowSummaryPayload,
@@ -174,6 +174,117 @@ function inferRecipeTypeFromTemplateCategory(category: string): 'dish' | 'prep' 
   const normalized = category.trim().toLowerCase();
   const prepCategories = ['sauce', 'dressing', 'marinade', 'stock', 'syrup', 'mix', 'mixer', 'prep', 'batch', 'cocktail'];
   return prepCategories.some((token) => normalized.includes(token)) ? 'prep' : 'dish';
+}
+
+function coerceRecipeUnit(value: string | null | undefined, fallback: Unit = 'each'): Unit {
+  if (!value) {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const exact = UNITS.find((unit) => unit.toLowerCase() === normalized);
+  if (exact) {
+    return exact;
+  }
+
+  if (normalized === 'l') {
+    return 'L';
+  }
+
+  return fallback;
+}
+
+function tokenizeRecipeSearch(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1);
+}
+
+function scoreInventoryMatch(templateIngredientName: string, item: Item): number {
+  const ingredientTokens = tokenizeRecipeSearch(templateIngredientName);
+  const itemTokens = tokenizeRecipeSearch(item.name);
+
+  if (!ingredientTokens.length || !itemTokens.length) {
+    return 0;
+  }
+
+  const ingredientSet = new Set(ingredientTokens);
+  const itemSet = new Set(itemTokens);
+  const overlap = ingredientTokens.filter((token) => itemSet.has(token)).length;
+  const overlapRatio = overlap / ingredientSet.size;
+  const exactPhrase = item.name.toLowerCase().includes(templateIngredientName.toLowerCase()) ? 0.45 : 0;
+  const prefixHit = ingredientTokens.some((token) => item.name.toLowerCase().startsWith(token)) ? 0.15 : 0;
+
+  return overlapRatio + exactPhrase + prefixHit;
+}
+
+function getLikelyInventoryMatches(templateIngredientName: string | null | undefined, items: Item[]): Item[] {
+  if (!templateIngredientName?.trim()) {
+    return [];
+  }
+
+  return items
+    .map((item) => ({ item, score: scoreInventoryMatch(templateIngredientName, item) }))
+    .filter((entry) => entry.score >= 0.45)
+    .sort((left, right) => right.score - left.score || left.item.name.localeCompare(right.item.name))
+    .slice(0, 4)
+    .map((entry) => entry.item);
+}
+
+function getItemUnitCandidates(item: Item): Unit[] {
+  return [
+    item.unit,
+    item.order_unit,
+    item.inner_unit,
+    item.item_size_unit,
+  ].filter((unit): unit is Unit => Boolean(unit));
+}
+
+function templateUnitMatchesInventoryUnit(templateUnit: string | null | undefined, item: Item): boolean {
+  if (!templateUnit) {
+    return true;
+  }
+
+  const normalizedTemplateUnit = coerceRecipeUnit(templateUnit);
+
+  return getItemUnitCandidates(item).some((candidateUnit) => {
+    if (candidateUnit === normalizedTemplateUnit) {
+      return true;
+    }
+
+    return tryConvertQuantity(1, normalizedTemplateUnit, candidateUnit, {
+      baseUnit: item.unit,
+      orderUnit: item.order_unit,
+      innerUnit: item.inner_unit,
+      qtyPerUnit: item.qty_per_unit,
+      itemSizeValue: item.item_size_value,
+      itemSizeUnit: item.item_size_unit,
+    }) != null;
+  });
+}
+
+function formatInventoryMappingContext(item: Item | undefined, vendorName: string | null): string {
+  if (!item) {
+    return 'No mapped inventory context yet';
+  }
+
+  const countedUnit = `Counted as ${item.unit}`;
+  const orderPack = item.order_unit
+    ? `Orders in ${item.order_unit}${item.qty_per_unit ? ` × ${trimRecipeNumber(item.qty_per_unit)}` : ''}`
+    : 'No order pack configured';
+  const measurable = item.item_size_value && item.item_size_unit
+    ? `Measures ${trimRecipeNumber(item.item_size_value)} ${item.item_size_unit}`
+    : null;
+  const price = item.order_unit_price != null
+    ? `${formatRecipeCurrency(item.order_unit_price)} per ${item.order_unit ?? item.unit}`
+    : 'No current order price';
+
+  return [countedUnit, orderPack, measurable, price, vendorName ? `Vendor ${vendorName}` : 'No default vendor']
+    .filter(Boolean)
+    .join(' • ');
 }
 
 function OperationalRecipes({ onAddRecipe }: { onAddRecipe: () => void }) {
@@ -801,10 +912,12 @@ function IngredientResolutionCard({ row }: { row: OperationalRecipeIngredientRow
 function ItemSearchInput({
   items,
   selectedId,
+  placeholder = 'Search items...',
   onSelect,
 }: {
   items: { id: number; name: string; unit: string }[];
   selectedId: number;
+  placeholder?: string;
   onSelect: (id: number, unit: string) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -833,7 +946,7 @@ function ItemSearchInput({
       <input
         type="text"
         value={displayValue}
-        placeholder="Search items..."
+        placeholder={placeholder}
         onChange={(e) => {
           setQuery(e.target.value);
           if (!open) setOpen(true);
@@ -1034,16 +1147,22 @@ interface IngredientRow {
   item_id: number;
   quantity: string;
   unit: string;
+  template_ingredient_name: string | null;
+  template_quantity: number | null;
+  template_unit: string | null;
+  template_sort_order: number | null;
 }
 
 function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => void }) {
   const { data: existing } = useRecipe(recipeId ?? 0);
   const { data: items } = useItems();
+  const { data: vendors } = useVendors();
   const { data: templates, isLoading: templatesLoading } = useRecipeTemplates();
   const createRecipe = useCreateRecipe();
   const updateRecipe = useUpdateRecipe();
   const { toast } = useToast();
 
+  const [creationMode, setCreationMode] = useState<'template' | 'blank' | null>(recipeId ? 'blank' : null);
   const [templateSearch, setTemplateSearch] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [name, setName] = useState('');
@@ -1054,7 +1173,15 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
   const [servingQuantity, setServingQuantity] = useState('');
   const [servingUnit, setServingUnit] = useState<string>('each');
   const [servingCountOverride, setServingCountOverride] = useState('');
-  const [ingredients, setIngredients] = useState<IngredientRow[]>([{ item_id: 0, quantity: '', unit: 'each' }]);
+  const [ingredients, setIngredients] = useState<IngredientRow[]>([{
+    item_id: 0,
+    quantity: '',
+    unit: 'each',
+    template_ingredient_name: null,
+    template_quantity: null,
+    template_unit: null,
+    template_sort_order: null,
+  }]);
   const [initialized, setInitialized] = useState(false);
   const [appliedTemplateVersionId, setAppliedTemplateVersionId] = useState<number | null>(null);
 
@@ -1070,6 +1197,7 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
     }
 
     if (existing) {
+      setCreationMode('blank');
       setName(existing.name);
       setType(existing.type);
       setNotes(existing.notes ?? '');
@@ -1083,8 +1211,20 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
             item_id: ingredient.item_id,
             quantity: String(ingredient.quantity),
             unit: ingredient.unit,
+            template_ingredient_name: null,
+            template_quantity: null,
+            template_unit: null,
+            template_sort_order: null,
           }))
-        : [{ item_id: 0, quantity: '', unit: 'each' }]);
+        : [{
+            item_id: 0,
+            quantity: '',
+            unit: 'each',
+            template_ingredient_name: null,
+            template_quantity: null,
+            template_unit: null,
+            template_sort_order: null,
+          }]);
       setAppliedTemplateVersionId(null);
     }
 
@@ -1092,11 +1232,11 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
   }, [existing, initialized, recipeId]);
 
   useEffect(() => {
-    if (!templates?.length || selectedTemplateId != null) {
+    if (creationMode !== 'template' || !templates?.length || selectedTemplateId != null) {
       return;
     }
     setSelectedTemplateId(templates[0].template_id);
-  }, [selectedTemplateId, templates]);
+  }, [creationMode, selectedTemplateId, templates]);
 
   const filteredTemplates = useMemo(() => {
     const rows = templates ?? [];
@@ -1107,8 +1247,18 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
     return rows.filter((template) => `${template.name} ${template.category}`.toLowerCase().includes(query));
   }, [templateSearch, templates]);
 
+  const createBlankIngredientRow = (): IngredientRow => ({
+    item_id: 0,
+    quantity: '',
+    unit: 'each',
+    template_ingredient_name: null,
+    template_quantity: null,
+    template_unit: null,
+    template_sort_order: null,
+  });
+
   const addIngredient = () => {
-    setIngredients((prev) => [...prev, { item_id: 0, quantity: '', unit: 'each' }]);
+    setIngredients((prev) => [...prev, createBlankIngredientRow()]);
   };
 
   const removeIngredient = (idx: number) => {
@@ -1135,8 +1285,39 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
   }, [derivedServingCount, servingCountOverride]);
 
   const validIngredientCount = ingredients.filter((ingredient) => ingredient.item_id > 0 && Number(ingredient.quantity) > 0).length;
+  const itemMap = useMemo(() => new Map((items ?? []).map((item) => [item.id, item])), [items]);
+  const vendorNameById = useMemo(() => new Map((vendors ?? []).map((vendor) => [vendor.id, vendor.name])), [vendors]);
+  const unmatchedTemplateRowCount = ingredients.filter((ingredient) => ingredient.template_ingredient_name && ingredient.item_id <= 0).length;
+  const allTemplateRowsMapped = ingredients.every((ingredient) => !ingredient.template_ingredient_name || ingredient.item_id > 0);
+  const readinessIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (!name.trim()) {
+      issues.push('Recipe name is still missing.');
+    }
+    if (!yieldQuantity || !yieldUnit) {
+      issues.push('Batch yield is not complete yet.');
+    }
+    if (type === 'dish' && !servingQuantity) {
+      issues.push('Serving size is required before this recipe can drive downstream usage.');
+    }
+    if (type === 'dish' && (effectiveServingCount == null || effectiveServingCount <= 0)) {
+      issues.push('Servings per batch are not derivable yet.');
+    }
+    if (validIngredientCount === 0) {
+      issues.push('No inventory-backed ingredient rows are mapped yet.');
+    }
+    if (unmatchedTemplateRowCount > 0) {
+      issues.push(`${unmatchedTemplateRowCount} template row${unmatchedTemplateRowCount === 1 ? ' is' : 's are'} still unmapped to live inventory.`);
+    }
+    return issues;
+  }, [effectiveServingCount, name, servingQuantity, type, unmatchedTemplateRowCount, validIngredientCount, yieldQuantity, yieldUnit]);
+  const usageReady = readinessIssues.length === 0 && allTemplateRowsMapped;
+  const saveBlockingReason = creationMode === 'template' && appliedTemplateVersionId != null && unmatchedTemplateRowCount > 0
+    ? 'Map or remove every template row before saving this draft. Unmapped template rows cannot be persisted safely yet.'
+    : null;
 
   const applyTemplate = (template: RecipeTemplateDetailPayload) => {
+    setCreationMode('template');
     setSelectedTemplateId(template.template_id);
     setAppliedTemplateVersionId(template.active_version_id);
     setName(template.name);
@@ -1149,15 +1330,39 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
       return existingNotes.includes(templateNote) ? existingNotes : `${templateNote}\n${existingNotes}`;
     });
     setYieldQuantity(String(template.yield_quantity));
-    setYieldUnit(template.yield_unit);
+    setYieldUnit(coerceRecipeUnit(template.yield_unit));
     setServingQuantity('');
-    setServingUnit(template.yield_unit);
+    setServingUnit(coerceRecipeUnit(template.yield_unit));
     setServingCountOverride('');
     setIngredients(template.ingredients.map((ingredient) => ({
       item_id: 0,
       quantity: String(ingredient.qty),
-      unit: ingredient.unit,
+      unit: coerceRecipeUnit(ingredient.unit),
+      template_ingredient_name: ingredient.ingredient_name,
+      template_quantity: ingredient.qty,
+      template_unit: coerceRecipeUnit(ingredient.unit),
+      template_sort_order: ingredient.sort_order,
     })));
+  };
+
+  const resetDraftForMode = (mode: 'template' | 'blank') => {
+    if (recipeId) {
+      return;
+    }
+
+    setCreationMode(mode);
+    setSelectedTemplateId(mode === 'template' ? (templates?.[0]?.template_id ?? null) : null);
+    setAppliedTemplateVersionId(null);
+    setName('');
+    setType('dish');
+    setNotes('');
+    setYieldQuantity('');
+    setYieldUnit('each');
+    setServingQuantity('');
+    setServingUnit('each');
+    setServingCountOverride('');
+    setIngredients([createBlankIngredientRow()]);
+    setTemplateSearch('');
   };
 
   const handleSubmit = () => {
@@ -1191,6 +1396,50 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
 
   const isPending = createRecipe.isPending || updateRecipe.isPending;
 
+  if (!recipeId && creationMode == null) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Choose how to start this recipe</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Template mode is faster for seeded recipes and keeps source ingredient identity attached during inventory mapping. Blank mode is for one-off recipes you want to enter from scratch.
+              </p>
+            </div>
+            <button onClick={onDone} className="text-sm text-slate-500 transition hover:text-slate-900">Cancel</button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => resetDraftForMode('template')}
+            className="rounded-3xl border border-slate-900 bg-slate-950 p-6 text-left text-white transition hover:bg-slate-900"
+          >
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Start from template</div>
+            <div className="mt-3 text-2xl font-semibold">Use the seeded recipe library</div>
+            <div className="mt-2 text-sm leading-6 text-slate-200">
+              Search the 198 seeded templates, apply one into the draft, and map each source ingredient to live inventory with explicit identity carried through.
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => resetDraftForMode('blank')}
+            className="rounded-3xl border border-slate-200 bg-white p-6 text-left text-slate-950 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Start blank</div>
+            <div className="mt-3 text-2xl font-semibold">Build a manual draft</div>
+            <div className="mt-2 text-sm leading-6 text-slate-600">
+              Use this when the recipe is not in the seeded library and you want to define the batch, portion math, and inventory rows manually.
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1200,10 +1449,23 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
               {recipeId ? 'Edit Recipe' : 'New Recipe'}
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Define the batch yield first, then the serving size, then the ingredient quantities for the full batch.
+              {creationMode === 'template'
+                ? 'Start from the seeded template, verify the carried ingredient identity, then map each source row to live inventory.'
+                : 'Define the batch yield first, then the serving size, then the ingredient quantities for the full batch.'}
             </p>
           </div>
-          <button onClick={onDone} className="text-sm text-slate-500 transition hover:text-slate-900">Cancel</button>
+          <div className="flex items-center gap-3">
+            {!recipeId && (
+              <button
+                type="button"
+                onClick={() => resetDraftForMode(creationMode === 'template' ? 'blank' : 'template')}
+                className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
+              >
+                {creationMode === 'template' ? 'Start blank instead' : 'Use template library'}
+              </button>
+            )}
+            <button onClick={onDone} className="text-sm text-slate-500 transition hover:text-slate-900">Cancel</button>
+          </div>
         </div>
       </div>
 
@@ -1349,25 +1611,101 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
 
             <div className="mt-4 space-y-3">
               {ingredients.map((ingredient, idx) => {
-                const existingItem = existing?.items.find((row) => row.item_id === ingredient.item_id);
+                const mappedItem = ingredient.item_id > 0 ? itemMap.get(ingredient.item_id) : undefined;
+                const vendorName = mappedItem?.vendor_id ? vendorNameById.get(mappedItem.vendor_id) ?? null : null;
                 const quantityNumber = Number(ingredient.quantity);
                 const perServingUsage = effectiveServingCount && effectiveServingCount > 0 && quantityNumber > 0
                   ? trimRecipeNumber(quantityNumber / effectiveServingCount)
                   : null;
+                const likelyMatches = getLikelyInventoryMatches(ingredient.template_ingredient_name, items ?? []);
+                const hasLikelyMatches = likelyMatches.length > 0;
+                const unitCompatible = mappedItem ? templateUnitMatchesInventoryUnit(ingredient.template_unit ?? ingredient.unit, mappedItem) : true;
+                const templateLabel = ingredient.template_ingredient_name ?? `Manual row ${idx + 1}`;
+                const templateQtyLabel = ingredient.template_quantity != null && ingredient.template_unit
+                  ? `${trimRecipeNumber(ingredient.template_quantity)} ${ingredient.template_unit}`
+                  : ingredient.quantity && ingredient.unit
+                    ? `${trimRecipeNumber(Number(ingredient.quantity))} ${ingredient.unit}`
+                    : 'Quantity not set yet';
+                const mappingContext = formatInventoryMappingContext(mappedItem, vendorName);
+                const mappedUnitLabel = mappedItem
+                  ? `${mappedItem.unit}${mappedItem.order_unit ? ` • orders in ${mappedItem.order_unit}` : ''}`
+                  : 'No inventory mapping';
 
                 return (
                   <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_120px_120px_minmax(0,0.9fr)_80px] lg:items-start">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
                       <div>
-                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500">Inventory item</label>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                          {ingredient.template_ingredient_name ? `Template row ${ingredient.template_sort_order ?? idx + 1}` : `Manual row ${idx + 1}`}
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-slate-950">{templateLabel}</div>
+                        <div className="mt-1 text-xs text-slate-500">Source quantity {templateQtyLabel}</div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${mappedItem ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                          {mappedItem ? 'Mapped to inventory' : 'Needs inventory mapping'}
+                        </span>
+                        {mappedItem && !unitCompatible && (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-medium text-amber-700">
+                            Unit mismatch warning
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_120px_120px_minmax(0,0.95fr)_80px] lg:items-start">
+                      <div className="space-y-2">
+                        <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500">Mapped inventory item</label>
                         <ItemSearchInput
                           items={items ?? []}
                           selectedId={ingredient.item_id}
+                          placeholder={ingredient.template_ingredient_name ? `Map ${ingredient.template_ingredient_name}` : 'Search items...'}
                           onSelect={(id, unit) => {
                             updateIngredient(idx, 'item_id', id);
                             updateIngredient(idx, 'unit', unit);
                           }}
                         />
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                          <div className="font-medium text-slate-900">{mappedItem ? mappedItem.name : 'No mapped inventory item yet'}</div>
+                          <div className="mt-1">{mappedUnitLabel}</div>
+                          <div className="mt-1">{mappingContext}</div>
+                        </div>
+                        {ingredient.template_ingredient_name && (
+                          <div className="rounded-xl border border-slate-200 bg-slate-100/80 px-3 py-2">
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Likely inventory matches</div>
+                            {hasLikelyMatches ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {likelyMatches.map((match) => (
+                                  <button
+                                    key={`${ingredient.template_ingredient_name}-${match.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      updateIngredient(idx, 'item_id', match.id);
+                                      updateIngredient(idx, 'unit', match.unit);
+                                    }}
+                                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                      ingredient.item_id === match.id
+                                        ? 'border-slate-900 bg-slate-900 text-white'
+                                        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950'
+                                    }`}
+                                  >
+                                    {match.name}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-xs text-amber-700">
+                                No sensible match was found from current inventory names. Keep this row unmapped until the right stocked item exists.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {mappedItem && !unitCompatible && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            The template expects {ingredient.template_unit ?? ingredient.unit}, but {mappedItem.name} is configured as {mappedItem.unit}
+                            {mappedItem.order_unit ? ` and orders in ${mappedItem.order_unit}` : ''}. Check the stocked item or adjust the recipe row before saving this draft.
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-slate-500">Batch qty</label>
@@ -1399,7 +1737,9 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
                           {perServingUsage ? `${perServingUsage} ${ingredient.unit}` : 'Set serving math'}
                         </div>
                         <div className="mt-1 text-[11px] text-slate-500">
-                          {existingItem?.line_cost != null ? `Current batch cost line: $${existingItem.line_cost.toFixed(2)}` : 'No cost preview yet'}
+                          {mappedItem?.order_unit_price != null
+                            ? `${formatRecipeCurrency(mappedItem.order_unit_price)} per ${mappedItem.order_unit ?? mappedItem.unit}`
+                            : 'No cost context yet'}
                         </div>
                       </div>
                       <div className="flex lg:justify-end">
@@ -1420,122 +1760,137 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
 
         <div className="space-y-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Seeded template library</div>
-                <div className="mt-1 text-sm text-slate-600">
-                  Start from the recipe template library, then adjust serving math and map ingredients to live inventory items.
+            {creationMode === 'template' ? (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Seeded template library</div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Pick a seeded recipe first, then map every source ingredient row to a live inventory item without losing the original template identity.
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                    {templates?.length ?? 0} templates
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                {templates?.length ?? 0} templates
-              </div>
-            </div>
 
-            <div className="mt-4">
-              <input
-                value={templateSearch}
-                onChange={(event) => setTemplateSearch(event.target.value)}
-                placeholder="Search template name or category"
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
-              />
-            </div>
+                <div className="mt-4">
+                  <input
+                    value={templateSearch}
+                    onChange={(event) => setTemplateSearch(event.target.value)}
+                    placeholder="Search template name or category"
+                    className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  />
+                </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-              <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
-                {templatesLoading ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                    Loading template library...
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+                  <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                    {templatesLoading ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                        Loading template library...
+                      </div>
+                    ) : !filteredTemplates.length ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                        No templates matched that search.
+                      </div>
+                    ) : (
+                      filteredTemplates.map((template) => {
+                        const selected = template.template_id === selectedTemplateId;
+                        return (
+                          <button
+                            key={template.template_id}
+                            type="button"
+                            onClick={() => setSelectedTemplateId(template.template_id)}
+                            className={selected
+                              ? 'w-full rounded-2xl border border-slate-900 bg-slate-950 px-4 py-3 text-left text-white'
+                              : 'w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-slate-900 transition hover:border-slate-300 hover:bg-white'}
+                          >
+                            <div className="font-medium">{template.name}</div>
+                            <div className={selected ? 'mt-1 text-xs text-slate-200' : 'mt-1 text-xs text-slate-500'}>
+                              {template.category} • {trimRecipeNumber(template.yield_quantity)} {template.yield_unit} • {template.ingredient_count} rows
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
-                ) : !filteredTemplates.length ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                    No templates matched that search.
-                  </div>
-                ) : (
-                  filteredTemplates.map((template) => {
-                    const selected = template.template_id === selectedTemplateId;
-                    return (
-                      <button
-                        key={template.template_id}
-                        type="button"
-                        onClick={() => setSelectedTemplateId(template.template_id)}
-                        className={selected
-                          ? 'w-full rounded-2xl border border-slate-900 bg-slate-950 px-4 py-3 text-left text-white'
-                          : 'w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-slate-900 transition hover:border-slate-300 hover:bg-white'}
-                      >
-                        <div className="font-medium">{template.name}</div>
-                        <div className={selected ? 'mt-1 text-xs text-slate-200' : 'mt-1 text-xs text-slate-500'}>
-                          {template.category} • {trimRecipeNumber(template.yield_quantity)} {template.yield_unit} • {template.ingredient_count} rows
-                        </div>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                {templateDetailLoading && selectedTemplateId != null ? (
-                  <div className="text-sm text-slate-500">Loading template detail...</div>
-                ) : selectedTemplate ? (
-                  <>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-base font-semibold text-slate-950">{selectedTemplate.name}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {selectedTemplate.category} • Active v{selectedTemplate.active_version_number}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => applyTemplate(selectedTemplate)}
-                        className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
-                      >
-                        Apply Template
-                      </button>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Template yield</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-950">
-                          {trimRecipeNumber(selectedTemplate.yield_quantity)} {selectedTemplate.yield_unit}
-                        </div>
-                      </div>
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                        <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Ingredient rows</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-950">{selectedTemplate.ingredient_count}</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Template ingredients</div>
-                      <div className="mt-2 max-h-[180px] space-y-2 overflow-y-auto pr-1">
-                        {selectedTemplate.ingredients.map((ingredient) => (
-                          <div key={`${selectedTemplate.template_id}-${ingredient.sort_order}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-                            <div className="font-medium text-slate-950">{ingredient.ingredient_name}</div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    {templateDetailLoading && selectedTemplateId != null ? (
+                      <div className="text-sm text-slate-500">Loading template detail...</div>
+                    ) : selectedTemplate ? (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-base font-semibold text-slate-950">{selectedTemplate.name}</div>
                             <div className="mt-1 text-xs text-slate-500">
-                              {trimRecipeNumber(ingredient.qty)} {ingredient.unit}
+                              {selectedTemplate.category} • Active v{selectedTemplate.active_version_number}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                          <button
+                            type="button"
+                            onClick={() => applyTemplate(selectedTemplate)}
+                            className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800"
+                          >
+                            Apply Template
+                          </button>
+                        </div>
 
-                    {appliedTemplateVersionId === selectedTemplate.active_version_id ? (
-                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                        This template is currently applied to the draft form.
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="text-sm text-slate-500">Select a template to preview and apply it to the recipe form.</div>
-                )}
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Template yield</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-950">
+                              {trimRecipeNumber(selectedTemplate.yield_quantity)} {selectedTemplate.yield_unit}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Ingredient rows</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-950">{selectedTemplate.ingredient_count}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Template ingredients</div>
+                          <div className="mt-2 max-h-[180px] space-y-2 overflow-y-auto pr-1">
+                            {selectedTemplate.ingredients.map((ingredient) => (
+                              <div key={`${selectedTemplate.template_id}-${ingredient.sort_order}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                                <div className="font-medium text-slate-950">{ingredient.ingredient_name}</div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {trimRecipeNumber(ingredient.qty)} {ingredient.unit}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {appliedTemplateVersionId === selectedTemplate.active_version_id ? (
+                          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                            This template is currently applied to the draft form.
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="text-sm text-slate-500">Select a template to preview and apply it to the recipe form.</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                Blank mode is active. This draft is manual-first, so there is no seeded ingredient identity to carry through mapping. If this recipe belongs in the library, switch back to template mode before entering the rows.
               </div>
-            </div>
+            )}
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Recipe math summary</div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Recipe math summary</div>
+              <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${
+                usageReady ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+              }`}>
+                {usageReady ? 'Usage ready' : 'Draft only'}
+              </span>
+            </div>
             <dl className="mt-4 space-y-4 text-sm">
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-slate-500">Batch yield</dt>
@@ -1572,6 +1927,22 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
                 </dd>
               </div>
             </dl>
+            <div className={`mt-5 rounded-2xl border px-4 py-3 text-xs leading-5 ${
+              usageReady ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+            }`}>
+              {usageReady
+                ? 'This draft has the minimum serving math and inventory mapping needed to feed downstream usage cleanly once it is promoted.'
+                : 'This draft is not operationally ready yet. FIFOFlow will keep it as a draft until the missing usage math or inventory mapping is completed.'}
+            </div>
+            {!usageReady && readinessIssues.length > 0 && (
+              <ul className="mt-3 space-y-2 text-xs text-slate-600">
+                {readinessIssues.map((issue) => (
+                  <li key={issue} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    {issue}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
               Ingredient quantities should always represent the full batch. Portion demand and menu usage now flow from servings-per-batch instead of assuming every quantity is already per guest.
             </div>
@@ -1591,6 +1962,11 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
+        {saveBlockingReason && (
+          <div className="mr-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            {saveBlockingReason}
+          </div>
+        )}
         <button
           onClick={onDone}
           className="border border-border text-text-secondary px-4 py-2 rounded-lg text-sm hover:bg-bg-hover transition-colors"
@@ -1599,10 +1975,10 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
         </button>
         <button
           onClick={handleSubmit}
-          disabled={isPending || !name.trim()}
+          disabled={isPending || !name.trim() || saveBlockingReason != null}
           className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
         >
-          {recipeId ? 'Save Changes' : 'Create Recipe'}
+          {recipeId ? 'Save Draft Changes' : 'Create Draft Recipe'}
         </button>
       </div>
     </div>

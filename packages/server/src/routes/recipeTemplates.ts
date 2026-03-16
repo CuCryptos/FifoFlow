@@ -1,5 +1,24 @@
 import { Router } from 'express';
 import type Database from 'better-sqlite3';
+import { UNITS } from '@fifoflow/shared';
+
+function normalizeTemplateUnit(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const exact = UNITS.find((unit) => unit.toLowerCase() === normalized);
+  if (exact) {
+    return exact;
+  }
+
+  if (normalized === 'l') {
+    return 'L';
+  }
+
+  return value;
+}
 
 export function createRecipeTemplateRoutes(db: Database.Database): Router {
   const router = Router();
@@ -25,9 +44,23 @@ export function createRecipeTemplateRoutes(db: Database.Database): Router {
         GROUP BY t.id, t.name, t.category, v.id, v.version_number, v.yield_quantity, v.yield_unit
         ORDER BY t.name COLLATE NOCASE ASC
       `,
-    ).all();
+    ).all() as Array<{
+      template_id: number;
+      name: string;
+      category: string;
+      active_version_id: number;
+      active_version_number: number;
+      yield_quantity: number;
+      yield_unit: string;
+      ingredient_count: number;
+    }>;
 
-    res.json({ templates });
+    res.json({
+      templates: templates.map((template) => ({
+        ...template,
+        yield_unit: normalizeTemplateUnit(template.yield_unit),
+      })),
+    });
   });
 
   router.get('/:templateId', (req, res) => {
@@ -80,12 +113,21 @@ export function createRecipeTemplateRoutes(db: Database.Database): Router {
         WHERE recipe_template_version_id = ?
         ORDER BY sort_order ASC
       `,
-    ).all(summary.active_version_id);
+    ).all(summary.active_version_id) as Array<{
+      ingredient_name: string;
+      qty: number;
+      unit: string;
+      sort_order: number;
+    }>;
 
     res.json({
       ...summary,
+      yield_unit: normalizeTemplateUnit(summary.yield_unit),
       ingredient_count: ingredients.length,
-      ingredients,
+      ingredients: ingredients.map((ingredient) => ({
+        ...ingredient,
+        unit: normalizeTemplateUnit(ingredient.unit),
+      })),
     });
   });
 

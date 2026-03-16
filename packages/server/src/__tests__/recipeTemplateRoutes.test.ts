@@ -50,7 +50,7 @@ describe('Recipe template routes', () => {
     });
   });
 
-  it('returns active template detail with ordered ingredient rows', async () => {
+  it('returns active template detail with ordered ingredient rows and normalized units', async () => {
     const response = await request(app).get('/api/recipe-templates/1');
 
     expect(response.status).toBe(200);
@@ -79,7 +79,7 @@ function seedTemplateLibrary(db: Database.Database) {
   `).run();
   db.prepare(`
     INSERT INTO recipe_template_versions (id, recipe_template_id, version_number, yield_quantity, yield_unit, source_hash, is_active)
-    VALUES (11, 1, 2, 2, 'L', 'vinaigrette-v2', 1)
+    VALUES (11, 1, 2, 2, 'l', 'vinaigrette-v2', 1)
   `).run();
   db.prepare(`
     INSERT INTO recipe_template_versions (id, recipe_template_id, version_number, yield_quantity, yield_unit, source_hash, is_active)
@@ -88,8 +88,8 @@ function seedTemplateLibrary(db: Database.Database) {
 
   db.prepare(`
     INSERT INTO recipe_template_ingredients (recipe_template_version_id, ingredient_name, qty, unit, sort_order)
-    VALUES (11, 'olive oil', 1.2, 'L', 1),
-           (11, 'rice vinegar', 0.8, 'L', 2),
+    VALUES (11, 'olive oil', 1.2, 'l', 1),
+           (11, 'rice vinegar', 0.8, 'l', 2),
            (20, 'tequila', 750, 'ml', 1),
            (20, 'lime juice', 500, 'ml', 2),
            (20, 'agave', 250, 'ml', 3)
