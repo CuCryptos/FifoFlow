@@ -247,7 +247,7 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
   const { selectedVenueId } = useVenueContext();
   const [comparisonRecipeVersionId, setComparisonRecipeVersionId] = useState<number | null>(null);
   const [diffFilter, setDiffFilter] = useState<'changed' | 'all'>('changed');
-  const [diffTypeFilter, setDiffTypeFilter] = useState<'all' | 'QUANTITY_CHANGED' | 'RESOLUTION_CHANGED' | 'ADDED' | 'REMOVED'>('all');
+  const [diffTypeFilter, setDiffTypeFilter] = useState<'all' | 'QUANTITY_CHANGED' | 'RESOLUTION_CHANGED' | 'RESOLUTION_BLOCKED' | 'ADDED' | 'REMOVED'>('all');
   const { data: detail, isLoading } = useOperationalRecipeWorkflowDetail(summary.recipe_version_id, selectedVenueId, comparisonRecipeVersionId);
   const blockers = summary.blocker_messages.length > 0 ? summary.blocker_messages : ['No active blockers. This recipe is ready to cost in the current scope.'];
 
@@ -264,12 +264,14 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
     changed: detail?.ingredient_diffs.filter((diff) => diff.change_type !== 'UNCHANGED').length ?? 0,
     QUANTITY_CHANGED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'QUANTITY_CHANGED').length ?? 0,
     RESOLUTION_CHANGED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'RESOLUTION_CHANGED').length ?? 0,
+    RESOLUTION_BLOCKED: detail?.ingredient_diffs.filter((diff) => isResolutionBlockedDiff(diff)).length ?? 0,
     ADDED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'ADDED').length ?? 0,
     REMOVED: detail?.ingredient_diffs.filter((diff) => diff.change_type === 'REMOVED').length ?? 0,
   };
   const filteredDiffs = detail?.ingredient_diffs.filter((diff) => {
     const matchesVisibility = diffFilter === 'all' || diff.change_type !== 'UNCHANGED';
-    const matchesType = diffTypeFilter === 'all' || diff.change_type === diffTypeFilter;
+    const matchesType = diffTypeFilter === 'all'
+      || (diffTypeFilter === 'RESOLUTION_BLOCKED' ? isResolutionBlockedDiff(diff) : diff.change_type === diffTypeFilter);
     return matchesVisibility && matchesType;
   }) ?? [];
 
@@ -432,6 +434,7 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
                   ['all', `All change types (${diffCounts.changed})`],
                   ['QUANTITY_CHANGED', `Quantity (${diffCounts.QUANTITY_CHANGED})`],
                   ['RESOLUTION_CHANGED', `Resolution (${diffCounts.RESOLUTION_CHANGED})`],
+                  ['RESOLUTION_BLOCKED', `Resolution blocked (${diffCounts.RESOLUTION_BLOCKED})`],
                   ['ADDED', `Added (${diffCounts.ADDED})`],
                   ['REMOVED', `Removed (${diffCounts.REMOVED})`],
                 ] as const).map(([value, label]) => (
@@ -491,7 +494,10 @@ function OperationalRecipeDetail({ summary }: { summary: OperationalRecipeWorkfl
 
 function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayload }) {
   const rowLabel = diff.current_row?.raw_ingredient_text ?? diff.previous_row?.raw_ingredient_text ?? diff.comparison_key;
-  const changeTone = diff.change_type === 'ADDED'
+  const resolutionBlocked = isResolutionBlockedDiff(diff);
+  const changeTone = resolutionBlocked
+    ? 'red'
+    : diff.change_type === 'ADDED'
     ? 'blue'
     : diff.change_type === 'REMOVED'
       ? 'red'
@@ -508,9 +514,16 @@ function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayloa
           <div className="text-sm font-semibold text-text-primary">{rowLabel}</div>
           <div className="text-xs text-text-secondary">{diff.summary}</div>
         </div>
-        <WorkflowStatusPill tone={changeTone}>
-          {diff.change_type.replaceAll('_', ' ')}
-        </WorkflowStatusPill>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {resolutionBlocked && (
+            <WorkflowStatusPill tone="red">
+              Resolution blocked
+            </WorkflowStatusPill>
+          )}
+          <WorkflowStatusPill tone={changeTone}>
+            {diff.change_type.replaceAll('_', ' ')}
+          </WorkflowStatusPill>
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -533,6 +546,11 @@ function IngredientDiffCard({ diff }: { diff: RecipeWorkflowIngredientDiffPayloa
       </div>
     </div>
   );
+}
+
+function isResolutionBlockedDiff(diff: RecipeWorkflowIngredientDiffPayload): boolean {
+  return [diff.current_row?.costability_status, diff.previous_row?.costability_status]
+    .some((status) => status != null && status !== 'RESOLVED_FOR_COSTING');
 }
 
 function DiffRowDetail({ row }: { row: OperationalRecipeIngredientRowPayload }) {

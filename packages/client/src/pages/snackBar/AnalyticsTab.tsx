@@ -136,8 +136,18 @@ export function AnalyticsTab() {
   );
 }
 
+type RevenueHoverPoint = {
+  x: number;
+  y: number;
+  date: string;
+  revenue: number;
+  itemsSold: number;
+  saleCount: number;
+};
+
 function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
-  const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; revenue: number; itemsSold: number; saleCount: number } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<RevenueHoverPoint | null>(null);
+  const tooltipId = 'snackbar-revenue-tooltip';
   const chart = useMemo(() => {
     const revenueMax = Math.max(...daily.map((entry) => entry.revenue), 1);
     const innerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
@@ -209,15 +219,14 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
                 cy={point.y}
                 r="10"
                 fill="transparent"
-                onMouseEnter={() => setHoveredPoint({
-                  x: point.x,
-                  y: point.y,
-                  date: point.date,
-                  revenue: point.revenue,
-                  itemsSold: point.items_sold,
-                  saleCount: point.sale_count,
-                })}
+                tabIndex={0}
+                role="img"
+                aria-label={`Revenue ${formatCurrency(point.revenue)} on ${formatChartDate(point.date)} from ${point.sale_count} sales and ${point.items_sold} items sold`}
+                aria-describedby={hoveredPoint?.date === point.date ? tooltipId : undefined}
+                onMouseEnter={() => setHoveredPoint(buildRevenueHoverPoint(point))}
                 onMouseLeave={() => setHoveredPoint(null)}
+                onFocus={() => setHoveredPoint(buildRevenueHoverPoint(point))}
+                onBlur={() => setHoveredPoint(null)}
               />
               <circle cx={point.x} cy={point.y} r="4" fill="#0F172A" pointerEvents="none" />
               <circle cx={point.x} cy={point.y} r="2.5" fill="#34D399" pointerEvents="none" />
@@ -226,6 +235,9 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
         </svg>
         {hoveredPoint && (
           <div
+            id={tooltipId}
+            role="status"
+            aria-live="polite"
             className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
             style={{
               left: `${(hoveredPoint.x / CHART_WIDTH) * 100}%`,
@@ -253,6 +265,7 @@ function RevenueTimelineChart({ daily }: { daily: SalesSummary['daily'] }) {
 
 function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }) {
   const [hoveredSellerId, setHoveredSellerId] = useState<number | null>(null);
+  const tooltipId = 'snackbar-seller-tooltip';
   const maxRevenue = Math.max(...sellers.map((seller) => seller.revenue), 1);
 
   return (
@@ -263,9 +276,15 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
         return (
           <div
             key={seller.item_id}
-            className="relative space-y-1.5"
+            className={`relative space-y-1.5 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent-indigo/40 ${hovered ? 'bg-slate-50' : ''}`}
+            tabIndex={0}
+            role="img"
+            aria-label={`${seller.item_name}, ${formatCurrency(seller.revenue)} revenue, ${seller.quantity_sold} sold`}
+            aria-describedby={hovered ? tooltipId : undefined}
             onMouseEnter={() => setHoveredSellerId(seller.item_id)}
             onMouseLeave={() => setHoveredSellerId(null)}
+            onFocus={() => setHoveredSellerId(seller.item_id)}
+            onBlur={() => setHoveredSellerId(null)}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -281,7 +300,12 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
               />
             </div>
             {hovered && (
-              <div className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl">
+              <div
+                id={tooltipId}
+                role="status"
+                aria-live="polite"
+                className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 text-xs text-white shadow-xl"
+              >
                 <div className="font-semibold">{seller.item_name}</div>
                 <div className="mt-1 font-mono">{formatCurrency(seller.revenue)}</div>
                 <div className="text-slate-300">{seller.quantity_sold} sold</div>
@@ -292,6 +316,17 @@ function TopSellerBarChart({ sellers }: { sellers: SalesSummary['top_sellers'] }
       })}
     </div>
   );
+}
+
+function buildRevenueHoverPoint(point: SalesSummary['daily'][number] & { x: number; y: number }): RevenueHoverPoint {
+  return {
+    x: point.x,
+    y: point.y,
+    date: point.date,
+    revenue: point.revenue,
+    itemsSold: point.items_sold,
+    saleCount: point.sale_count,
+  };
 }
 
 function formatCurrency(value: number): string {

@@ -1596,6 +1596,17 @@ function InventoryItemSidePanel({
   });
   const [fieldStates, setFieldStates] = useState<Record<DraftField, FieldSaveState>>(emptyFieldStates);
   const [fieldSavedAt, setFieldSavedAt] = useState<Record<DraftField, number | null>>(emptySavedAt);
+  const [fieldRollbackReasons, setFieldRollbackReasons] = useState<Record<DraftField, string | null>>({
+    category: null,
+    vendor_id: null,
+    venue_id: null,
+    storage_area_id: null,
+    reorder_level: null,
+    reorder_qty: null,
+    order_unit: null,
+    qty_per_unit: null,
+    order_unit_price: null,
+  });
 
   useEffect(() => {
     setDraft({
@@ -1611,6 +1622,17 @@ function InventoryItemSidePanel({
     });
     setFieldStates(emptyFieldStates());
     setFieldSavedAt(emptySavedAt());
+    setFieldRollbackReasons({
+      category: null,
+      vendor_id: null,
+      venue_id: null,
+      storage_area_id: null,
+      reorder_level: null,
+      reorder_qty: null,
+      order_unit: null,
+      qty_per_unit: null,
+      order_unit_price: null,
+    });
   }, [item]);
 
   const vendorName = vendors.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Unassigned';
@@ -1699,6 +1721,13 @@ function InventoryItemSidePanel({
       });
       return next;
     });
+    setFieldRollbackReasons((current) => {
+      const next = { ...current };
+      fieldsToSave.forEach((field) => {
+        next[field] = null;
+      });
+      return next;
+    });
     updateItem.mutate(
       {
         id: item.id,
@@ -1721,6 +1750,13 @@ function InventoryItemSidePanel({
             });
             return next;
           });
+          setFieldRollbackReasons((current) => {
+            const next = { ...current };
+            fieldsToSave.forEach((field) => {
+              next[field] = null;
+            });
+            return next;
+          });
           window.setTimeout(() => {
             setFieldStates((current) => {
               const next = { ...current };
@@ -1735,10 +1771,18 @@ function InventoryItemSidePanel({
           toast(`${label} saved`, 'success');
         },
         onError: (error) => {
+          const reason = error.message || 'Save failed';
           setFieldStates((current) => {
             const next = { ...current };
             fieldsToSave.forEach((field) => {
               next[field] = 'rolled_back';
+            });
+            return next;
+          });
+          setFieldRollbackReasons((current) => {
+            const next = { ...current };
+            fieldsToSave.forEach((field) => {
+              next[field] = reason;
             });
             return next;
           });
@@ -1753,7 +1797,7 @@ function InventoryItemSidePanel({
               return next;
             });
           }, 2200);
-          toast(error.message, 'error');
+          toast(reason, 'error');
         },
       },
     );
@@ -1800,7 +1844,7 @@ function InventoryItemSidePanel({
                 <option key={categoryOption} value={categoryOption}>{categoryOption}</option>
               ))}
             </select>
-            <FieldStateHint state={fieldStates.category} dirty={changedFields.includes('category')} savedAt={fieldSavedAt.category} />
+            <FieldStateHint state={fieldStates.category} dirty={changedFields.includes('category')} savedAt={fieldSavedAt.category} rollbackReason={fieldRollbackReasons.category} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Vendor</span>
@@ -1814,7 +1858,7 @@ function InventoryItemSidePanel({
                 <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
               ))}
             </select>
-            <FieldStateHint state={fieldStates.vendor_id} dirty={changedFields.includes('vendor_id')} savedAt={fieldSavedAt.vendor_id} />
+            <FieldStateHint state={fieldStates.vendor_id} dirty={changedFields.includes('vendor_id')} savedAt={fieldSavedAt.vendor_id} rollbackReason={fieldRollbackReasons.vendor_id} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Venue</span>
@@ -1828,7 +1872,7 @@ function InventoryItemSidePanel({
                 <option key={venue.id} value={venue.id}>{venue.name}</option>
               ))}
             </select>
-            <FieldStateHint state={fieldStates.venue_id} dirty={changedFields.includes('venue_id')} savedAt={fieldSavedAt.venue_id} />
+            <FieldStateHint state={fieldStates.venue_id} dirty={changedFields.includes('venue_id')} savedAt={fieldSavedAt.venue_id} rollbackReason={fieldRollbackReasons.venue_id} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Storage area</span>
@@ -1842,7 +1886,7 @@ function InventoryItemSidePanel({
                 <option key={area.id} value={area.id}>{area.name}</option>
               ))}
             </select>
-            <FieldStateHint state={fieldStates.storage_area_id} dirty={changedFields.includes('storage_area_id')} savedAt={fieldSavedAt.storage_area_id} />
+            <FieldStateHint state={fieldStates.storage_area_id} dirty={changedFields.includes('storage_area_id')} savedAt={fieldSavedAt.storage_area_id} rollbackReason={fieldRollbackReasons.storage_area_id} />
           </label>
         </div>
       </div>
@@ -1876,7 +1920,7 @@ function InventoryItemSidePanel({
               onChange={(event) => setDraft((current) => ({ ...current, reorder_level: event.target.value }))}
               className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_level)}`}
             />
-            <FieldStateHint state={fieldStates.reorder_level} dirty={changedFields.includes('reorder_level')} savedAt={fieldSavedAt.reorder_level} />
+            <FieldStateHint state={fieldStates.reorder_level} dirty={changedFields.includes('reorder_level')} savedAt={fieldSavedAt.reorder_level} rollbackReason={fieldRollbackReasons.reorder_level} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Reorder qty</span>
@@ -1888,7 +1932,7 @@ function InventoryItemSidePanel({
               onChange={(event) => setDraft((current) => ({ ...current, reorder_qty: event.target.value }))}
               className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.reorder_qty)}`}
             />
-            <FieldStateHint state={fieldStates.reorder_qty} dirty={changedFields.includes('reorder_qty')} savedAt={fieldSavedAt.reorder_qty} />
+            <FieldStateHint state={fieldStates.reorder_qty} dirty={changedFields.includes('reorder_qty')} savedAt={fieldSavedAt.reorder_qty} rollbackReason={fieldRollbackReasons.reorder_qty} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Order unit</span>
@@ -1902,7 +1946,7 @@ function InventoryItemSidePanel({
                 <option key={unitOption} value={unitOption}>{unitOption}</option>
               ))}
             </select>
-            <FieldStateHint state={fieldStates.order_unit} dirty={changedFields.includes('order_unit')} savedAt={fieldSavedAt.order_unit} />
+            <FieldStateHint state={fieldStates.order_unit} dirty={changedFields.includes('order_unit')} savedAt={fieldSavedAt.order_unit} rollbackReason={fieldRollbackReasons.order_unit} />
           </label>
           <label className="space-y-1 text-sm">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pack qty</span>
@@ -1914,7 +1958,7 @@ function InventoryItemSidePanel({
               onChange={(event) => setDraft((current) => ({ ...current, qty_per_unit: event.target.value }))}
               className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.qty_per_unit)}`}
             />
-            <FieldStateHint state={fieldStates.qty_per_unit} dirty={changedFields.includes('qty_per_unit')} savedAt={fieldSavedAt.qty_per_unit} />
+            <FieldStateHint state={fieldStates.qty_per_unit} dirty={changedFields.includes('qty_per_unit')} savedAt={fieldSavedAt.qty_per_unit} rollbackReason={fieldRollbackReasons.qty_per_unit} />
           </label>
           <label className="space-y-1 text-sm md:col-span-2">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Case price</span>
@@ -1926,7 +1970,7 @@ function InventoryItemSidePanel({
               onChange={(event) => setDraft((current) => ({ ...current, order_unit_price: event.target.value }))}
               className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.order_unit_price)}`}
             />
-            <FieldStateHint state={fieldStates.order_unit_price} dirty={changedFields.includes('order_unit_price')} savedAt={fieldSavedAt.order_unit_price} />
+            <FieldStateHint state={fieldStates.order_unit_price} dirty={changedFields.includes('order_unit_price')} savedAt={fieldSavedAt.order_unit_price} rollbackReason={fieldRollbackReasons.order_unit_price} />
           </label>
         </div>
       </div>
@@ -1998,10 +2042,12 @@ function FieldStateHint({
   state,
   dirty,
   savedAt,
+  rollbackReason,
 }: {
   state: 'idle' | 'saving' | 'saved' | 'rolled_back';
   dirty: boolean;
   savedAt: number | null;
+  rollbackReason: string | null;
 }) {
   if (state === 'idle' && !dirty && savedAt == null) return null;
   const text = state === 'saving'
@@ -2009,7 +2055,7 @@ function FieldStateHint({
     : state === 'saved'
       ? 'Saved'
       : state === 'rolled_back'
-        ? 'Rolled back'
+        ? `Rolled back${rollbackReason ? `: ${rollbackReason}` : ''}`
         : dirty
           ? 'Unsaved change'
           : `Last saved ${formatFieldSavedAt(savedAt)}`;
