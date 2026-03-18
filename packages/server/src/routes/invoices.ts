@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { InventoryStore } from '../store/types.js';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
 import { matchInvoiceLineToInventory } from './invoiceMatching.js';
@@ -37,48 +38,49 @@ interface ParsedInvoice {
   }>;
 }
 
-async function parseOneFile(
-  client: Anthropic,
-  file: Express.Multer.File,
-  store: InventoryStore,
-  vendorIdOverride?: number,
-): Promise<InvoiceParseResult[]> {
-  const base64Data = file.buffer.toString('base64');
-  const isPdf = file.mimetype === 'application/pdf';
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const pdf = await getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    isEvalSupported: false,
+  }).promise;
 
-  const contentBlock: Anthropic.ContentBlockParam = isPdf
-    ? {
-        type: 'document' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: 'application/pdf' as const,
-          data: base64Data,
-        },
+  const pages: string[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const lines = new Map<number, string[]>();
+
+    for (const item of textContent.items) {
+      if (!('str' in item)) {
+        continue;
       }
-    : {
-        type: 'image' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: getMediaType(file.mimetype),
-          data: base64Data,
-        },
-      };
+      const lineKey = Math.round(item.transform[5] ?? 0);
+      const line = lines.get(lineKey) ?? [];
+      const value = String(item.str ?? '').trim();
+      if (!value) {
+        continue;
+      }
+      line.push(value);
+      lines.set(lineKey, line);
+    }
 
-  // Get vendor list for the prompt
-  const vendors = await store.listVendors();
-  const vendorNames = vendors.map((v) => v.name).join(', ');
+    const pageText = [...lines.entries()]
+      .sort((left, right) => right[0] - left[0])
+      .map(([, line]) => line.join(' ').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n');
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 16384,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          contentBlock,
-          {
-            type: 'text',
-            text: `Extract ALL invoices and their line items from this document. This document may contain MULTIPLE invoices from DIFFERENT vendors across multiple pages. Return a JSON object with this exact structure:
+    if (pageText) {
+      pages.push(`--- PAGE ${pageNumber} ---\n${pageText}`);
+    }
+  }
+
+  return pages.join('\n\n').trim();
+}
+
+function buildInvoiceExtractionPrompt(vendorNames: string, rawPdfText?: string): string {
+  const baseInstructions = `Extract ALL invoices and their line items from this document. This document may contain MULTIPLE invoices from DIFFERENT vendors across multiple pages. Return a JSON object with this exact structure:
 
 {
   "invoices": [
@@ -111,7 +113,70 @@ Rules:
 - Preserve pack, size, or cut descriptors when they are part of the product description
 - Prices should be numbers without currency symbols
 - If unit_price or line_total is missing, calculate from the other
-- Return ONLY the JSON object, no other text`,
+- NEVER invent products, quantities, or prices that are not visibly present in the invoice
+- If a line is unreadable, omit that line instead of guessing
+- Return ONLY the JSON object, no other text`;
+
+  if (!rawPdfText) {
+    return baseInstructions;
+  }
+
+  const truncatedText = rawPdfText.slice(0, 50000);
+  return `${baseInstructions}
+
+The PDF text below was extracted directly from the uploaded invoice and should be treated as the primary source of truth for product names, quantities, units, prices, and invoice numbers.
+- Only emit line items that are supported by the extracted text below
+- Do not rewrite liquor items into produce or meat items that are not present in the extracted text
+- Keep vendor_item_name anchored to the actual extracted line text
+
+EXTRACTED PDF TEXT:
+${truncatedText}`;
+}
+
+async function parseOneFile(
+  client: Anthropic,
+  file: Express.Multer.File,
+  store: InventoryStore,
+  vendorIdOverride?: number,
+): Promise<InvoiceParseResult[]> {
+  const base64Data = file.buffer.toString('base64');
+  const isPdf = file.mimetype === 'application/pdf';
+  const extractedPdfText = isPdf ? await extractPdfText(file.buffer).catch(() => '') : '';
+  const shouldUseExtractedTextOnly = isPdf && extractedPdfText.trim().length >= 200;
+
+  const contentBlock: Anthropic.ContentBlockParam = isPdf
+    ? {
+        type: 'document' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: 'application/pdf' as const,
+          data: base64Data,
+        },
+      }
+    : {
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: getMediaType(file.mimetype),
+          data: base64Data,
+        },
+      };
+
+  // Get vendor list for the prompt
+  const vendors = await store.listVendors();
+  const vendorNames = vendors.map((v) => v.name).join(', ');
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 16384,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          ...(!shouldUseExtractedTextOnly ? [contentBlock] : []),
+          {
+            type: 'text',
+            text: buildInvoiceExtractionPrompt(vendorNames, extractedPdfText || undefined),
           },
         ],
       },
