@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { InventoryStore } from '../store/types.js';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
 import { matchInvoiceLineToInventory } from './invoiceMatching.js';
@@ -38,111 +37,14 @@ interface ParsedInvoice {
   }>;
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  const pdf = await getDocument({
-    data: new Uint8Array(buffer),
-    useSystemFonts: true,
-    isEvalSupported: false,
-  }).promise;
-
-  const pages: string[] = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const lines = new Map<number, string[]>();
-
-    for (const item of textContent.items) {
-      if (!('str' in item)) {
-        continue;
-      }
-      const lineKey = Math.round(item.transform[5] ?? 0);
-      const line = lines.get(lineKey) ?? [];
-      const value = String(item.str ?? '').trim();
-      if (!value) {
-        continue;
-      }
-      line.push(value);
-      lines.set(lineKey, line);
-    }
-
-    const pageText = [...lines.entries()]
-      .sort((left, right) => right[0] - left[0])
-      .map(([, line]) => line.join(' ').replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .join('\n');
-
-    if (pageText) {
-      pages.push(`--- PAGE ${pageNumber} ---\n${pageText}`);
-    }
-  }
-
-  return pages.join('\n\n').trim();
-}
-
-function buildInvoiceExtractionPrompt(vendorNames: string, rawPdfText?: string): string {
-  const baseInstructions = `Extract ALL invoices and their line items from this document. This document may contain MULTIPLE invoices from DIFFERENT vendors across multiple pages. Return a JSON object with this exact structure:
-
-{
-  "invoices": [
-    {
-      "vendor_name": "the company/vendor name on this invoice",
-      "invoice_date": "YYYY-MM-DD or null",
-      "invoice_number": "string or null",
-      "lines": [
-        {
-          "vendor_item_name": "product name as shown on invoice",
-          "quantity": number,
-          "unit": "unit of measure (case, each, lb, oz, etc.)",
-          "unit_price": number (price per unit),
-          "line_total": number (quantity * unit_price)
-        }
-      ]
-    }
-  ]
-}
-
-Known vendors in our system: ${vendorNames || 'none yet'}
-
-Rules:
-- CRITICAL: Read EVERY page of this document from start to finish
-- This document may contain multiple separate invoices from different vendors — return each as a separate entry in the "invoices" array
-- If the same vendor has multiple invoice pages (continuation), combine their line items into one invoice entry
-- Extract every single line item from every page
-- Use the fullest readable product description exactly as printed on the invoice line
-- Do not shorten product names into abbreviations unless the invoice itself only shows the abbreviation
-- Preserve pack, size, or cut descriptors when they are part of the product description
-- Prices should be numbers without currency symbols
-- If unit_price or line_total is missing, calculate from the other
-- NEVER invent products, quantities, or prices that are not visibly present in the invoice
-- If a line is unreadable, omit that line instead of guessing
-- Return ONLY the JSON object, no other text`;
-
-  if (!rawPdfText) {
-    return baseInstructions;
-  }
-
-  const truncatedText = rawPdfText.slice(0, 50000);
-  return `${baseInstructions}
-
-The PDF text below was extracted directly from the uploaded invoice and should be treated as the primary source of truth for product names, quantities, units, prices, and invoice numbers.
-- Only emit line items that are supported by the extracted text below
-- Do not rewrite liquor items into produce or meat items that are not present in the extracted text
-- Keep vendor_item_name anchored to the actual extracted line text
-
-EXTRACTED PDF TEXT:
-${truncatedText}`;
-}
-
 async function parseOneFile(
   client: Anthropic,
   file: Express.Multer.File,
   store: InventoryStore,
   vendorIdOverride?: number,
-): Promise<InvoiceParseResult[]> {
+): Promise<InvoiceParseResult> {
   const base64Data = file.buffer.toString('base64');
   const isPdf = file.mimetype === 'application/pdf';
-  const extractedPdfText = isPdf ? await extractPdfText(file.buffer).catch(() => '') : '';
-  const shouldUseExtractedTextOnly = isPdf && extractedPdfText.trim().length >= 200;
 
   const contentBlock: Anthropic.ContentBlockParam = isPdf
     ? {
@@ -173,10 +75,35 @@ async function parseOneFile(
       {
         role: 'user',
         content: [
-          ...(!shouldUseExtractedTextOnly ? [contentBlock] : []),
+          contentBlock,
           {
             type: 'text',
-            text: buildInvoiceExtractionPrompt(vendorNames, extractedPdfText || undefined),
+            text: `Extract the vendor name and all line items from this invoice. Return a JSON object with this exact structure:
+{
+  "vendor_name": "the company/vendor name on the invoice",
+  "invoice_date": "YYYY-MM-DD or null",
+  "invoice_number": "string or null",
+  "lines": [
+    {
+      "vendor_item_name": "product name as shown on invoice",
+      "quantity": number,
+      "unit": "unit of measure (case, each, lb, oz, etc.)",
+      "unit_price": number (price per unit),
+      "line_total": number (quantity * unit_price)
+    }
+  ]
+}
+
+Known vendors in our system: ${vendorNames || 'none yet'}
+
+Rules:
+- IMPORTANT: This may be a multi-page document. Extract line items from ALL pages, not just the first page
+- The vendor_name should be the company that issued/sold the items on this invoice
+- Extract every single line item from every page, even if partially visible
+- Use the exact product name as printed on the invoice
+- Prices should be numbers without currency symbols
+- If unit_price or line_total is missing, calculate from the other
+- Return ONLY the JSON object, no other text`,
           },
         ],
       },
@@ -188,23 +115,14 @@ async function parseOneFile(
     throw new Error('Failed to extract invoice data');
   }
 
-  let rawParsed: { invoices: ParsedInvoice[] };
+  let parsed: ParsedInvoice;
   try {
     const jsonMatch = textContent.text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, textContent.text];
-    const jsonData = JSON.parse(jsonMatch[1]!.trim());
-    // Handle both old single-invoice format and new multi-invoice format
-    if (Array.isArray(jsonData.invoices)) {
-      rawParsed = jsonData;
-    } else if (jsonData.vendor_name && Array.isArray(jsonData.lines)) {
-      rawParsed = { invoices: [jsonData] };
-    } else {
-      throw new Error('Unexpected format');
-    }
+    parsed = JSON.parse(jsonMatch[1]!.trim());
   } catch {
     throw new Error('Failed to parse invoice data from AI response');
   }
 
-  // Process each extracted invoice
   const items = await store.listItems();
   const allVendorPrices: Array<{ id: number; item_id: number; vendor_id: number; vendor_item_name: string | null }> = [];
   for (const item of items) {
@@ -214,96 +132,87 @@ async function parseOneFile(
     }
   }
 
-  const results: InvoiceParseResult[] = [];
+  let vendorId: number | null = vendorIdOverride ?? null;
+  let vendorName = parsed.vendor_name;
+  const detectedVendorName = parsed.vendor_name;
 
-  for (const parsed of rawParsed.invoices) {
-    // Match vendor
-    let vendorId: number | null = vendorIdOverride ?? null;
-    let vendorName = parsed.vendor_name;
-    const detectedVendorName = parsed.vendor_name;
-
-    if (!vendorId && parsed.vendor_name) {
-      const vNameLower = parsed.vendor_name.toLowerCase().trim();
-      const exactMatch = vendors.find((v) => v.name.toLowerCase().trim() === vNameLower);
-      if (exactMatch) {
-        vendorId = exactMatch.id;
-        vendorName = exactMatch.name;
+  if (!vendorId && parsed.vendor_name) {
+    const vNameLower = parsed.vendor_name.toLowerCase().trim();
+    const exactMatch = vendors.find((v) => v.name.toLowerCase().trim() === vNameLower);
+    if (exactMatch) {
+      vendorId = exactMatch.id;
+      vendorName = exactMatch.name;
+    } else {
+      const fuzzyMatch = vendors.find((v) => {
+        const vLower = v.name.toLowerCase();
+        return vLower.includes(vNameLower) || vNameLower.includes(vLower);
+      });
+      if (fuzzyMatch) {
+        vendorId = fuzzyMatch.id;
+        vendorName = fuzzyMatch.name;
       } else {
-        const fuzzyMatch = vendors.find((v) => {
-          const vLower = v.name.toLowerCase();
-          return vLower.includes(vNameLower) || vNameLower.includes(vLower);
-        });
-        if (fuzzyMatch) {
-          vendorId = fuzzyMatch.id;
-          vendorName = fuzzyMatch.name;
-        } else {
-          const nameWords = vNameLower.split(/\s+/).filter((w) => w.length > 2);
-          let best: { vendor: typeof vendors[0]; overlap: number } | null = null;
-          for (const v of vendors) {
-            const vWords = v.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-            const overlap = nameWords.filter((w) => vWords.some((vw) => vw.includes(w) || w.includes(vw))).length;
-            if (overlap > 0 && (!best || overlap > best.overlap)) {
-              best = { vendor: v, overlap };
-            }
+        const nameWords = vNameLower.split(/\s+/).filter((w) => w.length > 2);
+        let best: { vendor: typeof vendors[0]; overlap: number } | null = null;
+        for (const v of vendors) {
+          const vWords = v.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+          const overlap = nameWords.filter((w) => vWords.some((vw) => vw.includes(w) || w.includes(vw))).length;
+          if (overlap > 0 && (!best || overlap > best.overlap)) {
+            best = { vendor: v, overlap };
           }
-          if (best) {
-            vendorId = best.vendor.id;
-            vendorName = best.vendor.name;
-          }
+        }
+        if (best) {
+          vendorId = best.vendor.id;
+          vendorName = best.vendor.name;
         }
       }
     }
-
-    if (vendorId) {
-      const v = vendors.find((v) => v.id === vendorId);
-      if (v) vendorName = v.name;
-    }
-
-    // Filter to this vendor's prices if we know the vendor
-    const vendorSpecificPrices = vendorId
-      ? allVendorPrices.filter((vp) => vp.vendor_id === vendorId)
-      : allVendorPrices;
-
-    const lines: InvoiceLine[] = parsed.lines.map((rawLine) => {
-      // Coerce numeric fields — Claude sometimes returns strings, nulls, or omits them
-      const line = {
-        vendor_item_name: String(rawLine.vendor_item_name ?? ''),
-        quantity: Number(rawLine.quantity) || 0,
-        unit: String(rawLine.unit ?? 'each'),
-        unit_price: Number(rawLine.unit_price) || 0,
-        line_total: Number(rawLine.line_total) || Number(rawLine.quantity || 0) * Number(rawLine.unit_price || 0),
-      };
-      if (!line.line_total && line.quantity && line.unit_price) {
-        line.line_total = Math.round(line.quantity * line.unit_price * 100) / 100;
-      }
-      const matched = matchInvoiceLineToInventory(line.vendor_item_name, items, vendorSpecificPrices);
-
-      return {
-        ...line,
-        ...matched,
-      };
-    });
-
-    const matched = lines.filter((line) => line.matched_item_id != null).length;
-    const totalAmount = lines.reduce((sum, l) => sum + l.line_total, 0);
-
-    results.push({
-      vendor_id: vendorId,
-      vendor_name: vendorName,
-      detected_vendor_name: detectedVendorName,
-      invoice_date: parsed.invoice_date,
-      invoice_number: parsed.invoice_number,
-      lines,
-      summary: {
-        total_lines: lines.length,
-        matched,
-        unmatched: lines.length - matched,
-        total_amount: Math.round(totalAmount * 100) / 100,
-      },
-    });
   }
 
-  return results;
+  if (vendorId) {
+    const v = vendors.find((v) => v.id === vendorId);
+    if (v) vendorName = v.name;
+  }
+
+  const vendorSpecificPrices = vendorId
+    ? allVendorPrices.filter((vp) => vp.vendor_id === vendorId)
+    : allVendorPrices;
+
+  const lines: InvoiceLine[] = parsed.lines.map((rawLine) => {
+    const line = {
+      vendor_item_name: String(rawLine.vendor_item_name ?? ''),
+      quantity: Number(rawLine.quantity) || 0,
+      unit: String(rawLine.unit ?? 'each'),
+      unit_price: Number(rawLine.unit_price) || 0,
+      line_total: Number(rawLine.line_total) || Number(rawLine.quantity || 0) * Number(rawLine.unit_price || 0),
+    };
+    if (!line.line_total && line.quantity && line.unit_price) {
+      line.line_total = Math.round(line.quantity * line.unit_price * 100) / 100;
+    }
+    const matched = matchInvoiceLineToInventory(line.vendor_item_name, items, vendorSpecificPrices);
+
+    return {
+      ...line,
+      ...matched,
+    };
+  });
+
+  const matched = lines.filter((line) => line.matched_item_id != null).length;
+  const totalAmount = lines.reduce((sum, line) => sum + line.line_total, 0);
+
+  return {
+    vendor_id: vendorId,
+    vendor_name: vendorName,
+    detected_vendor_name: detectedVendorName,
+    invoice_date: parsed.invoice_date,
+    invoice_number: parsed.invoice_number,
+    lines,
+    summary: {
+      total_lines: lines.length,
+      matched,
+      unmatched: lines.length - matched,
+      total_amount: Math.round(totalAmount * 100) / 100,
+    },
+  };
 }
 
 export function createInvoiceRoutes(store: InventoryStore): Router {
@@ -338,8 +247,8 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
       const results: InvoiceParseResult[] = [];
 
       for (const file of files) {
-        const fileResults = await parseOneFile(client, file, store, vendorIdOverride);
-        results.push(...fileResults);
+        const result = await parseOneFile(client, file, store, vendorIdOverride);
+        results.push(result);
       }
 
       res.json(results);
