@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useVendors } from '../hooks/useVendors';
 import { useItems } from '../hooks/useItems';
@@ -126,6 +126,7 @@ export function InvoiceUpload({ onClose }: Props) {
   };
 
   const activeResult = results[activeResultIdx];
+  const itemById = useMemo(() => new Map((items ?? []).map((item) => [item.id, item])), [items]);
   const getEffectiveItemId = (line: InvoiceLine, ri: number, li: number): number | null => {
     const override = lineOverrides.get(`${ri}-${li}`);
     return override !== undefined ? override : line.matched_item_id;
@@ -267,7 +268,7 @@ export function InvoiceUpload({ onClose }: Props) {
                     </thead>
                     <tbody>
                       {activeResult.lines.map((line, li) => (
-                        <tr key={li} className="border-b border-border/50 hover:bg-bg-hover/50">
+                        <tr key={li} className="border-b border-border/50 hover:bg-bg-hover/50 align-top">
                           <td className="px-2 py-2 text-text-primary">{line.vendor_item_name}</td>
                           <td className="px-2 py-2 text-text-primary text-right">{line.quantity}</td>
                           <td className="px-2 py-2 text-text-secondary">{line.unit}</td>
@@ -275,20 +276,91 @@ export function InvoiceUpload({ onClose }: Props) {
                           <td className="px-2 py-2 text-text-primary text-right">${(line.line_total ?? 0).toFixed(2)}</td>
                           <td className="px-2 py-2">{getConfidenceBadge(line.match_confidence)}</td>
                           <td className="px-2 py-2">
-                            <select
-                              value={getEffectiveItemId(line, activeResultIdx, li) ?? ''}
-                              onChange={(e) => {
-                                const newMap = new Map(lineOverrides);
-                                newMap.set(`${activeResultIdx}-${li}`, e.target.value ? Number(e.target.value) : null);
-                                setLineOverrides(newMap);
-                              }}
-                              className="bg-white border border-border rounded px-2 py-1 text-xs w-full max-w-[200px] focus:outline-none focus:ring-1 focus:ring-accent-indigo/20"
-                            >
-                              <option value="">-- No match --</option>
-                              {(items ?? []).map((item) => (
-                                <option key={item.id} value={item.id}>{item.name}</option>
-                              ))}
-                            </select>
+                            <div className="space-y-2 max-w-[280px]">
+                              <select
+                                value={getEffectiveItemId(line, activeResultIdx, li) ?? ''}
+                                onChange={(e) => {
+                                  const newMap = new Map(lineOverrides);
+                                  newMap.set(`${activeResultIdx}-${li}`, e.target.value ? Number(e.target.value) : null);
+                                  setLineOverrides(newMap);
+                                }}
+                                className="bg-white border border-border rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-accent-indigo/20"
+                              >
+                                <option value="">-- No match --</option>
+                                {(line.suggested_matches?.length ?? 0) > 0 && (
+                                  <optgroup label="Likely matches">
+                                    {line.suggested_matches?.map((suggestion) => (
+                                      <option key={`suggested-${suggestion.item_id}`} value={suggestion.item_id}>
+                                        {suggestion.item_name}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                <optgroup label="All inventory items">
+                                  {(items ?? []).map((item) => (
+                                    <option key={item.id} value={item.id}>{item.name}</option>
+                                  ))}
+                                </optgroup>
+                              </select>
+
+                              {(line.suggested_matches?.length ?? 0) > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
+                                    Likely matches
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {line.suggested_matches?.map((suggestion) => {
+                                      const selected = getEffectiveItemId(line, activeResultIdx, li) === suggestion.item_id;
+                                      return (
+                                        <button
+                                          key={`chip-${suggestion.item_id}`}
+                                          type="button"
+                                          onClick={() => {
+                                            const newMap = new Map(lineOverrides);
+                                            newMap.set(`${activeResultIdx}-${li}`, suggestion.item_id);
+                                            setLineOverrides(newMap);
+                                          }}
+                                          className={`rounded-full border px-2 py-1 text-[11px] transition-colors ${
+                                            selected
+                                              ? 'border-accent-indigo bg-accent-indigo/10 text-accent-indigo'
+                                              : 'border-border bg-white text-text-secondary hover:border-accent-indigo/40 hover:text-text-primary'
+                                          }`}
+                                        >
+                                          {suggestion.item_name}
+                                          <span className="ml-1 text-text-muted">
+                                            {suggestion.matched_via === 'vendor_alias' ? 'vendor' : 'name'}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="space-y-1">
+                                    {line.suggested_matches?.map((suggestion) => {
+                                      const matchedItem = itemById.get(suggestion.item_id);
+                                      return (
+                                        <div key={`context-${suggestion.item_id}`} className="rounded-lg bg-bg-secondary/50 px-2 py-1.5 text-[11px] text-text-secondary">
+                                          <div className="font-medium text-text-primary">
+                                            {suggestion.item_name}
+                                            <span className="ml-1 text-text-muted">
+                                              {Math.round(suggestion.match_score * 100)}%
+                                            </span>
+                                          </div>
+                                          <div>
+                                            Via {suggestion.matched_via === 'vendor_alias' ? 'vendor alias' : 'inventory name'}
+                                            {matchedItem?.vendor_id ? ' • vendor linked' : ''}
+                                            {matchedItem?.order_unit && matchedItem?.order_unit_price != null ? ` • ${matchedItem.order_unit} $${matchedItem.order_unit_price.toFixed(2)}` : ''}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : line.match_confidence === 'none' ? (
+                                <div className="rounded-lg border border-dashed border-border px-2 py-1.5 text-[11px] text-text-muted">
+                                  No sensible match. Pick an inventory item manually.
+                                </div>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="px-2 py-2 text-center">
                             <input

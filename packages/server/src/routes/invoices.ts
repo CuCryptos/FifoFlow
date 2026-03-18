@@ -3,6 +3,7 @@ import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import type { InventoryStore } from '../store/types.js';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
+import { matchInvoiceLineToInventory } from './invoiceMatching.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -105,7 +106,9 @@ Rules:
 - This document may contain multiple separate invoices from different vendors — return each as a separate entry in the "invoices" array
 - If the same vendor has multiple invoice pages (continuation), combine their line items into one invoice entry
 - Extract every single line item from every page
-- Use the exact product name as printed on the invoice
+- Use the fullest readable product description exactly as printed on the invoice line
+- Do not shorten product names into abbreviations unless the invoice itself only shows the abbreviation
+- Preserve pack, size, or cut descriptors when they are part of the product description
 - Prices should be numbers without currency symbols
 - If unit_price or line_total is missing, calculate from the other
 - Return ONLY the JSON object, no other text`,
@@ -208,95 +211,11 @@ Rules:
       if (!line.line_total && line.quantity && line.unit_price) {
         line.line_total = Math.round(line.quantity * line.unit_price * 100) / 100;
       }
-      const nameLower = line.vendor_item_name.toLowerCase().trim();
+      const matched = matchInvoiceLineToInventory(line.vendor_item_name, items, vendorSpecificPrices);
 
-      // 1. Exact match on vendor_prices.vendor_item_name
-      const exactVpMatch = vendorSpecificPrices.find(
-        (vp) => vp.vendor_item_name && vp.vendor_item_name.toLowerCase().trim() === nameLower
-      );
-      if (exactVpMatch) {
-        const matchedItem = items.find((i) => i.id === exactVpMatch.item_id);
-        return {
-          ...line,
-          matched_item_id: exactVpMatch.item_id,
-          matched_item_name: matchedItem?.name ?? null,
-          match_confidence: 'exact' as const,
-          existing_vendor_price_id: exactVpMatch.id,
-        };
-      }
-
-      // 2. Exact match on items.name
-      const exactItemMatch = items.find((i) => i.name.toLowerCase().trim() === nameLower);
-      if (exactItemMatch) {
-        return {
-          ...line,
-          matched_item_id: exactItemMatch.id,
-          matched_item_name: exactItemMatch.name,
-          match_confidence: 'exact' as const,
-          existing_vendor_price_id: null,
-        };
-      }
-
-      // 3. Fuzzy: substring match on vendor_prices
-      const fuzzyVpMatch = vendorSpecificPrices.find(
-        (vp) => vp.vendor_item_name && (
-          vp.vendor_item_name.toLowerCase().includes(nameLower) ||
-          nameLower.includes(vp.vendor_item_name.toLowerCase())
-        )
-      );
-      if (fuzzyVpMatch) {
-        const matchedItem = items.find((i) => i.id === fuzzyVpMatch.item_id);
-        return {
-          ...line,
-          matched_item_id: fuzzyVpMatch.item_id,
-          matched_item_name: matchedItem?.name ?? null,
-          match_confidence: 'high' as const,
-          existing_vendor_price_id: fuzzyVpMatch.id,
-        };
-      }
-
-      // 4. Fuzzy: substring match on items.name
-      const fuzzyItemMatch = items.find((i) => {
-        const itemLower = i.name.toLowerCase();
-        return itemLower.includes(nameLower) || nameLower.includes(itemLower);
-      });
-      if (fuzzyItemMatch) {
-        return {
-          ...line,
-          matched_item_id: fuzzyItemMatch.id,
-          matched_item_name: fuzzyItemMatch.name,
-          match_confidence: 'high' as const,
-          existing_vendor_price_id: null,
-        };
-      }
-
-      // 5. Word overlap match
-      const nameWords = nameLower.split(/\s+/).filter((w) => w.length > 2);
-      let bestMatch: { item: typeof items[0]; overlap: number } | null = null;
-      for (const item of items) {
-        const itemWords = item.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-        const overlap = nameWords.filter((w) => itemWords.some((iw) => iw.includes(w) || w.includes(iw))).length;
-        if (overlap > 0 && (!bestMatch || overlap > bestMatch.overlap)) {
-          bestMatch = { item, overlap };
-        }
-      }
-      if (bestMatch && bestMatch.overlap >= Math.max(1, Math.floor(nameWords.length / 2))) {
-        return {
-          ...line,
-          matched_item_id: bestMatch.item.id,
-          matched_item_name: bestMatch.item.name,
-          match_confidence: 'low' as const,
-          existing_vendor_price_id: null,
-        };
-      }
-
-      // 6. No match
       return {
         ...line,
-        matched_item_id: null,
-        matched_item_name: null,
-        match_confidence: 'none' as const,
-        existing_vendor_price_id: null,
+        ...matched,
       };
     });
 

@@ -424,6 +424,14 @@ export interface InvoiceLine {
   matched_item_name: string | null;
   match_confidence: 'exact' | 'high' | 'low' | 'none';
   existing_vendor_price_id: number | null;
+  suggested_matches?: Array<{
+    item_id: number;
+    item_name: string;
+    match_confidence: 'high' | 'low';
+    match_score: number;
+    existing_vendor_price_id: number | null;
+    matched_via: 'vendor_alias' | 'inventory_name';
+  }>;
 }
 
 export interface InvoiceParseResult {
