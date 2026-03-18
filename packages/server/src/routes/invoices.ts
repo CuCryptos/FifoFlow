@@ -219,7 +219,7 @@ Rules:
       };
     });
 
-    const matched = lines.filter((l) => l.match_confidence !== 'none').length;
+    const matched = lines.filter((line) => line.matched_item_id != null).length;
     const totalAmount = lines.reduce((sum, l) => sum + l.line_total, 0);
 
     results.push({

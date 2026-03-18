@@ -330,11 +330,21 @@ export function matchInvoiceLineToInventory(
 
   const matchConfidence = best.exact || best.score >= 0.97
     ? 'exact'
-    : best.score >= 0.8
+    : best.score >= 0.86
       ? 'high'
-      : best.score >= 0.62
-        ? 'low'
-        : 'none';
+    : best.score >= 0.62
+      ? 'low'
+      : 'none';
+
+  if (matchConfidence === 'low') {
+    return {
+      matched_item_id: null,
+      matched_item_name: null,
+      match_confidence: 'low',
+      existing_vendor_price_id: null,
+      suggested_matches: suggestions,
+    };
+  }
 
   if (matchConfidence === 'none') {
     return {

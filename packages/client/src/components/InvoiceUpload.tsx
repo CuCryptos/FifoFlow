@@ -36,7 +36,12 @@ export function InvoiceUpload({ onClose }: Props) {
           const flags = new Map<string, boolean>();
           data.forEach((result, ri) => {
             result.lines.forEach((line, li) => {
-              flags.set(`${ri}-${li}`, !line.existing_vendor_price_id);
+              flags.set(
+                `${ri}-${li}`,
+                line.matched_item_id != null
+                && (line.match_confidence === 'exact' || line.match_confidence === 'high')
+                && !line.existing_vendor_price_id,
+              );
             });
           });
           setCreateVpFlags(flags);
@@ -251,6 +256,11 @@ export function InvoiceUpload({ onClose }: Props) {
                   <span className="px-2 py-1 bg-gray-50 text-gray-600 rounded">{activeResult.summary.unmatched} unmatched</span>
                   <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">Total: ${(activeResult.summary.total_amount ?? 0).toFixed(2)}</span>
                 </div>
+                {activeResult.lines.some((line) => line.match_confidence === 'low') && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Low-confidence rows are not auto-matched. Review the suggested items before confirming.
+                  </div>
+                )}
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
