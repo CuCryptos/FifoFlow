@@ -36,6 +36,7 @@ import type {
 } from '../api';
 
 export function Recipes() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const draftParam = searchParams.get('draft');
   const composeParam = searchParams.get('compose');
@@ -92,7 +93,7 @@ export function Recipes() {
             setSearchParams({ compose: 'new' });
           }}
           onOpenDraft={(draftId) => {
-            setSearchParams({ draft: String(draftId) });
+            navigate(`/recipes/drafts/${draftId}`);
           }}
         />
       )}
@@ -200,6 +201,36 @@ export function PromotedRecipeDetailPage() {
           </WorkflowPanel>
           <OperationalRecipeDetail summary={summary} />
         </div>
+      )}
+    </WorkflowPage>
+  );
+}
+
+export function DraftRecipeDetailPage() {
+  const { draftId } = useParams();
+  const parsedDraftId = Number(draftId);
+
+  return (
+    <WorkflowPage
+      eyebrow="Draft Recipe Detail"
+      title="Open one draft recipe directly for mapping, serving math, and promotion work."
+      description="This route gives operators a stable draft detail page for handoff and focused cleanup outside the main queue."
+      actions={(
+        <Link
+          to="/recipes"
+          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+        >
+          Back to Recipes
+        </Link>
+      )}
+    >
+      {!Number.isInteger(parsedDraftId) || parsedDraftId <= 0 ? (
+        <WorkflowEmptyState
+          title="Draft id is invalid"
+          body="The draft detail route requires a positive draft id."
+        />
+      ) : (
+        <RecipeForm draftId={parsedDraftId} onDone={() => window.history.back()} />
       )}
     </WorkflowPage>
   );
@@ -409,6 +440,7 @@ const DRAFT_QUEUE_SORT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sort';
 const DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sourceFilter';
 const COMPOSER_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeComposer.filter';
 const OPERATIONAL_STATUS_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.statusFilter';
+const OPERATIONAL_SELECTED_RECIPE_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.selectedRecipeVersion';
 
 function readDraftQueuePageSize(): number {
   if (typeof window === 'undefined') {
@@ -474,6 +506,20 @@ function readOperationalStatusFilter(
     : 'all';
 }
 
+function getOperationalSelectedRecipeStorageKey(venueId: number | null | undefined): string {
+  return `${OPERATIONAL_SELECTED_RECIPE_STORAGE_KEY_PREFIX}.${venueId != null ? venueId : 'all'}`;
+}
+
+function readSelectedOperationalRecipeVersionId(venueId: number | null | undefined): number | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.sessionStorage.getItem(getOperationalSelectedRecipeStorageKey(venueId));
+  const parsed = raw ? Number(raw) : null;
+  return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
   if (draft.promotion_link) {
     return 'PROMOTED';
@@ -529,33 +575,48 @@ function formatPromotionOutcomeLabel(outcome: {
   return `${base}${version}${costability}`;
 }
 
-function resolveDraftUnreadinessReasons(draft: RecipeDraftSummaryPayload): string[] {
+function resolveDraftUnreadinessReasons(draft: RecipeDraftSummaryPayload): Array<{ label: string; help: string }> {
   if (draft.completeness_status === 'READY') {
     return [];
   }
 
-  const reasons: string[] = [];
+  const reasons: Array<{ label: string; help: string }> = [];
   if (draft.source_type === 'template' && draft.unresolved_inventory_count > 0) {
-    reasons.push(`${draft.unresolved_inventory_count} template unmapped`);
+    reasons.push({
+      label: `${draft.unresolved_inventory_count} template unmapped`,
+      help: 'Template source rows are still missing live inventory matches. Map or remove them before promotion.',
+    });
   }
   if (draft.review_row_count > 0) {
-    reasons.push(`${draft.review_row_count} rows need review`);
+    reasons.push({
+      label: `${draft.review_row_count} rows need review`,
+      help: 'These ingredient rows have enough structure to inspect, but they still need operator review before the draft is trustworthy.',
+    });
   }
   if (draft.ready_row_count === 0 && draft.ingredient_row_count > 0) {
-    reasons.push('No rows ready');
+    reasons.push({
+      label: 'No rows ready',
+      help: 'Nothing in this draft is currently ready for promotion. Start with mapping, batch yield, and serving math.',
+    });
   }
   if (draft.completeness_status === 'BLOCKED') {
-    reasons.push('Serving math or batch incomplete');
+    reasons.push({
+      label: 'Serving math or batch incomplete',
+      help: 'Batch yield, serving size, or other required recipe math is still incomplete, so downstream usage cannot be trusted yet.',
+    });
   }
   if (
     draft.unresolved_inventory_count === 0
     && draft.review_row_count === 0
     && draft.ready_row_count < draft.ingredient_row_count
   ) {
-    reasons.push(`${draft.ingredient_row_count - draft.ready_row_count} rows incomplete`);
+    reasons.push({
+      label: `${draft.ingredient_row_count - draft.ready_row_count} rows incomplete`,
+      help: 'Some ingredient rows are still missing the data required to promote even though they are not currently flagged for review.',
+    });
   }
 
-  return Array.from(new Set(reasons)).slice(0, 4);
+  return reasons.filter((reason, index, all) => all.findIndex((candidate) => candidate.label === reason.label) === index).slice(0, 4);
 }
 
 async function copyRecipeOperatorId(
@@ -578,7 +639,9 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const promoteDraft = usePromoteRecipeDraft();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
+  const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(
+    readSelectedOperationalRecipeVersionId(selectedVenueId),
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>(
     readOperationalStatusFilter(selectedVenueId),
   );
@@ -636,6 +699,10 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     ?? null;
 
   useEffect(() => {
+    setSelectedRecipeVersionId(readSelectedOperationalRecipeVersionId(selectedVenueId));
+  }, [selectedVenueId]);
+
+  useEffect(() => {
     if (!selectedSummary) {
       setSelectedRecipeVersionId(null);
       return;
@@ -680,6 +747,18 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     }
     window.sessionStorage.setItem(getOperationalStatusFilterStorageKey(selectedVenueId), statusFilter);
   }, [selectedVenueId, statusFilter]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const key = getOperationalSelectedRecipeStorageKey(selectedVenueId);
+    if (selectedRecipeVersionId == null) {
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+    window.sessionStorage.setItem(key, String(selectedRecipeVersionId));
+  }, [selectedRecipeVersionId, selectedVenueId]);
 
   if (isLoading) {
     return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
@@ -810,9 +889,10 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
               };
               const promotionOutcomeLabel = formatPromotionOutcomeLabel(promotionOutcome);
               const unreadinessReasons = resolveDraftUnreadinessReasons(draft);
+              const draftComposerPath = `/recipes/drafts/${draft.id}`;
               const draftComposerHref = typeof window === 'undefined'
-                ? `/recipes?draft=${draft.id}`
-                : `${window.location.origin}/recipes?draft=${draft.id}`;
+                ? draftComposerPath
+                : `${window.location.origin}${draftComposerPath}`;
 
               return (
                 <div
@@ -860,10 +940,12 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                       <div className="mt-2 flex flex-wrap gap-2">
                         {unreadinessReasons.map((reason) => (
                           <span
-                            key={`${draft.id}-${reason}`}
+                            key={`${draft.id}-${reason.label}`}
+                            title={reason.help}
+                            aria-label={`${reason.label}. ${reason.help}`}
                             className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-900"
                           >
-                            {reason}
+                            {reason.label}
                           </span>
                         ))}
                       </div>
@@ -893,7 +975,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => onOpenDraft(Number(draft.id))}
+                        onClick={() => navigate(draftComposerPath)}
                         className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
                       >
                         Open draft
