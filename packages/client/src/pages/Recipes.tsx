@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   useCreateRecipeDraft,
   useDeleteRecipeDraft,
@@ -36,8 +36,30 @@ import type {
 } from '../api';
 
 export function Recipes() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const draftParam = searchParams.get('draft');
+  const composeParam = searchParams.get('compose');
+  const parsedDraftParam = draftParam ? Number(draftParam) : null;
+  const queryDraftId = parsedDraftParam != null && Number.isInteger(parsedDraftParam) && parsedDraftParam > 0
+    ? parsedDraftParam
+    : null;
   const [showDraftComposer, setShowDraftComposer] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (queryDraftId != null) {
+      setActiveDraftId(queryDraftId);
+      setShowDraftComposer(true);
+      return;
+    }
+    if (composeParam === 'new') {
+      setActiveDraftId(null);
+      setShowDraftComposer(true);
+      return;
+    }
+    setShowDraftComposer(false);
+    setActiveDraftId(null);
+  }, [composeParam, queryDraftId]);
 
   return (
     <WorkflowPage
@@ -48,8 +70,7 @@ export function Recipes() {
         <div className="flex flex-wrap items-center justify-end gap-3">
           <button
             onClick={() => {
-              setActiveDraftId(null);
-              setShowDraftComposer(true);
+              setSearchParams({ compose: 'new' });
             }}
             className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
           >
@@ -62,19 +83,16 @@ export function Recipes() {
         <RecipeForm
           draftId={activeDraftId ?? undefined}
           onDone={() => {
-            setShowDraftComposer(false);
-            setActiveDraftId(null);
+            setSearchParams({});
           }}
         />
       ) : (
         <OperationalRecipes
           onAddRecipe={() => {
-            setActiveDraftId(null);
-            setShowDraftComposer(true);
+            setSearchParams({ compose: 'new' });
           }}
           onOpenDraft={(draftId) => {
-            setActiveDraftId(draftId);
-            setShowDraftComposer(true);
+            setSearchParams({ draft: String(draftId) });
           }}
         />
       )}
@@ -390,6 +408,7 @@ const DRAFT_PAGE_SIZE_STORAGE_KEY = 'fifoflow.recipeDraftQueue.pageSize';
 const DRAFT_QUEUE_SORT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sort';
 const DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sourceFilter';
 const COMPOSER_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeComposer.filter';
+const OPERATIONAL_STATUS_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.statusFilter';
 
 function readDraftQueuePageSize(): number {
   if (typeof window === 'undefined') {
@@ -434,6 +453,23 @@ function readComposerIngredientFilter(draftId: number | null | undefined): Compo
 
   const raw = window.sessionStorage.getItem(getComposerFilterStorageKey(draftId));
   return raw === 'all' || raw === 'UNRESOLVED_TEMPLATE' || raw === 'MAPPED_TEMPLATE' || raw === 'MANUAL'
+    ? raw
+    : 'all';
+}
+
+function getOperationalStatusFilterStorageKey(venueId: number | null | undefined): string {
+  return `${OPERATIONAL_STATUS_FILTER_STORAGE_KEY_PREFIX}.${venueId != null ? venueId : 'all'}`;
+}
+
+function readOperationalStatusFilter(
+  venueId: number | null | undefined,
+): 'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING' {
+  if (typeof window === 'undefined') {
+    return 'all';
+  }
+
+  const raw = window.sessionStorage.getItem(getOperationalStatusFilterStorageKey(venueId));
+  return raw === 'all' || raw === 'COSTABLE_NOW' || raw === 'OPERATIONAL_ONLY' || raw === 'BLOCKED_FOR_COSTING'
     ? raw
     : 'all';
 }
@@ -493,6 +529,35 @@ function formatPromotionOutcomeLabel(outcome: {
   return `${base}${version}${costability}`;
 }
 
+function resolveDraftUnreadinessReasons(draft: RecipeDraftSummaryPayload): string[] {
+  if (draft.completeness_status === 'READY') {
+    return [];
+  }
+
+  const reasons: string[] = [];
+  if (draft.source_type === 'template' && draft.unresolved_inventory_count > 0) {
+    reasons.push(`${draft.unresolved_inventory_count} template unmapped`);
+  }
+  if (draft.review_row_count > 0) {
+    reasons.push(`${draft.review_row_count} rows need review`);
+  }
+  if (draft.ready_row_count === 0 && draft.ingredient_row_count > 0) {
+    reasons.push('No rows ready');
+  }
+  if (draft.completeness_status === 'BLOCKED') {
+    reasons.push('Serving math or batch incomplete');
+  }
+  if (
+    draft.unresolved_inventory_count === 0
+    && draft.review_row_count === 0
+    && draft.ready_row_count < draft.ingredient_row_count
+  ) {
+    reasons.push(`${draft.ingredient_row_count - draft.ready_row_count} rows incomplete`);
+  }
+
+  return Array.from(new Set(reasons)).slice(0, 4);
+}
+
 async function copyRecipeOperatorId(
   value: string,
   label: string,
@@ -514,7 +579,9 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const { toast } = useToast();
   const navigate = useNavigate();
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>(
+    readOperationalStatusFilter(selectedVenueId),
+  );
   const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
   const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>(readDraftQueueSourceFilter);
   const [draftSort, setDraftSort] = useState<DraftQueueSort>(readDraftQueueSort);
@@ -602,6 +669,17 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     }
     window.sessionStorage.setItem(DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY, draftFocusFilter);
   }, [draftFocusFilter]);
+
+  useEffect(() => {
+    setStatusFilter(readOperationalStatusFilter(selectedVenueId));
+  }, [selectedVenueId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(getOperationalStatusFilterStorageKey(selectedVenueId), statusFilter);
+  }, [selectedVenueId, statusFilter]);
 
   if (isLoading) {
     return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
@@ -731,6 +809,10 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                 costability_status: null,
               };
               const promotionOutcomeLabel = formatPromotionOutcomeLabel(promotionOutcome);
+              const unreadinessReasons = resolveDraftUnreadinessReasons(draft);
+              const draftComposerHref = typeof window === 'undefined'
+                ? `/recipes?draft=${draft.id}`
+                : `${window.location.origin}/recipes?draft=${draft.id}`;
 
               return (
                 <div
@@ -774,6 +856,18 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                         {promotionOutcomeLabel}
                       </div>
                     ) : null}
+                    {unreadinessReasons.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {unreadinessReasons.map((reason) => (
+                          <span
+                            key={`${draft.id}-${reason}`}
+                            className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-900"
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </button>
                   <div className="text-xs text-slate-500 lg:text-right">
                     <div>{draft.ready_row_count}/{draft.ingredient_row_count} rows ready</div>
@@ -803,6 +897,13 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                         className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
                       >
                         Open draft
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyRecipeOperatorId(draftComposerHref, 'Draft link', toast)}
+                        className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
+                      >
+                        Copy draft link
                       </button>
                       <button
                         type="button"
