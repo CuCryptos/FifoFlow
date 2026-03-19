@@ -92,6 +92,11 @@ export function PromotedRecipeDetailPage() {
   const summary = (data?.summaries ?? []).find(
     (candidate) => Number(candidate.recipe_version_id) === parsedRecipeVersionId,
   ) ?? null;
+  const promotedDetailHref = summary
+    ? (typeof window === 'undefined'
+      ? `/recipes/promoted/${summary.recipe_version_id}`
+      : `${window.location.origin}/recipes/promoted/${summary.recipe_version_id}`)
+    : null;
 
   return (
     <WorkflowPage
@@ -146,6 +151,15 @@ export function PromotedRecipeDetailPage() {
                 >
                   Copy version id
                 </button>
+                {promotedDetailHref ? (
+                  <button
+                    type="button"
+                    onClick={() => copyRecipeOperatorId(promotedDetailHref, 'Promoted detail link', toast)}
+                    className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                  >
+                    Copy detail link
+                  </button>
+                ) : null}
               </div>
             )}
           >
@@ -158,6 +172,12 @@ export function PromotedRecipeDetailPage() {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe version id</div>
                 <div className="mt-2 text-lg font-semibold text-slate-950">{summary.recipe_version_id}</div>
               </div>
+              {promotedDetailHref ? (
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 md:col-span-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Promoted detail link</div>
+                  <div className="mt-2 break-all text-sm font-medium text-slate-900">{promotedDetailHref}</div>
+                </div>
+              ) : null}
             </div>
           </WorkflowPanel>
           <OperationalRecipeDetail summary={summary} />
@@ -367,6 +387,8 @@ type ComposerIngredientFilter = 'all' | 'UNRESOLVED_TEMPLATE' | 'MAPPED_TEMPLATE
 
 const DEFAULT_DRAFT_PAGE_SIZE = 12;
 const DRAFT_PAGE_SIZE_STORAGE_KEY = 'fifoflow.recipeDraftQueue.pageSize';
+const DRAFT_QUEUE_SORT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sort';
+const DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sourceFilter';
 
 function readDraftQueuePageSize(): number {
   if (typeof window === 'undefined') {
@@ -376,6 +398,28 @@ function readDraftQueuePageSize(): number {
   const raw = window.sessionStorage.getItem(DRAFT_PAGE_SIZE_STORAGE_KEY);
   const parsed = Number(raw);
   return [12, 24, 48].includes(parsed) ? parsed : DEFAULT_DRAFT_PAGE_SIZE;
+}
+
+function readDraftQueueSort(): DraftQueueSort {
+  if (typeof window === 'undefined') {
+    return 'updated_at';
+  }
+
+  const raw = window.sessionStorage.getItem(DRAFT_QUEUE_SORT_STORAGE_KEY);
+  return raw === 'updated_at' || raw === 'unmapped_count' || raw === 'promotion_readiness'
+    ? raw
+    : 'updated_at';
+}
+
+function readDraftQueueSourceFilter(): DraftQueueFocusFilter {
+  if (typeof window === 'undefined') {
+    return 'all';
+  }
+
+  const raw = window.sessionStorage.getItem(DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY);
+  return raw === 'all' || raw === 'TEMPLATE_DRAFTS' || raw === 'TEMPLATE_UNMAPPED'
+    ? raw
+    : 'all';
 }
 
 function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
@@ -456,8 +500,8 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
   const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
-  const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>('all');
-  const [draftSort, setDraftSort] = useState<DraftQueueSort>('updated_at');
+  const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>(readDraftQueueSourceFilter);
+  const [draftSort, setDraftSort] = useState<DraftQueueSort>(readDraftQueueSort);
   const [draftPageSize, setDraftPageSize] = useState(readDraftQueuePageSize);
   const [visibleDraftCount, setVisibleDraftCount] = useState(readDraftQueuePageSize);
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
@@ -528,6 +572,20 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     }
     window.sessionStorage.setItem(DRAFT_PAGE_SIZE_STORAGE_KEY, String(draftPageSize));
   }, [draftPageSize]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(DRAFT_QUEUE_SORT_STORAGE_KEY, draftSort);
+  }, [draftSort]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY, draftFocusFilter);
+  }, [draftFocusFilter]);
 
   if (isLoading) {
     return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
@@ -1578,6 +1636,12 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
     MAPPED_TEMPLATE: ingredients.filter((ingredient) => ingredient.template_ingredient_name && ingredient.item_id > 0).length,
     MANUAL: ingredients.filter((ingredient) => !ingredient.template_ingredient_name).length,
   };
+  const ingredientFilterDescriptors: Record<ComposerIngredientFilter, string> = {
+    all: `${ingredientFilterCounts.all} total${ingredientFilterCounts.UNRESOLVED_TEMPLATE > 0 ? ` • ${ingredientFilterCounts.UNRESOLVED_TEMPLATE} blocked` : ''}`,
+    UNRESOLVED_TEMPLATE: `${ingredientFilterCounts.UNRESOLVED_TEMPLATE} blocked`,
+    MAPPED_TEMPLATE: `${ingredientFilterCounts.MAPPED_TEMPLATE} ready`,
+    MANUAL: `${ingredientFilterCounts.MANUAL} manual`,
+  };
   const visibleIngredientRows = useMemo(() => (
     ingredients
       .map((ingredient, index) => ({ ingredient, index }))
@@ -1977,7 +2041,7 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
                       active={composerIngredientFilter === value}
                       onClick={() => setComposerIngredientFilter(value)}
                     >
-                      {label} {ingredientFilterCounts[value]}
+                      {label} {ingredientFilterDescriptors[value]}
                     </WorkflowChip>
                   ))}
                 </WorkflowFocusBar>
