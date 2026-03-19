@@ -1384,7 +1384,39 @@ export class SqliteInventoryStore implements InventoryStore {
       (err as any).status = 409;
       throw err;
     }
-    this.db.prepare('DELETE FROM recipes WHERE id = ?').run(id);
+
+    const recipeVersionIds = this.db
+      .prepare('SELECT id FROM recipe_versions WHERE recipe_id = ?')
+      .all(id) as Array<{ id: number }>;
+
+    const deleteRecipeTransaction = this.db.transaction((recipeId: number, versionIds: number[]) => {
+      if (versionIds.length > 0) {
+        const placeholders = versionIds.map(() => '?').join(', ');
+        this.db.prepare(
+          `
+            UPDATE recipe_promotion_events
+            SET promoted_recipe_id = NULL,
+                promoted_recipe_version_id = NULL
+            WHERE promoted_recipe_id = ?
+               OR promoted_recipe_version_id IN (${placeholders})
+          `
+        ).run(recipeId, ...versionIds);
+      } else {
+        this.db.prepare(
+          `
+            UPDATE recipe_promotion_events
+            SET promoted_recipe_id = NULL,
+                promoted_recipe_version_id = NULL
+            WHERE promoted_recipe_id = ?
+          `
+        ).run(recipeId);
+      }
+
+      this.db.prepare('DELETE FROM recipe_builder_promotion_links WHERE recipe_id = ?').run(recipeId);
+      this.db.prepare('DELETE FROM recipes WHERE id = ?').run(recipeId);
+    });
+
+    deleteRecipeTransaction(id, recipeVersionIds.map((row) => row.id));
   }
 
   // ── Product Recipes ─────────────────────────────────────────
