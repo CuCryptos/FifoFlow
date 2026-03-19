@@ -19,8 +19,6 @@ import type {
   OrderDetail,
   RecipeWithCost,
   RecipeDetail,
-  ProductRecipe,
-  OrderCalculationResult,
   UsageReport,
   WasteReport,
   CostReport,
@@ -36,8 +34,6 @@ import type {
   UpdateOrderInput,
   UpdateRecipeInput,
   UpdateVendorPriceInput,
-  SetProductRecipeInput,
-  CalculateOrderInput,
   RecordCountEntryInput,
   SetItemCountInput,
   UpdateItemInput,
@@ -627,18 +623,6 @@ export const api = {
       const query = qs.toString();
       return fetchJson<RecipeWorkflowDetailPayload>(`/recipe-workflow/operational-summary/${recipeVersionId}${query ? `?${query}` : ''}`);
     },
-  },
-  productRecipes: {
-    list: (venueId?: number) => {
-      const qs = venueId ? `?venue_id=${venueId}` : '';
-      return fetchJson<ProductRecipe[]>(`/product-recipes${qs}`);
-    },
-    set: (venueId: number, data: SetProductRecipeInput) =>
-      fetchJson<ProductRecipe>(`/product-recipes/${venueId}`, { method: 'POST', body: JSON.stringify(data) }),
-    delete: (id: number) =>
-      fetchJson<void>(`/product-recipes/${id}`, { method: 'DELETE' }),
-    calculate: (data: CalculateOrderInput) =>
-      fetchJson<OrderCalculationResult>('/product-recipes/calculate', { method: 'POST', body: JSON.stringify(data) }),
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
   invoices: {
