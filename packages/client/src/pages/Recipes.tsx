@@ -212,10 +212,23 @@ export function DraftRecipeDetailPage() {
   const { toast } = useToast();
   const parsedDraftId = Number(draftId);
   const { data: draft, isLoading, error } = useRecipeDraft(Number.isInteger(parsedDraftId) && parsedDraftId > 0 ? parsedDraftId : 0);
+  const { data: drafts } = useRecipeDrafts();
   const queueLane = readDraftQueueFilter();
   const queueSource = readDraftQueueSourceFilter();
-  const queueLaneLabel = queueLane === 'all' ? 'All drafts' : queueLane.replaceAll('_', ' ').toLowerCase();
-  const queueSourceLabel = queueSource === 'all' ? 'all sources' : queueSource.replaceAll('_', ' ').toLowerCase();
+  const queueSort = readDraftQueueSort();
+  const queuePageSize = readDraftQueuePageSize();
+  const queueVisibleCount = readDraftQueueVisibleCount();
+  const queueLaneLabel = formatDraftQueueFilterLabel(queueLane);
+  const queueSourceLabel = formatDraftQueueSourceLabel(queueSource);
+  const queueSortLabel = formatDraftQueueSortLabel(queueSort);
+  const sortedQueueDrafts = useMemo(
+    () => sortDraftRows(filterDraftRows(drafts ?? [], queueLane, queueSource), queueSort),
+    [drafts, queueLane, queueSource, queueSort],
+  );
+  const currentDraftIndex = sortedQueueDrafts.findIndex((row) => Number(row.id) === parsedDraftId);
+  const nextBlockedDraft = sortedQueueDrafts
+    .slice(currentDraftIndex + 1)
+    .find((row) => row.completeness_status === 'BLOCKED' || row.unresolved_inventory_count > 0);
 
   return (
     <WorkflowPage
@@ -240,11 +253,44 @@ export function DraftRecipeDetailPage() {
               Copy draft detail link
             </button>
           ) : null}
+          {nextBlockedDraft ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/recipes/drafts/${nextBlockedDraft.id}`)}
+              className="rounded-full border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:border-amber-400 hover:bg-amber-50"
+            >
+              Next blocked draft
+            </button>
+          ) : null}
         </div>
       )}
     >
       <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-sm">
-        Returning to the recipes workspace will reopen the <span className="font-semibold text-slate-900">{queueLaneLabel}</span> lane with <span className="font-semibold text-slate-900">{queueSourceLabel}</span>.
+        <div>
+          Returning to the recipes workspace will reopen the <span className="font-semibold text-slate-900">{queueLaneLabel}</span> lane with <span className="font-semibold text-slate-900">{queueSourceLabel}</span>.
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Lane: {queueLaneLabel}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Source: {queueSourceLabel}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Sort: {queueSortLabel}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Page size: {queuePageSize}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Showing: {queueVisibleCount}
+          </span>
+        </div>
+        {nextBlockedDraft ? (
+          <div className="mt-3 text-xs text-slate-500">
+            Next blocked draft in this stored queue context: <span className="font-semibold text-slate-900">{nextBlockedDraft.draft_name}</span> #{nextBlockedDraft.id}
+          </div>
+        ) : null}
       </div>
       {!Number.isInteger(parsedDraftId) || parsedDraftId <= 0 ? (
         <WorkflowEmptyState
@@ -473,6 +519,7 @@ type OperationalWorkspaceSort = 'coverage_desc' | 'latest_cost_desc' | 'name_asc
 
 const DEFAULT_DRAFT_PAGE_SIZE = 12;
 const DRAFT_PAGE_SIZE_STORAGE_KEY = 'fifoflow.recipeDraftQueue.pageSize';
+const DRAFT_QUEUE_VISIBLE_COUNT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.visibleCount';
 const DRAFT_QUEUE_STATUS_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.statusFilter';
 const DRAFT_QUEUE_SORT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sort';
 const DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sourceFilter';
@@ -489,6 +536,16 @@ function readDraftQueuePageSize(): number {
   const raw = window.sessionStorage.getItem(DRAFT_PAGE_SIZE_STORAGE_KEY);
   const parsed = Number(raw);
   return [12, 24, 48].includes(parsed) ? parsed : DEFAULT_DRAFT_PAGE_SIZE;
+}
+
+function readDraftQueueVisibleCount(): number {
+  if (typeof window === 'undefined') {
+    return DEFAULT_DRAFT_PAGE_SIZE;
+  }
+
+  const raw = window.sessionStorage.getItem(DRAFT_QUEUE_VISIBLE_COUNT_STORAGE_KEY);
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DRAFT_PAGE_SIZE;
 }
 
 function readDraftQueueFilter(): DraftQueueFilter {
@@ -624,6 +681,60 @@ function resolveDraftFocusFilter(draft: RecipeDraftSummaryPayload): Exclude<Draf
   return null;
 }
 
+function filterDraftRows(
+  draftRows: RecipeDraftSummaryPayload[],
+  draftFilter: DraftQueueFilter,
+  draftFocusFilter: DraftQueueFocusFilter,
+): RecipeDraftSummaryPayload[] {
+  return draftRows
+    .filter((draft) => draftFilter === 'all' || resolveDraftQueueFilter(draft) === draftFilter)
+    .filter((draft) => {
+      if (draftFocusFilter === 'all') {
+        return true;
+      }
+      return resolveDraftFocusFilter(draft) === draftFocusFilter;
+    });
+}
+
+function sortDraftRows(
+  draftRows: RecipeDraftSummaryPayload[],
+  draftSort: DraftQueueSort,
+): RecipeDraftSummaryPayload[] {
+  return [...draftRows].sort((left, right) => {
+    if (draftSort === 'unmapped_count') {
+      return right.unresolved_inventory_count - left.unresolved_inventory_count
+        || right.review_row_count - left.review_row_count
+        || right.ready_row_count - left.ready_row_count;
+    }
+
+    if (draftSort === 'promotion_readiness') {
+      return resolveDraftPromotionReadinessScore(right) - resolveDraftPromotionReadinessScore(left)
+        || right.unresolved_inventory_count - left.unresolved_inventory_count
+        || new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
+    }
+
+    return new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
+  });
+}
+
+function formatDraftQueueFilterLabel(value: DraftQueueFilter): string {
+  return value === 'all' ? 'All drafts' : value.replaceAll('_', ' ').toLowerCase();
+}
+
+function formatDraftQueueSourceLabel(value: DraftQueueFocusFilter): string {
+  return value === 'all' ? 'All sources' : value.replaceAll('_', ' ').toLowerCase();
+}
+
+function formatDraftQueueSortLabel(value: DraftQueueSort): string {
+  if (value === 'unmapped_count') {
+    return 'Unmapped';
+  }
+  if (value === 'promotion_readiness') {
+    return 'Promotion readiness';
+  }
+  return 'Updated';
+}
+
 function formatPromotionOutcomeLabel(outcome: {
   promotion_link: { recipe_id: number | string; recipe_version_id: number | string | null } | null;
   costability_status?: string | null;
@@ -717,7 +828,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>(readDraftQueueSourceFilter);
   const [draftSort, setDraftSort] = useState<DraftQueueSort>(readDraftQueueSort);
   const [draftPageSize, setDraftPageSize] = useState(readDraftQueuePageSize);
-  const [visibleDraftCount, setVisibleDraftCount] = useState(readDraftQueuePageSize);
+  const [visibleDraftCount, setVisibleDraftCount] = useState(() => Math.max(readDraftQueueVisibleCount(), readDraftQueuePageSize()));
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
   const [queuePromotionOutcomes, setQueuePromotionOutcomes] = useState<Record<number, RecipeDraftPromotionResultPayload>>({});
 
@@ -735,32 +846,10 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     TEMPLATE_DRAFTS: draftRows.filter((draft) => draft.source_type === 'template').length,
     TEMPLATE_UNMAPPED: draftRows.filter((draft) => draft.source_type === 'template' && draft.unresolved_inventory_count > 0).length,
   };
-  const filteredDrafts = useMemo(() => {
-    const rows = draftRows
-      .filter((draft) => draftFilter === 'all' || resolveDraftQueueFilter(draft) === draftFilter)
-      .filter((draft) => {
-        if (draftFocusFilter === 'all') {
-          return true;
-        }
-        return resolveDraftFocusFilter(draft) === draftFocusFilter;
-      });
-
-    return [...rows].sort((left, right) => {
-      if (draftSort === 'unmapped_count') {
-        return right.unresolved_inventory_count - left.unresolved_inventory_count
-          || right.review_row_count - left.review_row_count
-          || right.ready_row_count - left.ready_row_count;
-      }
-
-      if (draftSort === 'promotion_readiness') {
-        return resolveDraftPromotionReadinessScore(right) - resolveDraftPromotionReadinessScore(left)
-          || right.unresolved_inventory_count - left.unresolved_inventory_count
-          || new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
-      }
-
-      return new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
-    });
-  }, [draftFilter, draftFocusFilter, draftRows, draftSort]);
+  const filteredDrafts = useMemo(
+    () => sortDraftRows(filterDraftRows(draftRows, draftFilter, draftFocusFilter), draftSort),
+    [draftFilter, draftFocusFilter, draftRows, draftSort],
+  );
   const filteredSummaries = useMemo(() => {
     const rows = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
     return [...rows].sort((left, right) => {
@@ -806,6 +895,13 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     }
     window.sessionStorage.setItem(DRAFT_PAGE_SIZE_STORAGE_KEY, String(draftPageSize));
   }, [draftPageSize]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(DRAFT_QUEUE_VISIBLE_COUNT_STORAGE_KEY, String(visibleDraftCount));
+  }, [visibleDraftCount]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
