@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   useCreateRecipeDraft,
@@ -85,6 +85,7 @@ export function Recipes() {
 export function PromotedRecipeDetailPage() {
   const { recipeVersionId } = useParams();
   const { selectedVenueId } = useVenueContext();
+  const { toast } = useToast();
   const parsedRecipeVersionId = Number(recipeVersionId);
   const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
 
@@ -125,7 +126,42 @@ export function PromotedRecipeDetailPage() {
           body="That promoted recipe version is not available in the current venue scope. Switch venue context or return to the recipes workspace."
         />
       ) : (
-        <OperationalRecipeDetail summary={summary} />
+        <div className="space-y-4">
+          <WorkflowPanel
+            title="Operations Handoff IDs"
+            description="Use these ids when another operator, reviewer, or standards workflow needs to reference this exact promoted recipe version."
+            actions={(
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyRecipeOperatorId(String(summary.recipe_id), 'Recipe id', toast)}
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Copy recipe id
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copyRecipeOperatorId(String(summary.recipe_version_id), 'Recipe version id', toast)}
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Copy version id
+                </button>
+              </div>
+            )}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe id</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">{summary.recipe_id}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe version id</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">{summary.recipe_version_id}</div>
+              </div>
+            </div>
+          </WorkflowPanel>
+          <OperationalRecipeDetail summary={summary} />
+        </div>
       )}
     </WorkflowPage>
   );
@@ -327,6 +363,20 @@ function DraftStatusBadge({ draft }: { draft: RecipeDraftSummaryPayload }) {
 type DraftQueueFilter = 'all' | 'READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'PROMOTED';
 type DraftQueueFocusFilter = 'all' | 'TEMPLATE_DRAFTS' | 'TEMPLATE_UNMAPPED';
 type DraftQueueSort = 'updated_at' | 'unmapped_count' | 'promotion_readiness';
+type ComposerIngredientFilter = 'all' | 'UNRESOLVED_TEMPLATE' | 'MAPPED_TEMPLATE' | 'MANUAL';
+
+const DEFAULT_DRAFT_PAGE_SIZE = 12;
+const DRAFT_PAGE_SIZE_STORAGE_KEY = 'fifoflow.recipeDraftQueue.pageSize';
+
+function readDraftQueuePageSize(): number {
+  if (typeof window === 'undefined') {
+    return DEFAULT_DRAFT_PAGE_SIZE;
+  }
+
+  const raw = window.sessionStorage.getItem(DRAFT_PAGE_SIZE_STORAGE_KEY);
+  const parsed = Number(raw);
+  return [12, 24, 48].includes(parsed) ? parsed : DEFAULT_DRAFT_PAGE_SIZE;
+}
 
 function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
   if (draft.promotion_link) {
@@ -383,6 +433,19 @@ function formatPromotionOutcomeLabel(outcome: {
   return `${base}${version}${costability}`;
 }
 
+async function copyRecipeOperatorId(
+  value: string,
+  label: string,
+  toast: (message: string, tone?: 'success' | 'error' | 'info') => void,
+) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast(`${label} copied`, 'success');
+  } catch {
+    toast(`Could not copy ${label.toLowerCase()}`, 'error');
+  }
+}
+
 function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => void; onOpenDraft: (draftId: number) => void }) {
   const { selectedVenueId } = useVenueContext();
   const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
@@ -395,7 +458,8 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
   const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>('all');
   const [draftSort, setDraftSort] = useState<DraftQueueSort>('updated_at');
-  const [visibleDraftCount, setVisibleDraftCount] = useState(12);
+  const [draftPageSize, setDraftPageSize] = useState(readDraftQueuePageSize);
+  const [visibleDraftCount, setVisibleDraftCount] = useState(readDraftQueuePageSize);
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
   const [queuePromotionOutcomes, setQueuePromotionOutcomes] = useState<Record<number, RecipeDraftPromotionResultPayload>>({});
 
@@ -455,8 +519,15 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   }, [filteredSummaries, selectedRecipeVersionId, selectedSummary]);
 
   useEffect(() => {
-    setVisibleDraftCount(12);
-  }, [draftFilter, draftFocusFilter, draftSort]);
+    setVisibleDraftCount(draftPageSize);
+  }, [draftFilter, draftFocusFilter, draftPageSize, draftSort]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(DRAFT_PAGE_SIZE_STORAGE_KEY, String(draftPageSize));
+  }, [draftPageSize]);
 
   if (isLoading) {
     return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
@@ -533,6 +604,18 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                 <option value="updated_at">Updated</option>
                 <option value="unmapped_count">Unmapped</option>
                 <option value="promotion_readiness">Promotion readiness</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Page size
+              <select
+                value={draftPageSize}
+                onChange={(event) => setDraftPageSize(Number(event.target.value))}
+                className="bg-transparent text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-900 outline-none"
+              >
+                <option value={12}>12</option>
+                <option value={24}>24</option>
+                <option value={48}>48</option>
               </select>
             </label>
             <button
@@ -682,7 +765,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
               <div className="flex justify-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setVisibleDraftCount((current) => current + 12)}
+                  onClick={() => setVisibleDraftCount((current) => current + draftPageSize)}
                   className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
                 >
                   Show more drafts
@@ -1371,6 +1454,7 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
   const [servingQuantity, setServingQuantity] = useState('');
   const [servingUnit, setServingUnit] = useState<string>('each');
   const [servingCountOverride, setServingCountOverride] = useState('');
+  const [composerIngredientFilter, setComposerIngredientFilter] = useState<ComposerIngredientFilter>('all');
   const [ingredients, setIngredients] = useState<IngredientRow[]>([{
     item_id: 0,
     quantity: '',
@@ -1488,6 +1572,28 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
   }, [derivedServingCount, servingCountOverride]);
 
   const validIngredientCount = ingredients.filter((ingredient) => ingredient.item_id > 0 && Number(ingredient.quantity) > 0).length;
+  const ingredientFilterCounts = {
+    all: ingredients.length,
+    UNRESOLVED_TEMPLATE: ingredients.filter((ingredient) => ingredient.template_ingredient_name && ingredient.item_id <= 0).length,
+    MAPPED_TEMPLATE: ingredients.filter((ingredient) => ingredient.template_ingredient_name && ingredient.item_id > 0).length,
+    MANUAL: ingredients.filter((ingredient) => !ingredient.template_ingredient_name).length,
+  };
+  const visibleIngredientRows = useMemo(() => (
+    ingredients
+      .map((ingredient, index) => ({ ingredient, index }))
+      .filter(({ ingredient }) => {
+        if (composerIngredientFilter === 'UNRESOLVED_TEMPLATE') {
+          return Boolean(ingredient.template_ingredient_name) && ingredient.item_id <= 0;
+        }
+        if (composerIngredientFilter === 'MAPPED_TEMPLATE') {
+          return Boolean(ingredient.template_ingredient_name) && ingredient.item_id > 0;
+        }
+        if (composerIngredientFilter === 'MANUAL') {
+          return !ingredient.template_ingredient_name;
+        }
+        return true;
+      })
+  ), [composerIngredientFilter, ingredients]);
   const itemMap = useMemo(() => new Map((items ?? []).map((item) => [item.id, item])), [items]);
   const vendorNameById = useMemo(() => new Map((vendors ?? []).map((vendor) => [vendor.id, vendor.name])), [vendors]);
   const unmatchedTemplateRowCount = ingredients.filter((ingredient) => ingredient.template_ingredient_name && ingredient.item_id <= 0).length;
@@ -1858,16 +1964,39 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
                   Enter quantities for the full batch. FIFOFlow will derive per-serving usage from the serving math above.
                 </p>
               </div>
-              <button
-                onClick={addIngredient}
-                className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-              >
-                Add Ingredient
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <WorkflowFocusBar>
+                  {([
+                    ['all', 'All rows'],
+                    ['UNRESOLVED_TEMPLATE', 'Template unmapped'],
+                    ['MAPPED_TEMPLATE', 'Template mapped'],
+                    ['MANUAL', 'Manual rows'],
+                  ] as const).map(([value, label]) => (
+                    <WorkflowChip
+                      key={value}
+                      active={composerIngredientFilter === value}
+                      onClick={() => setComposerIngredientFilter(value)}
+                    >
+                      {label} {ingredientFilterCounts[value]}
+                    </WorkflowChip>
+                  ))}
+                </WorkflowFocusBar>
+                <button
+                  onClick={addIngredient}
+                  className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Add Ingredient
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 space-y-3">
-              {ingredients.map((ingredient, idx) => {
+              {!visibleIngredientRows.length ? (
+                <WorkflowEmptyState
+                  title="No ingredient rows matched this filter"
+                  body="Switch the composer filter or add another ingredient row to continue recipe mapping work."
+                />
+              ) : visibleIngredientRows.map(({ ingredient, index: idx }) => {
                 const mappedItem = ingredient.item_id > 0 ? itemMap.get(ingredient.item_id) : undefined;
                 const vendorName = mappedItem?.vendor_id ? vendorNameById.get(mappedItem.vendor_id) ?? null : null;
                 const quantityNumber = Number(ingredient.quantity);
