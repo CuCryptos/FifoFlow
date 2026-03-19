@@ -3,11 +3,12 @@ import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import type { InventoryStore } from '../store/types.js';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
-import { matchInvoiceLineToInventory } from './invoiceMatching.js';
+import { matchInvoiceLineToInventory, normalizeInvoiceItemName, tokenizeInvoiceItemName } from './invoiceMatching.js';
+import { buildInvoiceTranscript, extractPdfEvidence, type InvoiceDocumentPageEvidence } from './invoiceDocumentExtraction.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (allowed.includes(file.mimetype)) {
@@ -24,21 +25,32 @@ function getMediaType(mimetype: string): 'image/png' | 'image/jpeg' | 'image/web
   return 'image/jpeg';
 }
 
+interface ParsedInvoiceLine {
+  vendor_item_name: string;
+  source_text?: string | null;
+  page_number?: number | null;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  line_total: number;
+}
+
 interface ParsedInvoice {
   vendor_name: string;
   invoice_date: string | null;
   invoice_number: string | null;
-  lines: Array<{
-    vendor_item_name: string;
-    quantity: number;
-    unit: string;
-    unit_price: number;
-    line_total: number;
-  }>;
+  lines: ParsedInvoiceLine[];
 }
 
 interface ParsedInvoiceEnvelope {
   invoices: ParsedInvoice[];
+}
+
+interface InvoiceTranscriptContext {
+  fullTranscript: string;
+  normalizedTranscript: string;
+  transcriptTokens: Set<string>;
+  pageTranscripts: Map<number, { raw: string; normalized: string; tokens: Set<string> }>;
 }
 
 export function parseInvoiceAiResponse(text: string): ParsedInvoiceEnvelope {
@@ -58,62 +70,92 @@ export function parseInvoiceAiResponse(text: string): ParsedInvoiceEnvelope {
   throw new Error('Unexpected invoice response shape');
 }
 
-async function parseOneFile(
-  client: Anthropic,
-  file: Express.Multer.File,
-  store: InventoryStore,
-  vendorIdOverride?: number,
-): Promise<InvoiceParseResult[]> {
-  const base64Data = file.buffer.toString('base64');
-  const isPdf = file.mimetype === 'application/pdf';
+export function buildInvoiceTranscriptContext(pages: InvoiceDocumentPageEvidence[]): InvoiceTranscriptContext {
+  const fullTranscript = buildInvoiceTranscript(pages);
+  const normalizedTranscript = normalizeInvoiceItemName(fullTranscript);
+  const transcriptTokens = new Set(tokenizeInvoiceItemName(fullTranscript));
+  const pageTranscripts = new Map<number, { raw: string; normalized: string; tokens: Set<string> }>();
 
-  const contentBlock: Anthropic.ContentBlockParam = isPdf
-    ? {
-        type: 'document' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: 'application/pdf' as const,
-          data: base64Data,
-        },
-      }
-    : {
-        type: 'image' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: getMediaType(file.mimetype),
-          data: base64Data,
-        },
-      };
+  for (const page of pages) {
+    pageTranscripts.set(page.pageNumber, {
+      raw: page.extractedText,
+      normalized: normalizeInvoiceItemName(page.extractedText),
+      tokens: new Set(tokenizeInvoiceItemName(page.extractedText)),
+    });
+  }
 
-  // Get vendor list for the prompt
-  const vendors = await store.listVendors();
-  const vendorNames = vendors.map((v) => v.name).join(', ');
-  const vendorOverrideName = vendorIdOverride
-    ? vendors.find((vendor) => vendor.id === vendorIdOverride)?.name ?? null
+  return {
+    fullTranscript,
+    normalizedTranscript,
+    transcriptTokens,
+    pageTranscripts,
+  };
+}
+
+export function isInvoiceLineSupportedByTranscript(
+  line: Pick<ParsedInvoiceLine, 'vendor_item_name' | 'source_text' | 'page_number'>,
+  transcript: InvoiceTranscriptContext,
+): boolean {
+  if (!transcript.transcriptTokens.size) {
+    return true;
+  }
+
+  const lineTokens = tokenizeInvoiceItemName(line.vendor_item_name);
+  if (!lineTokens.length) {
+    return false;
+  }
+
+  const scopedTranscript = line.page_number != null
+    ? transcript.pageTranscripts.get(line.page_number) ?? null
     : null;
+  const normalizedTranscript = scopedTranscript?.normalized || transcript.normalizedTranscript;
+  const transcriptTokens = scopedTranscript?.tokens || transcript.transcriptTokens;
+  const rawTranscript = scopedTranscript?.raw || transcript.fullTranscript;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 16384,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          contentBlock,
-          {
-            type: 'text',
-            text: `Extract ALL invoices and their line items from this document. This document may contain MULTIPLE invoices and MULTIPLE pages. Return a JSON object with this exact structure:
+  const normalizedName = lineTokens.join(' ');
+  if (normalizedName && normalizedTranscript.includes(normalizedName)) {
+    return true;
+  }
+
+  const sourceText = normalizeLooseText(line.source_text ?? '');
+  if (sourceText && normalizeLooseText(rawTranscript).includes(sourceText)) {
+    return true;
+  }
+
+  const matchingTokens = lineTokens.filter((token) => transcriptTokens.has(token)).length;
+  if (lineTokens.length === 1) {
+    return matchingTokens === 1;
+  }
+
+  return matchingTokens >= Math.min(2, lineTokens.length)
+    && (matchingTokens / lineTokens.length) >= 0.6;
+}
+
+function normalizeLooseText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .trim();
+}
+
+function buildInvoiceParsePrompt(vendorNames: string, vendorOverrideName: string | null, pages: InvoiceDocumentPageEvidence[]): string {
+  const hasExtractedTranscript = pages.some((page) => page.extractedText.length > 0);
+
+  return `Extract ALL invoices and their line items from the supplied evidence. Return a JSON object with this exact structure:
 {
   "invoices": [
     {
-      "vendor_name": "the company/vendor name on this invoice",
+      "vendor_name": "the seller/vendor name shown on this invoice",
       "invoice_date": "YYYY-MM-DD or null",
       "invoice_number": "string or null",
       "lines": [
         {
-          "vendor_item_name": "product name exactly as shown on the invoice line",
+          "vendor_item_name": "product name exactly as printed on the invoice line",
+          "source_text": "short exact snippet copied from the invoice line that supports this item",
+          "page_number": 1,
           "quantity": number,
-          "unit": "unit of measure (case, each, lb, oz, bottle, etc.)",
+          "unit": "unit of measure exactly as shown (case, bottle, each, lb, oz, etc.)",
           "unit_price": number,
           "line_total": number
         }
@@ -126,27 +168,123 @@ Known vendors in our system: ${vendorNames || 'none yet'}
 ${vendorOverrideName ? `Vendor override selected by the operator: ${vendorOverrideName}` : ''}
 
 Rules:
-- CRITICAL: Read EVERY page of the document, not just the first page
-- This document may contain one invoice or multiple invoices
-- If multiple pages belong to the same invoice, combine them into one invoice entry
-- If multiple separate invoices are present, return a separate entry for each invoice
-- The vendor_name must be the seller shown on the invoice, not a customer or ship-to location
-- Extract only text that is visibly present on the document
-- Never invent substitute products, categories, or likely items
-- If a line item is unreadable, omit that line instead of guessing
-- Extract every readable line item from every page
-- Use the exact product name as printed on the invoice
-- Prices should be numbers without currency symbols
-- If unit_price or line_total is missing, calculate from the other
-- If quantity or unit is missing on the document, use the closest literal value shown and do not infer hidden pack math
-- Return ONLY the JSON object, no other text`,
-          },
-        ],
+- Read EVERY supplied page in order.
+- This document may contain one invoice or multiple invoices.
+- If multiple pages belong to the same invoice, combine them into one invoice entry.
+- If multiple separate invoices are present, return separate invoice entries.
+- Use page transcripts as the primary source of truth whenever they are present.${hasExtractedTranscript ? '' : ' No transcript was available, so rely on the page images only.'}
+- Never invent substitute products, categories, or likely items.
+- If an item cannot be anchored to visible invoice evidence, omit it.
+- source_text must be copied exactly from the supporting invoice line, not paraphrased.
+- vendor_item_name must stay faithful to the printed line item, not normalized into a different product.
+- The vendor_name must be the seller shown on the invoice, not the customer or ship-to location.
+- If unit_price or line_total is missing, calculate from the other visible values.
+- If quantity or unit is missing, use only the closest literal value shown on the invoice line.
+- Return ONLY the JSON object, no other text.`;
+}
+
+function buildInvoiceParseContent(
+  file: Express.Multer.File,
+  pages: InvoiceDocumentPageEvidence[],
+  vendors: Array<{ id: number; name: string }>,
+  vendorIdOverride?: number,
+): Anthropic.ContentBlockParam[] {
+  const vendorNames = vendors.map((vendor) => vendor.name).join(', ');
+  const vendorOverrideName = vendorIdOverride
+    ? vendors.find((vendor) => vendor.id === vendorIdOverride)?.name ?? null
+    : null;
+
+  const content: Anthropic.ContentBlockParam[] = [
+    {
+      type: 'text',
+      text: `Invoice file: ${file.originalname}\n${buildInvoiceParsePrompt(vendorNames, vendorOverrideName, pages)}`,
+    },
+  ];
+
+  for (const page of pages) {
+    if (page.extractedText) {
+      content.push({
+        type: 'text',
+        text: `PAGE ${page.pageNumber} TRANSCRIPT:\n${page.extractedText.slice(0, 12000)}`,
+      });
+    } else {
+      content.push({
+        type: 'text',
+        text: `PAGE ${page.pageNumber} TRANSCRIPT:\n[no embedded text extracted from this page]`,
+      });
+    }
+
+    if (page.imageBase64) {
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: page.imageMediaType,
+          data: page.imageBase64,
+        },
+      });
+    }
+  }
+
+  return content;
+}
+
+function buildImageEvidence(file: Express.Multer.File): InvoiceDocumentPageEvidence[] {
+  return [{
+    pageNumber: 1,
+    extractedText: '',
+    imageBase64: file.buffer.toString('base64'),
+    imageMediaType: getMediaType(file.mimetype),
+  }];
+}
+
+function normalizeParsedLine(rawLine: ParsedInvoiceLine): ParsedInvoiceLine | null {
+  const vendorItemName = String(rawLine.vendor_item_name ?? '').trim();
+  if (!vendorItemName) {
+    return null;
+  }
+
+  const quantity = Number(rawLine.quantity) || 0;
+  const unitPrice = Number(rawLine.unit_price) || 0;
+  let lineTotal = Number(rawLine.line_total) || quantity * unitPrice;
+  if (!lineTotal && quantity && unitPrice) {
+    lineTotal = Math.round(quantity * unitPrice * 100) / 100;
+  }
+
+  return {
+    vendor_item_name: vendorItemName,
+    source_text: rawLine.source_text ? String(rawLine.source_text).trim() : null,
+    page_number: rawLine.page_number != null ? Number(rawLine.page_number) || null : null,
+    quantity,
+    unit: String(rawLine.unit ?? 'each').trim() || 'each',
+    unit_price: unitPrice,
+    line_total: lineTotal,
+  };
+}
+
+async function parseOneFile(
+  client: Anthropic,
+  file: Express.Multer.File,
+  store: InventoryStore,
+  vendorIdOverride?: number,
+): Promise<InvoiceParseResult[]> {
+  const vendors = await store.listVendors();
+  const pages = file.mimetype === 'application/pdf'
+    ? await extractPdfEvidence(file.buffer)
+    : buildImageEvidence(file);
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 16384,
+    messages: [
+      {
+        role: 'user',
+        content: buildInvoiceParseContent(file, pages, vendors, vendorIdOverride),
       },
     ],
   });
 
-  const textContent = response.content.find((c) => c.type === 'text');
+  const textContent = response.content.find((content) => content.type === 'text');
   if (!textContent || textContent.type !== 'text') {
     throw new Error('Failed to extract invoice data');
   }
@@ -158,12 +296,18 @@ Rules:
     throw new Error('Failed to parse invoice data from AI response');
   }
 
+  const transcript = buildInvoiceTranscriptContext(pages);
   const items = await store.listItems();
   const allVendorPrices: Array<{ id: number; item_id: number; vendor_id: number; vendor_item_name: string | null }> = [];
   for (const item of items) {
     const prices = await store.listVendorPricesForItem(item.id);
-    for (const vp of prices) {
-      allVendorPrices.push({ id: vp.id, item_id: vp.item_id, vendor_id: vp.vendor_id, vendor_item_name: vp.vendor_item_name });
+    for (const vendorPrice of prices) {
+      allVendorPrices.push({
+        id: vendorPrice.id,
+        item_id: vendorPrice.item_id,
+        vendor_id: vendorPrice.vendor_id,
+        vendor_item_name: vendorPrice.vendor_item_name,
+      });
     }
   }
 
@@ -175,27 +319,27 @@ Rules:
     const detectedVendorName = parsed.vendor_name;
 
     if (!vendorId && parsed.vendor_name) {
-      const vNameLower = parsed.vendor_name.toLowerCase().trim();
-      const exactMatch = vendors.find((v) => v.name.toLowerCase().trim() === vNameLower);
+      const normalizedVendorName = parsed.vendor_name.toLowerCase().trim();
+      const exactMatch = vendors.find((vendor) => vendor.name.toLowerCase().trim() === normalizedVendorName);
       if (exactMatch) {
         vendorId = exactMatch.id;
         vendorName = exactMatch.name;
       } else {
-        const fuzzyMatch = vendors.find((v) => {
-          const vLower = v.name.toLowerCase();
-          return vLower.includes(vNameLower) || vNameLower.includes(vLower);
+        const fuzzyMatch = vendors.find((vendor) => {
+          const vendorNameLower = vendor.name.toLowerCase();
+          return vendorNameLower.includes(normalizedVendorName) || normalizedVendorName.includes(vendorNameLower);
         });
         if (fuzzyMatch) {
           vendorId = fuzzyMatch.id;
           vendorName = fuzzyMatch.name;
         } else {
-          const nameWords = vNameLower.split(/\s+/).filter((w) => w.length > 2);
-          let best: { vendor: typeof vendors[0]; overlap: number } | null = null;
-          for (const v of vendors) {
-            const vWords = v.name.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-            const overlap = nameWords.filter((w) => vWords.some((vw) => vw.includes(w) || w.includes(vw))).length;
+          const nameWords = normalizedVendorName.split(/\s+/).filter((word) => word.length > 2);
+          let best: { vendor: (typeof vendors)[number]; overlap: number } | null = null;
+          for (const vendor of vendors) {
+            const vendorWords = vendor.name.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
+            const overlap = nameWords.filter((word) => vendorWords.some((vendorWord) => vendorWord.includes(word) || word.includes(vendorWord))).length;
             if (overlap > 0 && (!best || overlap > best.overlap)) {
-              best = { vendor: v, overlap };
+              best = { vendor, overlap };
             }
           }
           if (best) {
@@ -207,34 +351,38 @@ Rules:
     }
 
     if (vendorId) {
-      const v = vendors.find((vendor) => vendor.id === vendorId);
-      if (v) vendorName = v.name;
+      const vendor = vendors.find((entry) => entry.id === vendorId);
+      if (vendor) {
+        vendorName = vendor.name;
+      }
     }
 
     const vendorSpecificPrices = vendorId
-      ? allVendorPrices.filter((vp) => vp.vendor_id === vendorId)
+      ? allVendorPrices.filter((vendorPrice) => vendorPrice.vendor_id === vendorId)
       : allVendorPrices;
 
-    const lines: InvoiceLine[] = parsed.lines.map((rawLine) => {
-      const line = {
-        vendor_item_name: String(rawLine.vendor_item_name ?? ''),
-        quantity: Number(rawLine.quantity) || 0,
-        unit: String(rawLine.unit ?? 'each'),
-        unit_price: Number(rawLine.unit_price) || 0,
-        line_total: Number(rawLine.line_total) || Number(rawLine.quantity || 0) * Number(rawLine.unit_price || 0),
-      };
-      if (!line.line_total && line.quantity && line.unit_price) {
-        line.line_total = Math.round(line.quantity * line.unit_price * 100) / 100;
-      }
-      const matched = matchInvoiceLineToInventory(line.vendor_item_name, items, vendorSpecificPrices);
+    const normalizedLines = parsed.lines
+      .map((rawLine) => normalizeParsedLine(rawLine))
+      .filter((line): line is ParsedInvoiceLine => line !== null)
+      .filter((line) => isInvoiceLineSupportedByTranscript(line, transcript));
 
+    if (parsed.lines.length > 0 && normalizedLines.length === 0 && transcript.transcriptTokens.size > 0) {
+      throw new Error(`No invoice lines from ${file.originalname} could be verified against extracted document text`);
+    }
+
+    const lines: InvoiceLine[] = normalizedLines.map((line) => {
+      const matched = matchInvoiceLineToInventory(line.vendor_item_name, items, vendorSpecificPrices);
       return {
-        ...line,
+        vendor_item_name: line.vendor_item_name,
+        quantity: line.quantity,
+        unit: line.unit,
+        unit_price: line.unit_price,
+        line_total: line.line_total,
         ...matched,
       };
     });
 
-    const matched = lines.filter((line) => line.matched_item_id != null).length;
+    const matchedCount = lines.filter((line) => line.matched_item_id != null).length;
     const totalAmount = lines.reduce((sum, line) => sum + line.line_total, 0);
 
     results.push({
@@ -246,8 +394,8 @@ Rules:
       lines,
       summary: {
         total_lines: lines.length,
-        matched,
-        unmatched: lines.length - matched,
+        matched: matchedCount,
+        unmatched: lines.length - matchedCount,
         total_amount: Math.round(totalAmount * 100) / 100,
       },
     });
@@ -259,7 +407,6 @@ Rules:
 export function createInvoiceRoutes(store: InventoryStore): Router {
   const router = Router();
 
-  // POST /api/invoices/parse — bulk upload, auto-detect vendor
   router.post('/parse', upload.array('files', 20), async (req, res) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -273,7 +420,6 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
       return;
     }
 
-    // Optional vendor_id override
     const vendorIdOverride = req.body.vendor_id ? Number(req.body.vendor_id) : undefined;
     if (vendorIdOverride) {
       const vendor = await store.getVendorById(vendorIdOverride);
@@ -298,7 +444,6 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
     }
   });
 
-  // POST /api/invoices/confirm
   router.post('/confirm', async (req, res) => {
     const { vendor_id, lines, record_transactions } = req.body as {
       vendor_id: number;
@@ -334,7 +479,6 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
       const item = await store.getItemById(line.matched_item_id);
       if (!item) continue;
 
-      // Assign vendor to item if it doesn't have one
       if (!item.vendor_id) {
         await store.updateItem(line.matched_item_id, { vendor_id });
         vendorsAssigned++;
@@ -343,8 +487,8 @@ export function createInvoiceRoutes(store: InventoryStore): Router {
       if (line.create_vendor_price) {
         const existingPrices = await store.listVendorPricesForItem(line.matched_item_id);
         const alreadyExists = existingPrices.some(
-          (vp) => vp.vendor_id === vendor_id &&
-            vp.vendor_item_name?.toLowerCase() === line.vendor_item_name.toLowerCase()
+          (vendorPrice) => vendorPrice.vendor_id === vendor_id
+            && vendorPrice.vendor_item_name?.toLowerCase() === line.vendor_item_name.toLowerCase(),
         );
 
         if (!alreadyExists) {

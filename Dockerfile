@@ -24,6 +24,8 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 
+RUN apk add --no-cache poppler-utils
+
 # Copy package files for production install
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
