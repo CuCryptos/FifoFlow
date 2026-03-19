@@ -389,6 +389,7 @@ const DEFAULT_DRAFT_PAGE_SIZE = 12;
 const DRAFT_PAGE_SIZE_STORAGE_KEY = 'fifoflow.recipeDraftQueue.pageSize';
 const DRAFT_QUEUE_SORT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sort';
 const DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sourceFilter';
+const COMPOSER_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeComposer.filter';
 
 function readDraftQueuePageSize(): number {
   if (typeof window === 'undefined') {
@@ -418,6 +419,21 @@ function readDraftQueueSourceFilter(): DraftQueueFocusFilter {
 
   const raw = window.sessionStorage.getItem(DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY);
   return raw === 'all' || raw === 'TEMPLATE_DRAFTS' || raw === 'TEMPLATE_UNMAPPED'
+    ? raw
+    : 'all';
+}
+
+function getComposerFilterStorageKey(draftId: number | null | undefined): string {
+  return `${COMPOSER_FILTER_STORAGE_KEY_PREFIX}.${draftId != null ? draftId : 'new'}`;
+}
+
+function readComposerIngredientFilter(draftId: number | null | undefined): ComposerIngredientFilter {
+  if (typeof window === 'undefined') {
+    return 'all';
+  }
+
+  const raw = window.sessionStorage.getItem(getComposerFilterStorageKey(draftId));
+  return raw === 'all' || raw === 'UNRESOLVED_TEMPLATE' || raw === 'MAPPED_TEMPLATE' || raw === 'MANUAL'
     ? raw
     : 'all';
 }
@@ -737,6 +753,21 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
                       {draft.source_recipe_type ?? 'prep'} • {draft.source_type === 'template' ? 'Template draft' : 'Manual draft'} • {draft.ingredient_row_count} rows
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium">
+                        Draft id #{draft.id}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          copyRecipeOperatorId(String(draft.id), 'Draft id', toast);
+                        }}
+                        className="rounded-full border border-slate-200 px-2.5 py-1 font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        Copy draft id
+                      </button>
                     </div>
                     {promotionOutcomeLabel ? (
                       <div className="mt-2 text-[11px] font-medium text-emerald-700">
@@ -1512,7 +1543,7 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
   const [servingQuantity, setServingQuantity] = useState('');
   const [servingUnit, setServingUnit] = useState<string>('each');
   const [servingCountOverride, setServingCountOverride] = useState('');
-  const [composerIngredientFilter, setComposerIngredientFilter] = useState<ComposerIngredientFilter>('all');
+  const [composerIngredientFilter, setComposerIngredientFilter] = useState<ComposerIngredientFilter>(readComposerIngredientFilter(initialDraftId ?? null));
   const [ingredients, setIngredients] = useState<IngredientRow[]>([{
     item_id: 0,
     quantity: '',
@@ -1581,6 +1612,21 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
     }
     setSelectedTemplateId(templates[0].template_id);
   }, [creationMode, selectedTemplateId, templates]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const scopedDraftId = draftId ?? null;
+    setComposerIngredientFilter(readComposerIngredientFilter(scopedDraftId));
+  }, [draftId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(getComposerFilterStorageKey(draftId ?? null), composerIngredientFilter);
+  }, [composerIngredientFilter, draftId]);
 
   const filteredTemplates = useMemo(() => {
     const rows = templates ?? [];
@@ -1688,6 +1734,9 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
   const saveBlockingReason = creationMode === 'template' && appliedTemplateVersionId != null && unmatchedTemplateRowCount > 0
     ? 'Map or remove every template row before saving this draft. Unmapped template rows cannot be persisted safely yet.'
     : null;
+  const blockedTemplateRows = ingredients
+    .map((ingredient, index) => ({ ingredient, index }))
+    .filter(({ ingredient }) => Boolean(ingredient.template_ingredient_name) && ingredient.item_id <= 0);
 
   const applyTemplate = (template: RecipeTemplateDetailPayload) => {
     setCreationMode('template');
@@ -2021,6 +2070,43 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            {blockedTemplateRows.length > 0 ? (
+              <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Blocked template rows</div>
+                    <div className="mt-2 text-sm font-semibold text-amber-950">
+                      {blockedTemplateRows.length} template row{blockedTemplateRows.length === 1 ? '' : 's'} still need inventory mapping
+                    </div>
+                    <div className="mt-1 text-sm text-amber-800">
+                      Keep the composer on unresolved template rows until these source ingredients are mapped or removed. FIFOFlow will not treat this draft as promotion-ready while they remain blocked.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setComposerIngredientFilter('UNRESOLVED_TEMPLATE')}
+                    className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 transition hover:border-amber-400 hover:bg-amber-100"
+                  >
+                    Focus blocked rows
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {blockedTemplateRows.slice(0, 6).map(({ ingredient, index }) => (
+                    <span
+                      key={`${ingredient.template_ingredient_name ?? 'blocked'}-${index}`}
+                      className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-900"
+                    >
+                      {ingredient.template_ingredient_name ?? `Template row ${index + 1}`}
+                    </span>
+                  ))}
+                  {blockedTemplateRows.length > 6 ? (
+                    <span className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-900">
+                      +{blockedTemplateRows.length - 6} more
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-semibold text-slate-950">Batch ingredients</div>
