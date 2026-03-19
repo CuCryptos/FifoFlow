@@ -8,7 +8,6 @@ import type {
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
-  CreateRecipeInput,
   RecipeWithCost,
   CreateStorageAreaInput,
   CreateVendorPriceInput,
@@ -33,7 +32,6 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateOrderInput,
-  UpdateRecipeInput,
   UpdateStorageAreaInput,
   UpdateVendorPriceInput,
   UsageReport,
@@ -613,8 +611,6 @@ export class SupabaseInventoryStore implements InventoryStore {
 
   async listRecipes(): Promise<RecipeWithCost[]> { return []; }
   async getRecipeById(_id: number): Promise<RecipeDetail | undefined> { return undefined; }
-  async createRecipe(_input: CreateRecipeInput): Promise<RecipeDetail> { return this.notImplemented('createRecipe'); }
-  async updateRecipe(_id: number, _input: UpdateRecipeInput): Promise<RecipeDetail> { return this.notImplemented('updateRecipe'); }
   async deleteRecipe(_id: number): Promise<void> { return this.notImplemented('deleteRecipe'); }
 
   // Forecasts — stubs

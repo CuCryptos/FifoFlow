@@ -8,7 +8,6 @@ import type {
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
-  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
@@ -36,7 +35,6 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateOrderInput,
-  UpdateRecipeInput,
   UpdateStorageAreaInput,
   UpdateVendorPriceInput,
   UsageReport,
@@ -195,8 +193,6 @@ export interface InventoryStore {
   // Recipes
   listRecipes(): Promise<RecipeWithCost[]>;
   getRecipeById(id: number): Promise<RecipeDetail | undefined>;
-  createRecipe(input: CreateRecipeInput): Promise<RecipeDetail>;
-  updateRecipe(id: number, input: UpdateRecipeInput): Promise<RecipeDetail>;
   deleteRecipe(id: number): Promise<void>;
 
   // Forecasts

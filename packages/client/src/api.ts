@@ -393,6 +393,26 @@ export interface RecipeDraftDetailPayload extends RecipeDraftSummaryPayload {
   ingredient_rows: RecipeDraftIngredientPayload[];
 }
 
+export interface RecipeDraftPromotionResultPayload {
+  created_new_recipe: boolean;
+  created_new_version: boolean;
+  costability_status: 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING';
+  recipe: {
+    id: number | string;
+    name: string;
+    type: string;
+  } | null;
+  recipe_version: {
+    id: number | string;
+    recipe_id: number | string;
+    version_number: number;
+  } | null;
+  promotion_link: {
+    recipe_id: number | string;
+    recipe_version_id: number | string;
+  } | null;
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -667,7 +687,7 @@ export const api = {
     promote: (id: number, data?: { created_by?: string; notes?: string | null }) =>
       fetchJson<{
         draft: RecipeDraftDetailPayload | null;
-        promotion: Record<string, unknown>;
+        promotion: RecipeDraftPromotionResultPayload;
       }>(`/recipe-drafts/${id}/promote`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
   },
   recipeTemplates: {

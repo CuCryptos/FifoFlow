@@ -28,6 +28,7 @@ import type { Item, Unit } from '@fifoflow/shared';
 import type {
   OperationalRecipeIngredientRowPayload,
   OperationalRecipeWorkflowSummaryPayload,
+  RecipeDraftPromotionResultPayload,
   RecipeDraftSummaryPayload,
   RecipeTemplateDetailPayload,
   RecipeWorkflowIngredientDiffPayload,
@@ -273,6 +274,37 @@ function DraftStatusBadge({ draft }: { draft: RecipeDraftSummaryPayload }) {
   return <WorkflowStatusPill tone="slate">Needs review</WorkflowStatusPill>;
 }
 
+type DraftQueueFilter = 'all' | 'READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'PROMOTED';
+
+function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
+  if (draft.promotion_link) {
+    return 'PROMOTED';
+  }
+  if (draft.completeness_status === 'READY') {
+    return 'READY';
+  }
+  if (draft.completeness_status === 'BLOCKED') {
+    return 'BLOCKED';
+  }
+  return 'NEEDS_REVIEW';
+}
+
+function formatPromotionOutcomeLabel(outcome: {
+  promotion_link: { recipe_id: number | string; recipe_version_id: number | string | null } | null;
+  costability_status?: string | null;
+} | null | undefined): string | null {
+  if (!outcome?.promotion_link) {
+    return null;
+  }
+
+  const base = `Live as recipe #${outcome.promotion_link.recipe_id}`;
+  const version = outcome.promotion_link.recipe_version_id != null
+    ? ` • version #${outcome.promotion_link.recipe_version_id}`
+    : '';
+  const costability = outcome.costability_status ? ` • ${outcome.costability_status}` : '';
+  return `${base}${version}${costability}`;
+}
+
 function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => void; onOpenDraft: (draftId: number) => void }) {
   const { selectedVenueId } = useVenueContext();
   const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
@@ -281,9 +313,20 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const { toast } = useToast();
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
+  const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
+  const [queuePromotionOutcomes, setQueuePromotionOutcomes] = useState<Record<number, RecipeDraftPromotionResultPayload>>({});
 
   const summaries = data?.summaries ?? [];
+  const draftRows = drafts ?? [];
+  const draftFilterCounts = {
+    all: draftRows.length,
+    READY: draftRows.filter((draft) => resolveDraftQueueFilter(draft) === 'READY').length,
+    NEEDS_REVIEW: draftRows.filter((draft) => resolveDraftQueueFilter(draft) === 'NEEDS_REVIEW').length,
+    BLOCKED: draftRows.filter((draft) => resolveDraftQueueFilter(draft) === 'BLOCKED').length,
+    PROMOTED: draftRows.filter((draft) => resolveDraftQueueFilter(draft) === 'PROMOTED').length,
+  };
+  const filteredDrafts = draftRows.filter((draft) => draftFilter === 'all' || resolveDraftQueueFilter(draft) === draftFilter);
   const filteredSummaries = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
   const selectedSummary = filteredSummaries.find((summary) => summary.recipe_version_id === selectedRecipeVersionId)
     ?? filteredSummaries[0]
@@ -339,19 +382,34 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
         title="Draft Queue"
         description="Persisted recipe drafts now live on the promotion-native builder path. Reopen them here, finish serving math and mapping, then promote when they are trustworthy."
         actions={(
-          <button
-            onClick={onAddRecipe}
-            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            New Draft Recipe
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <WorkflowFocusBar>
+              {([
+                ['all', 'All drafts'],
+                ['READY', 'Ready'],
+                ['NEEDS_REVIEW', 'Needs review'],
+                ['BLOCKED', 'Blocked'],
+                ['PROMOTED', 'Promoted'],
+              ] as const).map(([value, label]) => (
+                <WorkflowChip key={value} active={draftFilter === value} onClick={() => setDraftFilter(value)}>
+                  {label} {draftFilterCounts[value]}
+                </WorkflowChip>
+              ))}
+            </WorkflowFocusBar>
+            <button
+              onClick={onAddRecipe}
+              className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              New Draft Recipe
+            </button>
+          </div>
         )}
       >
         {draftsLoading ? (
           <div className="text-sm text-slate-500">Loading draft queue...</div>
         ) : draftsError instanceof Error ? (
           <div className="text-sm text-rose-600">{draftsError.message}</div>
-        ) : !drafts?.length ? (
+        ) : !draftRows.length ? (
           <WorkflowEmptyState
             title="No persisted drafts yet"
             body="Start a draft from a template or from scratch. FIFOFlow will keep it on the builder path until it is ready for operational promotion."
@@ -364,85 +422,107 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
               </button>
             )}
           />
+        ) : !filteredDrafts.length ? (
+          <WorkflowEmptyState
+            title="No drafts matched this lane"
+            body="The current queue filter has no matching drafts. Switch lanes or create a new draft."
+          />
         ) : (
           <div className="space-y-3">
-            {drafts.slice(0, 8).map((draft) => (
-              <div
-                key={String(draft.id)}
-                className="grid gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50 lg:grid-cols-[minmax(0,1.15fr)_auto_minmax(210px,auto)]"
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpenDraft(Number(draft.id))}
-                  className="min-w-0 text-left"
+            {filteredDrafts.slice(0, 12).map((draft) => {
+              const promotionOutcome = queuePromotionOutcomes[Number(draft.id)] ?? {
+                promotion_link: draft.promotion_link,
+                costability_status: null,
+              };
+              const promotionOutcomeLabel = formatPromotionOutcomeLabel(promotionOutcome);
+
+              return (
+                <div
+                  key={String(draft.id)}
+                  className="grid gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50 lg:grid-cols-[minmax(0,1.15fr)_auto_minmax(210px,auto)]"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-950">{draft.draft_name}</span>
-                    <DraftStatusBadge draft={draft} />
-                    {draft.promotion_link ? <WorkflowStatusPill tone="slate">Promoted</WorkflowStatusPill> : null}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {draft.source_recipe_type ?? 'prep'} • {draft.source_type === 'template' ? 'Template draft' : 'Manual draft'} • {draft.ingredient_row_count} rows
-                  </div>
-                </button>
-                <div className="text-xs text-slate-500 lg:text-right">
-                  <div>{draft.ready_row_count}/{draft.ingredient_row_count} rows ready</div>
-                  <div>{draft.unresolved_inventory_count} unmapped</div>
-                </div>
-                <div className="flex flex-col gap-2 lg:items-end">
-                  <div className="text-xs text-slate-500 lg:text-right">
-                    <div>{formatDraftTimestamp(draft.updated_at)}</div>
-                    <div>{draft.promotion_link ? 'Revision-ready' : 'Not yet promoted'}</div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    <button
-                      type="button"
-                      onClick={() => onOpenDraft(Number(draft.id))}
-                      className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
-                    >
-                      Open draft
-                    </button>
-                    <button
-                      type="button"
-                      disabled={promoteDraft.isPending || queuePromotionDraftId != null || draft.completeness_status !== 'READY'}
-                      onClick={() => {
-                        setQueuePromotionDraftId(Number(draft.id));
-                        promoteDraft.mutate(
-                          { id: Number(draft.id) },
-                          {
-                            onSuccess: () => {
-                              toast(draft.promotion_link ? 'Revision promoted' : 'Recipe promoted', 'success');
-                            },
-                            onError: (mutationError) => {
-                              toast(mutationError.message, 'error');
-                            },
-                            onSettled: () => {
-                              setQueuePromotionDraftId((current) => (current === Number(draft.id) ? null : current));
-                            },
-                          },
-                        );
-                      }}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] transition ${
-                        draft.completeness_status === 'READY'
-                          ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-200'
-                          : 'bg-slate-200 text-slate-500 disabled:cursor-not-allowed'
-                      }`}
-                    >
-                      {queuePromotionDraftId === Number(draft.id)
-                        ? 'Promoting...'
-                        : draft.promotion_link
-                          ? 'Promote revision'
-                          : 'Promote draft'}
-                    </button>
-                  </div>
-                  {draft.completeness_status !== 'READY' ? (
-                    <div className="text-[11px] text-amber-700 lg:text-right">
-                      Finish this draft inside the composer before promoting it.
+                  <button
+                    type="button"
+                    onClick={() => onOpenDraft(Number(draft.id))}
+                    className="min-w-0 text-left"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-950">{draft.draft_name}</span>
+                      <DraftStatusBadge draft={draft} />
+                      {draft.promotion_link ? <WorkflowStatusPill tone="slate">Promoted</WorkflowStatusPill> : null}
                     </div>
-                  ) : null}
+                    <div className="mt-1 text-xs text-slate-500">
+                      {draft.source_recipe_type ?? 'prep'} • {draft.source_type === 'template' ? 'Template draft' : 'Manual draft'} • {draft.ingredient_row_count} rows
+                    </div>
+                    {promotionOutcomeLabel ? (
+                      <div className="mt-2 text-[11px] font-medium text-emerald-700">
+                        {promotionOutcomeLabel}
+                      </div>
+                    ) : null}
+                  </button>
+                  <div className="text-xs text-slate-500 lg:text-right">
+                    <div>{draft.ready_row_count}/{draft.ingredient_row_count} rows ready</div>
+                    <div>{draft.unresolved_inventory_count} unmapped</div>
+                  </div>
+                  <div className="flex flex-col gap-2 lg:items-end">
+                    <div className="text-xs text-slate-500 lg:text-right">
+                      <div>{formatDraftTimestamp(draft.updated_at)}</div>
+                      <div>{draft.promotion_link ? 'Revision-ready' : 'Not yet promoted'}</div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => onOpenDraft(Number(draft.id))}
+                        className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
+                      >
+                        Open draft
+                      </button>
+                      <button
+                        type="button"
+                        disabled={promoteDraft.isPending || queuePromotionDraftId != null || draft.completeness_status !== 'READY'}
+                        onClick={() => {
+                          setQueuePromotionDraftId(Number(draft.id));
+                          promoteDraft.mutate(
+                            { id: Number(draft.id) },
+                            {
+                              onSuccess: (result) => {
+                                setQueuePromotionOutcomes((current) => ({
+                                  ...current,
+                                  [Number(draft.id)]: result.promotion,
+                                }));
+                                toast(draft.promotion_link ? 'Revision promoted' : 'Recipe promoted', 'success');
+                              },
+                              onError: (mutationError) => {
+                                toast(mutationError.message, 'error');
+                              },
+                              onSettled: () => {
+                                setQueuePromotionDraftId((current) => (current === Number(draft.id) ? null : current));
+                              },
+                            },
+                          );
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+                          draft.completeness_status === 'READY'
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-200'
+                            : 'bg-slate-200 text-slate-500 disabled:cursor-not-allowed'
+                        }`}
+                      >
+                        {queuePromotionDraftId === Number(draft.id)
+                          ? 'Promoting...'
+                          : draft.promotion_link
+                            ? 'Promote revision'
+                            : 'Promote draft'}
+                      </button>
+                    </div>
+                    {draft.completeness_status !== 'READY' ? (
+                      <div className="text-[11px] text-amber-700 lg:text-right">
+                        Finish this draft inside the composer before promoting it.
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </WorkflowPanel>

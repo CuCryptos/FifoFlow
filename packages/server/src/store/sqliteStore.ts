@@ -10,7 +10,6 @@ import type {
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
-  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorPriceInput,
   DashboardStats,
@@ -36,7 +35,6 @@ import type {
   TransactionWithItem,
   UpdateItemInput,
   UpdateOrderInput,
-  UpdateRecipeInput,
   UpdateStorageAreaInput,
   UpdateVendorPriceInput,
   UsageReport,
@@ -1302,75 +1300,6 @@ export class SqliteInventoryStore implements InventoryStore {
       : null;
 
     return { ...recipe, items, total_cost: roundedTotalCost, cost_per_serving: costPerServing };
-  }
-
-  async createRecipe(input: CreateRecipeInput): Promise<RecipeDetail> {
-    const result = this.db.prepare(
-      `
-        INSERT INTO recipes (
-          name,
-          type,
-          notes,
-          yield_quantity,
-          yield_unit,
-          serving_quantity,
-          serving_unit,
-          serving_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `
-    ).run(
-      input.name,
-      input.type,
-      input.notes ?? null,
-      input.yield_quantity ?? null,
-      input.yield_unit ?? null,
-      input.serving_quantity ?? null,
-      input.serving_unit ?? null,
-      input.serving_count ?? null,
-    );
-
-    const recipeId = Number(result.lastInsertRowid);
-
-    if (input.items && input.items.length > 0) {
-      const insertItem = this.db.prepare(
-        'INSERT INTO recipe_items (recipe_id, item_id, quantity, unit) VALUES (?, ?, ?, ?)'
-      );
-      for (const item of input.items) {
-        insertItem.run(recipeId, item.item_id, item.quantity, item.unit);
-      }
-    }
-
-    return (await this.getRecipeById(recipeId))!;
-  }
-
-  async updateRecipe(id: number, input: UpdateRecipeInput): Promise<RecipeDetail> {
-    const fields: Array<[string, unknown]> = [];
-    if (input.name !== undefined) fields.push(['name', input.name]);
-    if (input.type !== undefined) fields.push(['type', input.type]);
-    if (input.notes !== undefined) fields.push(['notes', input.notes]);
-    if (input.yield_quantity !== undefined) fields.push(['yield_quantity', input.yield_quantity]);
-    if (input.yield_unit !== undefined) fields.push(['yield_unit', input.yield_unit]);
-    if (input.serving_quantity !== undefined) fields.push(['serving_quantity', input.serving_quantity]);
-    if (input.serving_unit !== undefined) fields.push(['serving_unit', input.serving_unit]);
-    if (input.serving_count !== undefined) fields.push(['serving_count', input.serving_count]);
-
-    if (fields.length > 0) {
-      const setClauses = fields.map(([col]) => `${col} = ?`).join(', ');
-      const values = fields.map(([, val]) => val);
-      this.db.prepare(`UPDATE recipes SET ${setClauses} WHERE id = ?`).run(...values, id);
-    }
-
-    if (input.items !== undefined) {
-      this.db.prepare('DELETE FROM recipe_items WHERE recipe_id = ?').run(id);
-      const insertItem = this.db.prepare(
-        'INSERT INTO recipe_items (recipe_id, item_id, quantity, unit) VALUES (?, ?, ?, ?)'
-      );
-      for (const item of input.items) {
-        insertItem.run(id, item.item_id, item.quantity, item.unit);
-      }
-    }
-
-    return (await this.getRecipeById(id))!;
   }
 
   async deleteRecipe(id: number): Promise<void> {
