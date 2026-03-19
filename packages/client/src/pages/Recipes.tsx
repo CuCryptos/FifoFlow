@@ -226,6 +226,11 @@ export function DraftRecipeDetailPage() {
     [drafts, queueLane, queueSource, queueSort],
   );
   const currentDraftIndex = sortedQueueDrafts.findIndex((row) => Number(row.id) === parsedDraftId);
+  const previousBlockedDraft = currentDraftIndex > 0
+    ? [...sortedQueueDrafts.slice(0, currentDraftIndex)]
+        .reverse()
+        .find((row) => row.completeness_status === 'BLOCKED' || row.unresolved_inventory_count > 0)
+    : undefined;
   const nextBlockedDraft = sortedQueueDrafts
     .slice(currentDraftIndex + 1)
     .find((row) => row.completeness_status === 'BLOCKED' || row.unresolved_inventory_count > 0);
@@ -251,6 +256,15 @@ export function DraftRecipeDetailPage() {
               className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
             >
               Copy draft detail link
+            </button>
+          ) : null}
+          {previousBlockedDraft ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/recipes/drafts/${previousBlockedDraft.id}`)}
+              className="rounded-full border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:border-amber-400 hover:bg-amber-50"
+            >
+              Previous blocked draft
             </button>
           ) : null}
           {nextBlockedDraft ? (
@@ -289,6 +303,11 @@ export function DraftRecipeDetailPage() {
         {nextBlockedDraft ? (
           <div className="mt-3 text-xs text-slate-500">
             Next blocked draft in this stored queue context: <span className="font-semibold text-slate-900">{nextBlockedDraft.draft_name}</span> #{nextBlockedDraft.id}
+          </div>
+        ) : null}
+        {previousBlockedDraft ? (
+          <div className="mt-1 text-xs text-slate-500">
+            Previous blocked draft in this stored queue context: <span className="font-semibold text-slate-900">{previousBlockedDraft.draft_name}</span> #{previousBlockedDraft.id}
           </div>
         ) : null}
       </div>
@@ -527,6 +546,7 @@ const COMPOSER_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeComposer.filter';
 const OPERATIONAL_STATUS_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.statusFilter';
 const OPERATIONAL_SELECTED_RECIPE_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.selectedRecipeVersion';
 const OPERATIONAL_SORT_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.sort';
+const OPERATIONAL_TABLE_SCROLL_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.tableScrollTop';
 
 function readDraftQueuePageSize(): number {
   if (typeof window === 'undefined') {
@@ -621,6 +641,10 @@ function getOperationalSortStorageKey(venueId: number | null | undefined): strin
   return `${OPERATIONAL_SORT_STORAGE_KEY_PREFIX}.${venueId != null ? venueId : 'all'}`;
 }
 
+function getOperationalTableScrollStorageKey(venueId: number | null | undefined): string {
+  return `${OPERATIONAL_TABLE_SCROLL_STORAGE_KEY_PREFIX}.${venueId != null ? venueId : 'all'}`;
+}
+
 function readSelectedOperationalRecipeVersionId(venueId: number | null | undefined): number | null {
   if (typeof window === 'undefined') {
     return null;
@@ -640,6 +664,16 @@ function readOperationalWorkspaceSort(venueId: number | null | undefined): Opera
   return raw === 'coverage_desc' || raw === 'latest_cost_desc' || raw === 'name_asc'
     ? raw
     : 'coverage_desc';
+}
+
+function readOperationalTableScrollTop(venueId: number | null | undefined): number {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  const raw = window.sessionStorage.getItem(getOperationalTableScrollStorageKey(venueId));
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
@@ -831,6 +865,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const [visibleDraftCount, setVisibleDraftCount] = useState(() => Math.max(readDraftQueueVisibleCount(), readDraftQueuePageSize()));
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
   const [queuePromotionOutcomes, setQueuePromotionOutcomes] = useState<Record<number, RecipeDraftPromotionResultPayload>>({});
+  const operationalTableRef = useRef<HTMLDivElement>(null);
 
   const summaries = data?.summaries ?? [];
   const draftRows = drafts ?? [];
@@ -958,6 +993,17 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     window.sessionStorage.setItem(key, String(selectedRecipeVersionId));
   }, [selectedRecipeVersionId, selectedVenueId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const container = operationalTableRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = readOperationalTableScrollTop(selectedVenueId);
+  }, [selectedVenueId, operationalSort, statusFilter]);
+
   if (isLoading) {
     return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
   }
@@ -993,6 +1039,40 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
           tone="red"
         />
       </WorkflowMetricGrid>
+
+      <WorkflowPanel
+        title="Stored Workspace Context"
+        description="FIFOFlow now restores the last queue and promoted-workspace state for this session so operators can continue where they left off."
+      >
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Queue lane: {formatDraftQueueFilterLabel(draftFilter)}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Queue source: {formatDraftQueueSourceLabel(draftFocusFilter)}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Queue sort: {formatDraftQueueSortLabel(draftSort)}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Queue page size: {draftPageSize}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Queue showing: {visibleDraftCount}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Workspace lane: {statusFilter === 'all' ? 'All' : statusFilter.replaceAll('_', ' ').toLowerCase()}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Workspace sort: {operationalSort === 'coverage_desc' ? 'Coverage' : operationalSort === 'latest_cost_desc' ? 'Latest cost' : 'Recipe name'}
+          </span>
+          {selectedRecipeVersionId ? (
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+              Selected recipe version: {selectedRecipeVersionId}
+            </span>
+          ) : null}
+        </div>
+      </WorkflowPanel>
 
       <WorkflowPanel
         title="Draft Queue"
@@ -1294,7 +1374,19 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
             />
           ) : (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
-              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70">
+              <div
+                ref={operationalTableRef}
+                onScroll={(event) => {
+                  if (typeof window === 'undefined') {
+                    return;
+                  }
+                  window.sessionStorage.setItem(
+                    getOperationalTableScrollStorageKey(selectedVenueId),
+                    String(event.currentTarget.scrollTop),
+                  );
+                }}
+                className="max-h-[680px] overflow-auto rounded-3xl border border-slate-200 bg-slate-50/70"
+              >
                 <table className="w-full text-sm">
                   <thead className="bg-white/90">
                     <tr className="text-left text-slate-500">
