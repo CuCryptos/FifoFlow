@@ -13,6 +13,7 @@ const Activity = lazy(async () => ({ default: (await import('./pages/Activity'))
 const Counts = lazy(async () => ({ default: (await import('./pages/Counts')).Counts }));
 const Orders = lazy(async () => ({ default: (await import('./pages/Orders')).Orders }));
 const Recipes = lazy(async () => ({ default: (await import('./pages/Recipes')).Recipes }));
+const PromotedRecipeDetailPage = lazy(async () => ({ default: (await import('./pages/Recipes')).PromotedRecipeDetailPage }));
 const Reports = lazy(async () => ({ default: (await import('./pages/Reports')).Reports }));
 const SnackBar = lazy(() => import('./pages/SnackBar'));
 const SignalDetail = lazy(async () => ({ default: (await import('./pages/SignalDetail')).SignalDetail }));
@@ -41,6 +42,7 @@ export default function App() {
                 <Route path="/inventory/:id" element={<RoutedPage><ItemDetail /></RoutedPage>} />
                 <Route path="/orders" element={<RoutedPage><Orders /></RoutedPage>} />
                 <Route path="/recipes" element={<RoutedPage><Recipes /></RoutedPage>} />
+                <Route path="/recipes/promoted/:recipeVersionId" element={<RoutedPage><PromotedRecipeDetailPage /></RoutedPage>} />
                 <Route path="/activity" element={<RoutedPage><Activity /></RoutedPage>} />
                 <Route path="/counts" element={<RoutedPage><Counts /></RoutedPage>} />
                 <Route path="/reports" element={<RoutedPage><Reports /></RoutedPage>} />

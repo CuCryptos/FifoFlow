@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   useCreateRecipeDraft,
   useDeleteRecipeDraft,
@@ -76,6 +77,55 @@ export function Recipes() {
             setShowDraftComposer(true);
           }}
         />
+      )}
+    </WorkflowPage>
+  );
+}
+
+export function PromotedRecipeDetailPage() {
+  const { recipeVersionId } = useParams();
+  const { selectedVenueId } = useVenueContext();
+  const parsedRecipeVersionId = Number(recipeVersionId);
+  const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
+
+  const summary = (data?.summaries ?? []).find(
+    (candidate) => Number(candidate.recipe_version_id) === parsedRecipeVersionId,
+  ) ?? null;
+
+  return (
+    <WorkflowPage
+      eyebrow="Promoted Recipe Detail"
+      title="Inspect one promoted operational recipe without relying on the queue context."
+      description="This route is dedicated to a promoted recipe version. Operators can review readiness, version history, ingredient resolution, and costability on a stable detail page."
+      actions={(
+        <Link
+          to="/recipes"
+          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+        >
+          Back to Recipes
+        </Link>
+      )}
+    >
+      {isLoading ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          Loading promoted recipe detail...
+        </div>
+      ) : error instanceof Error ? (
+        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+          {error.message}
+        </div>
+      ) : !Number.isInteger(parsedRecipeVersionId) || parsedRecipeVersionId <= 0 ? (
+        <WorkflowEmptyState
+          title="Recipe version id is invalid"
+          body="The promoted recipe detail route requires a positive recipe version id."
+        />
+      ) : !summary ? (
+        <WorkflowEmptyState
+          title="Promoted recipe not visible in this scope"
+          body="That promoted recipe version is not available in the current venue scope. Switch venue context or return to the recipes workspace."
+        />
+      ) : (
+        <OperationalRecipeDetail summary={summary} />
       )}
     </WorkflowPage>
   );
@@ -339,12 +389,13 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const { data: drafts, isLoading: draftsLoading, error: draftsError } = useRecipeDrafts();
   const promoteDraft = usePromoteRecipeDraft();
   const { toast } = useToast();
-  const operationalWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
   const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
   const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>('all');
   const [draftSort, setDraftSort] = useState<DraftQueueSort>('updated_at');
+  const [visibleDraftCount, setVisibleDraftCount] = useState(12);
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
   const [queuePromotionOutcomes, setQueuePromotionOutcomes] = useState<Record<number, RecipeDraftPromotionResultPayload>>({});
 
@@ -402,6 +453,10 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
       setSelectedRecipeVersionId(selectedSummary.recipe_version_id);
     }
   }, [filteredSummaries, selectedRecipeVersionId, selectedSummary]);
+
+  useEffect(() => {
+    setVisibleDraftCount(12);
+  }, [draftFilter, draftFocusFilter, draftSort]);
 
   if (isLoading) {
     return <div className="text-text-secondary text-sm">Loading operational recipes...</div>;
@@ -513,7 +568,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
           />
         ) : (
           <div className="space-y-3">
-            {filteredDrafts.slice(0, 12).map((draft) => {
+            {filteredDrafts.slice(0, visibleDraftCount).map((draft) => {
               const promotionOutcome = queuePromotionOutcomes[Number(draft.id)] ?? {
                 promotion_link: draft.promotion_link,
                 costability_status: null,
@@ -551,6 +606,9 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                   <div className="text-xs text-slate-500 lg:text-right">
                     <div>{draft.ready_row_count}/{draft.ingredient_row_count} rows ready</div>
                     <div>{draft.unresolved_inventory_count} unmapped</div>
+                    {draft.source_type === 'template' ? (
+                      <div>{draft.unresolved_inventory_count} template rows unmapped</div>
+                    ) : null}
                   </div>
                   <div className="flex flex-col gap-2 lg:items-end">
                     <div className="text-xs text-slate-500 lg:text-right">
@@ -561,20 +619,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                       {draft.promotion_link?.recipe_version_id != null ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            const linkedSummary = summaries.find(
-                              (summary) => String(summary.recipe_version_id) === String(draft.promotion_link?.recipe_version_id),
-                            );
-
-                            if (!linkedSummary) {
-                              toast('Promoted recipe is not visible in the current venue scope.', 'error');
-                              return;
-                            }
-
-                            setStatusFilter('all');
-                            setSelectedRecipeVersionId(Number(linkedSummary.recipe_version_id));
-                            operationalWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }}
+                          onClick={() => navigate(`/recipes/promoted/${draft.promotion_link?.recipe_version_id}`)}
                           className="rounded-full border border-emerald-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
                         >
                           Open promoted recipe
@@ -633,11 +678,22 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                 </div>
               );
             })}
+            {filteredDrafts.length > visibleDraftCount ? (
+              <div className="flex justify-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleDraftCount((current) => current + 12)}
+                  className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                >
+                  Show more drafts
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </WorkflowPanel>
 
-      <div ref={operationalWorkspaceRef}>
+      <div>
         <WorkflowPanel
           title="Operational Recipe Workspace"
           description="Review promoted recipe readiness, inspect ingredient-level resolution, and see whether the current live data path is trustworthy enough for costing."
