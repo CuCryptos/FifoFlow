@@ -208,7 +208,14 @@ export function PromotedRecipeDetailPage() {
 
 export function DraftRecipeDetailPage() {
   const { draftId } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const parsedDraftId = Number(draftId);
+  const { data: draft, isLoading, error } = useRecipeDraft(Number.isInteger(parsedDraftId) && parsedDraftId > 0 ? parsedDraftId : 0);
+  const queueLane = readDraftQueueFilter();
+  const queueSource = readDraftQueueSourceFilter();
+  const queueLaneLabel = queueLane === 'all' ? 'All drafts' : queueLane.replaceAll('_', ' ').toLowerCase();
+  const queueSourceLabel = queueSource === 'all' ? 'all sources' : queueSource.replaceAll('_', ' ').toLowerCase();
 
   return (
     <WorkflowPage
@@ -216,18 +223,47 @@ export function DraftRecipeDetailPage() {
       title="Open one draft recipe directly for mapping, serving math, and promotion work."
       description="This route gives operators a stable draft detail page for handoff and focused cleanup outside the main queue."
       actions={(
-        <Link
-          to="/recipes"
-          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-        >
-          Back to Recipes
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/recipes')}
+            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            Back to queue lane
+          </button>
+          {Number.isInteger(parsedDraftId) && parsedDraftId > 0 ? (
+            <button
+              type="button"
+              onClick={() => copyRecipeOperatorId(`${window.location.origin}/recipes/drafts/${parsedDraftId}`, 'Draft detail link', toast)}
+              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              Copy draft detail link
+            </button>
+          ) : null}
+        </div>
       )}
     >
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-sm">
+        Returning to the recipes workspace will reopen the <span className="font-semibold text-slate-900">{queueLaneLabel}</span> lane with <span className="font-semibold text-slate-900">{queueSourceLabel}</span>.
+      </div>
       {!Number.isInteger(parsedDraftId) || parsedDraftId <= 0 ? (
         <WorkflowEmptyState
           title="Draft id is invalid"
           body="The draft detail route requires a positive draft id."
+        />
+      ) : isLoading ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+          Loading draft detail...
+        </div>
+      ) : error instanceof Error ? (
+        <WorkflowEmptyState
+          title="Draft could not be loaded"
+          body="This draft id is not available in the current runtime. It may have been deleted, promoted and removed from the draft queue, or you may be on a different runtime than the operator who shared the link."
+        />
+      ) : !draft ? (
+        <WorkflowEmptyState
+          title="Draft not found"
+          body="No persisted draft exists for this id in the current runtime. Return to the queue and reopen the current draft inventory."
         />
       ) : (
         <RecipeForm draftId={parsedDraftId} onDone={() => window.history.back()} />
@@ -433,14 +469,17 @@ type DraftQueueFilter = 'all' | 'READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'PROMOTED
 type DraftQueueFocusFilter = 'all' | 'TEMPLATE_DRAFTS' | 'TEMPLATE_UNMAPPED';
 type DraftQueueSort = 'updated_at' | 'unmapped_count' | 'promotion_readiness';
 type ComposerIngredientFilter = 'all' | 'UNRESOLVED_TEMPLATE' | 'MAPPED_TEMPLATE' | 'MANUAL';
+type OperationalWorkspaceSort = 'coverage_desc' | 'latest_cost_desc' | 'name_asc';
 
 const DEFAULT_DRAFT_PAGE_SIZE = 12;
 const DRAFT_PAGE_SIZE_STORAGE_KEY = 'fifoflow.recipeDraftQueue.pageSize';
+const DRAFT_QUEUE_STATUS_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.statusFilter';
 const DRAFT_QUEUE_SORT_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sort';
 const DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY = 'fifoflow.recipeDraftQueue.sourceFilter';
 const COMPOSER_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeComposer.filter';
 const OPERATIONAL_STATUS_FILTER_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.statusFilter';
 const OPERATIONAL_SELECTED_RECIPE_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.selectedRecipeVersion';
+const OPERATIONAL_SORT_STORAGE_KEY_PREFIX = 'fifoflow.recipeWorkspace.sort';
 
 function readDraftQueuePageSize(): number {
   if (typeof window === 'undefined') {
@@ -450,6 +489,17 @@ function readDraftQueuePageSize(): number {
   const raw = window.sessionStorage.getItem(DRAFT_PAGE_SIZE_STORAGE_KEY);
   const parsed = Number(raw);
   return [12, 24, 48].includes(parsed) ? parsed : DEFAULT_DRAFT_PAGE_SIZE;
+}
+
+function readDraftQueueFilter(): DraftQueueFilter {
+  if (typeof window === 'undefined') {
+    return 'all';
+  }
+
+  const raw = window.sessionStorage.getItem(DRAFT_QUEUE_STATUS_FILTER_STORAGE_KEY);
+  return raw === 'all' || raw === 'READY' || raw === 'NEEDS_REVIEW' || raw === 'BLOCKED' || raw === 'PROMOTED'
+    ? raw
+    : 'all';
 }
 
 function readDraftQueueSort(): DraftQueueSort {
@@ -510,6 +560,10 @@ function getOperationalSelectedRecipeStorageKey(venueId: number | null | undefin
   return `${OPERATIONAL_SELECTED_RECIPE_STORAGE_KEY_PREFIX}.${venueId != null ? venueId : 'all'}`;
 }
 
+function getOperationalSortStorageKey(venueId: number | null | undefined): string {
+  return `${OPERATIONAL_SORT_STORAGE_KEY_PREFIX}.${venueId != null ? venueId : 'all'}`;
+}
+
 function readSelectedOperationalRecipeVersionId(venueId: number | null | undefined): number | null {
   if (typeof window === 'undefined') {
     return null;
@@ -518,6 +572,17 @@ function readSelectedOperationalRecipeVersionId(venueId: number | null | undefin
   const raw = window.sessionStorage.getItem(getOperationalSelectedRecipeStorageKey(venueId));
   const parsed = raw ? Number(raw) : null;
   return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function readOperationalWorkspaceSort(venueId: number | null | undefined): OperationalWorkspaceSort {
+  if (typeof window === 'undefined') {
+    return 'coverage_desc';
+  }
+
+  const raw = window.sessionStorage.getItem(getOperationalSortStorageKey(venueId));
+  return raw === 'coverage_desc' || raw === 'latest_cost_desc' || raw === 'name_asc'
+    ? raw
+    : 'coverage_desc';
 }
 
 function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
@@ -642,10 +707,13 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(
     readSelectedOperationalRecipeVersionId(selectedVenueId),
   );
+  const [operationalSort, setOperationalSort] = useState<OperationalWorkspaceSort>(
+    readOperationalWorkspaceSort(selectedVenueId),
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>(
     readOperationalStatusFilter(selectedVenueId),
   );
-  const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
+  const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>(readDraftQueueFilter);
   const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>(readDraftQueueSourceFilter);
   const [draftSort, setDraftSort] = useState<DraftQueueSort>(readDraftQueueSort);
   const [draftPageSize, setDraftPageSize] = useState(readDraftQueuePageSize);
@@ -693,7 +761,23 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
       return new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
     });
   }, [draftFilter, draftFocusFilter, draftRows, draftSort]);
-  const filteredSummaries = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
+  const filteredSummaries = useMemo(() => {
+    const rows = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
+    return [...rows].sort((left, right) => {
+      if (operationalSort === 'latest_cost_desc') {
+        return (right.latest_snapshot?.total_cost ?? -1) - (left.latest_snapshot?.total_cost ?? -1)
+          || right.costable_percent - left.costable_percent
+          || left.recipe_name.localeCompare(right.recipe_name);
+      }
+      if (operationalSort === 'name_asc') {
+        return left.recipe_name.localeCompare(right.recipe_name)
+          || right.version_number - left.version_number;
+      }
+      return right.costable_percent - left.costable_percent
+        || right.resolved_row_count - left.resolved_row_count
+        || left.recipe_name.localeCompare(right.recipe_name);
+    });
+  }, [operationalSort, statusFilter, summaries]);
   const selectedSummary = filteredSummaries.find((summary) => summary.recipe_version_id === selectedRecipeVersionId)
     ?? filteredSummaries[0]
     ?? null;
@@ -734,6 +818,13 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     if (typeof window === 'undefined') {
       return;
     }
+    window.sessionStorage.setItem(DRAFT_QUEUE_STATUS_FILTER_STORAGE_KEY, draftFilter);
+  }, [draftFilter]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     window.sessionStorage.setItem(DRAFT_QUEUE_SOURCE_FILTER_STORAGE_KEY, draftFocusFilter);
   }, [draftFocusFilter]);
 
@@ -742,11 +833,22 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   }, [selectedVenueId]);
 
   useEffect(() => {
+    setOperationalSort(readOperationalWorkspaceSort(selectedVenueId));
+  }, [selectedVenueId]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
     window.sessionStorage.setItem(getOperationalStatusFilterStorageKey(selectedVenueId), statusFilter);
   }, [selectedVenueId, statusFilter]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.sessionStorage.setItem(getOperationalSortStorageKey(selectedVenueId), operationalSort);
+  }, [operationalSort, selectedVenueId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1053,18 +1155,32 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
           title="Operational Recipe Workspace"
           description="Review promoted recipe readiness, inspect ingredient-level resolution, and see whether the current live data path is trustworthy enough for costing."
           actions={(
-            <WorkflowFocusBar>
-              {([
-                ['all', 'All'],
-                ['COSTABLE_NOW', 'Costable Now'],
-                ['OPERATIONAL_ONLY', 'Operational Only'],
-                ['BLOCKED_FOR_COSTING', 'Blocked'],
-              ] as const).map(([value, label]) => (
-                <WorkflowChip key={value} active={statusFilter === value} onClick={() => setStatusFilter(value)}>
-                  {label}
-                </WorkflowChip>
-              ))}
-            </WorkflowFocusBar>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <WorkflowFocusBar>
+                {([
+                  ['all', 'All'],
+                  ['COSTABLE_NOW', 'Costable Now'],
+                  ['OPERATIONAL_ONLY', 'Operational Only'],
+                  ['BLOCKED_FOR_COSTING', 'Blocked'],
+                ] as const).map(([value, label]) => (
+                  <WorkflowChip key={value} active={statusFilter === value} onClick={() => setStatusFilter(value)}>
+                    {label}
+                  </WorkflowChip>
+                ))}
+              </WorkflowFocusBar>
+              <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Sort
+                <select
+                  value={operationalSort}
+                  onChange={(event) => setOperationalSort(event.target.value as OperationalWorkspaceSort)}
+                  className="bg-transparent text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-900 outline-none"
+                >
+                  <option value="coverage_desc">Coverage</option>
+                  <option value="latest_cost_desc">Latest cost</option>
+                  <option value="name_asc">Recipe name</option>
+                </select>
+              </label>
+            </div>
           )}
         >
           {!filteredSummaries.length ? (
