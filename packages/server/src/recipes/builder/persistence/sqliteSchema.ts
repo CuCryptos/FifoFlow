@@ -20,6 +20,10 @@ export function initializeRecipeBuilderDb(db: Database.Database): void {
       recipe_builder_job_id INTEGER NOT NULL REFERENCES recipe_builder_jobs(id) ON DELETE CASCADE,
       line_index INTEGER NOT NULL,
       raw_line_text TEXT NOT NULL,
+      source_template_ingredient_name TEXT,
+      source_template_quantity REAL,
+      source_template_unit TEXT,
+      source_template_sort_order INTEGER,
       quantity_raw TEXT,
       quantity_normalized REAL,
       unit_raw TEXT,
@@ -56,8 +60,12 @@ export function initializeRecipeBuilderDb(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       recipe_builder_job_id INTEGER NOT NULL UNIQUE REFERENCES recipe_builder_jobs(id) ON DELETE CASCADE,
       draft_name TEXT NOT NULL,
+      draft_notes TEXT,
       yield_quantity REAL,
       yield_unit TEXT,
+      serving_quantity REAL,
+      serving_unit TEXT,
+      serving_count REAL,
       completeness_status TEXT NOT NULL CHECK(completeness_status IN ('READY', 'NEEDS_REVIEW', 'BLOCKED', 'INCOMPLETE', 'CREATED')),
       costability_status TEXT NOT NULL CHECK(costability_status IN ('COSTABLE', 'NEEDS_REVIEW', 'NOT_COSTABLE')),
       ingredient_row_count INTEGER NOT NULL DEFAULT 0,
@@ -112,4 +120,26 @@ export function initializeRecipeBuilderDb(db: Database.Database): void {
       UPDATE recipe_builder_draft_recipes SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
   `);
+
+  ensureColumn(db, 'recipe_builder_draft_recipes', 'draft_notes', 'TEXT');
+  ensureColumn(db, 'recipe_builder_draft_recipes', 'serving_quantity', 'REAL');
+  ensureColumn(db, 'recipe_builder_draft_recipes', 'serving_unit', 'TEXT');
+  ensureColumn(db, 'recipe_builder_draft_recipes', 'serving_count', 'REAL');
+  ensureColumn(db, 'recipe_builder_parsed_rows', 'source_template_ingredient_name', 'TEXT');
+  ensureColumn(db, 'recipe_builder_parsed_rows', 'source_template_quantity', 'REAL');
+  ensureColumn(db, 'recipe_builder_parsed_rows', 'source_template_unit', 'TEXT');
+  ensureColumn(db, 'recipe_builder_parsed_rows', 'source_template_sort_order', 'INTEGER');
+}
+
+function ensureColumn(
+  db: Database.Database,
+  tableName: string,
+  columnName: string,
+  columnDefinition: string,
+): void {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
 }

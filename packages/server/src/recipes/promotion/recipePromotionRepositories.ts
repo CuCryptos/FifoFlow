@@ -68,10 +68,33 @@ export class SQLiteRecipePromotionRepository implements RecipePromotionRepositor
     return row ? mapPromotionLinkRow(row) : null;
   }
 
-  async createRecipe(input: { name: string; type: Recipe['type']; notes?: string | null }): Promise<Recipe> {
+  async createRecipe(input: {
+    name: string;
+    type: Recipe['type'];
+    notes?: string | null;
+    serving_quantity?: number | null;
+    serving_unit?: string | null;
+    serving_count?: number | null;
+  }): Promise<Recipe> {
     const result = this.db.prepare(
-      'INSERT INTO recipes (name, type, notes) VALUES (?, ?, ?)',
-    ).run(input.name, input.type, input.notes ?? null);
+      `
+        INSERT INTO recipes (
+          name,
+          type,
+          notes,
+          serving_quantity,
+          serving_unit,
+          serving_count
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `,
+    ).run(
+      input.name,
+      input.type,
+      input.notes ?? null,
+      input.serving_quantity ?? null,
+      input.serving_unit ?? null,
+      input.serving_count ?? null,
+    );
     const recipe = await this.getRecipeById(Number(result.lastInsertRowid));
     if (!recipe) {
       throw new Error('Failed to load created recipe.');
@@ -82,6 +105,44 @@ export class SQLiteRecipePromotionRepository implements RecipePromotionRepositor
   async getRecipeById(id: number | string): Promise<Recipe | null> {
     const row = this.db.prepare('SELECT * FROM recipes WHERE id = ? LIMIT 1').get(id) as RecipeRow | undefined;
     return row ? mapRecipeRow(row) : null;
+  }
+
+  async updateRecipeMetadata(input: {
+    recipe_id: number | string;
+    name: string;
+    type: Recipe['type'];
+    notes?: string | null;
+    serving_quantity?: number | null;
+    serving_unit?: string | null;
+    serving_count?: number | null;
+  }): Promise<Recipe> {
+    this.db.prepare(
+      `
+        UPDATE recipes
+        SET name = ?,
+            type = ?,
+            notes = ?,
+            serving_quantity = ?,
+            serving_unit = ?,
+            serving_count = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+      `,
+    ).run(
+      input.name,
+      input.type,
+      input.notes ?? null,
+      input.serving_quantity ?? null,
+      input.serving_unit ?? null,
+      input.serving_count ?? null,
+      input.recipe_id,
+    );
+
+    const recipe = await this.getRecipeById(input.recipe_id);
+    if (!recipe) {
+      throw new Error('Failed to load updated recipe.');
+    }
+    return recipe;
   }
 
   async createRecipeVersion(input: {

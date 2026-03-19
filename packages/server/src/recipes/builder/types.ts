@@ -14,19 +14,27 @@ import type { TemplateIngredientMappingStatus } from '../../mapping/templates/ty
 export interface RecipeBuilderFreeformInput {
   source_type: 'freeform';
   draft_name?: string | null;
+  draft_notes?: string | null;
   source_text: string;
   yield_quantity?: number | null;
   yield_unit?: string | null;
+  serving_quantity?: number | null;
+  serving_unit?: string | null;
+  serving_count?: number | null;
   source_recipe_type?: RecipeType | null;
 }
 
 export interface RecipeBuilderTemplateInput {
   source_type: 'template';
   draft_name?: string | null;
+  draft_notes?: string | null;
   source_template_id: number;
   source_template_version_id?: number | null;
   yield_quantity?: number | null;
   yield_unit?: string | null;
+  serving_quantity?: number | null;
+  serving_unit?: string | null;
+  serving_count?: number | null;
   source_recipe_type?: RecipeType | null;
 }
 
@@ -149,12 +157,17 @@ export function deriveDraftCompletenessStatus(input: {
   reviewRows: number;
   unresolvedCanonicalRows: number;
   hasYield: boolean;
+  requiresServingMath?: boolean;
+  hasServingMath?: boolean;
 }): RecipeBuilderReviewStatus {
   if (input.blockedRows > 0) {
     return 'BLOCKED';
   }
   if (input.reviewRows > 0 || input.unresolvedCanonicalRows > 0) {
     return 'NEEDS_REVIEW';
+  }
+  if (input.requiresServingMath && !input.hasServingMath) {
+    return 'INCOMPLETE';
   }
   if (!input.hasYield) {
     return 'INCOMPLETE';

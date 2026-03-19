@@ -209,14 +209,6 @@ export function initializeDb(db: Database.Database): void {
       UNIQUE(recipe_id, item_id)
     );
 
-    CREATE TABLE IF NOT EXISTS product_recipes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
-      recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-      portions_per_guest REAL NOT NULL DEFAULT 1.0 CHECK(portions_per_guest > 0),
-      UNIQUE(venue_id, recipe_id)
-    );
-
     CREATE TRIGGER IF NOT EXISTS update_recipe_timestamp
     AFTER UPDATE ON recipes
     BEGIN
@@ -225,8 +217,6 @@ export function initializeDb(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe_id ON recipe_items(recipe_id);
     CREATE INDEX IF NOT EXISTS idx_recipe_items_item_id ON recipe_items(item_id);
-    CREATE INDEX IF NOT EXISTS idx_product_recipes_venue_id ON product_recipes(venue_id);
-    CREATE INDEX IF NOT EXISTS idx_product_recipes_recipe_id ON product_recipes(recipe_id);
 
     CREATE TABLE IF NOT EXISTS forecasts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

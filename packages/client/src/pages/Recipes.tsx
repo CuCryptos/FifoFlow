@@ -1,5 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useRecipe, useCreateRecipe, useUpdateRecipe } from '../hooks/useRecipes';
+import {
+  useCreateRecipeDraft,
+  useDeleteRecipeDraft,
+  usePromoteRecipeDraft,
+  useRecipeDraft,
+  useRecipeDrafts,
+  useUpdateRecipeDraft,
+} from '../hooks/useRecipeDrafts';
 import { useItems } from '../hooks/useItems';
 import { useVendors } from '../hooks/useVendors';
 import { useOperationalRecipeWorkflow, useOperationalRecipeWorkflowDetail } from '../hooks/useRecipeWorkflow';
@@ -21,12 +28,14 @@ import type { Item, Unit } from '@fifoflow/shared';
 import type {
   OperationalRecipeIngredientRowPayload,
   OperationalRecipeWorkflowSummaryPayload,
+  RecipeDraftSummaryPayload,
   RecipeTemplateDetailPayload,
   RecipeWorkflowIngredientDiffPayload,
 } from '../api';
 
 export function Recipes() {
   const [showDraftComposer, setShowDraftComposer] = useState(false);
+  const [activeDraftId, setActiveDraftId] = useState<number | null>(null);
 
   return (
     <WorkflowPage
@@ -36,7 +45,10 @@ export function Recipes() {
       actions={(
         <div className="flex flex-wrap items-center justify-end gap-3">
           <button
-            onClick={() => setShowDraftComposer(true)}
+            onClick={() => {
+              setActiveDraftId(null);
+              setShowDraftComposer(true);
+            }}
             className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
           >
             New Draft Recipe
@@ -45,9 +57,24 @@ export function Recipes() {
       )}
     >
       {showDraftComposer ? (
-        <RecipeForm onDone={() => setShowDraftComposer(false)} />
+        <RecipeForm
+          draftId={activeDraftId ?? undefined}
+          onDone={() => {
+            setShowDraftComposer(false);
+            setActiveDraftId(null);
+          }}
+        />
       ) : (
-        <OperationalRecipes onAddRecipe={() => setShowDraftComposer(true)} />
+        <OperationalRecipes
+          onAddRecipe={() => {
+            setActiveDraftId(null);
+            setShowDraftComposer(true);
+          }}
+          onOpenDraft={(draftId) => {
+            setActiveDraftId(draftId);
+            setShowDraftComposer(true);
+          }}
+        />
       )}
     </WorkflowPage>
   );
@@ -70,6 +97,18 @@ function formatYield(summary: OperationalRecipeWorkflowSummaryPayload): string {
     return 'Yield not set';
   }
   return `${summary.yield_qty} ${summary.yield_unit}`;
+}
+
+function formatDraftTimestamp(value: string | undefined): string {
+  if (!value) {
+    return 'Updated just now';
+  }
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function trimRecipeNumber(value: number | null | undefined): string {
@@ -221,11 +260,28 @@ function formatInventoryMappingContext(item: Item | undefined, vendorName: strin
     .join(' • ');
 }
 
-function OperationalRecipes({ onAddRecipe }: { onAddRecipe: () => void }) {
+function DraftStatusBadge({ draft }: { draft: RecipeDraftSummaryPayload }) {
+  if (draft.completeness_status === 'READY') {
+    return <WorkflowStatusPill tone="green">Ready draft</WorkflowStatusPill>;
+  }
+  if (draft.completeness_status === 'BLOCKED') {
+    return <WorkflowStatusPill tone="red">Blocked draft</WorkflowStatusPill>;
+  }
+  if (draft.completeness_status === 'INCOMPLETE') {
+    return <WorkflowStatusPill tone="amber">Incomplete draft</WorkflowStatusPill>;
+  }
+  return <WorkflowStatusPill tone="slate">Needs review</WorkflowStatusPill>;
+}
+
+function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => void; onOpenDraft: (draftId: number) => void }) {
   const { selectedVenueId } = useVenueContext();
   const { data, isLoading, error } = useOperationalRecipeWorkflow(selectedVenueId);
+  const { data: drafts, isLoading: draftsLoading, error: draftsError } = useRecipeDrafts();
+  const promoteDraft = usePromoteRecipeDraft();
+  const { toast } = useToast();
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
+  const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
 
   const summaries = data?.summaries ?? [];
   const filteredSummaries = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
@@ -278,6 +334,118 @@ function OperationalRecipes({ onAddRecipe }: { onAddRecipe: () => void }) {
           tone="red"
         />
       </WorkflowMetricGrid>
+
+      <WorkflowPanel
+        title="Draft Queue"
+        description="Persisted recipe drafts now live on the promotion-native builder path. Reopen them here, finish serving math and mapping, then promote when they are trustworthy."
+        actions={(
+          <button
+            onClick={onAddRecipe}
+            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            New Draft Recipe
+          </button>
+        )}
+      >
+        {draftsLoading ? (
+          <div className="text-sm text-slate-500">Loading draft queue...</div>
+        ) : draftsError instanceof Error ? (
+          <div className="text-sm text-rose-600">{draftsError.message}</div>
+        ) : !drafts?.length ? (
+          <WorkflowEmptyState
+            title="No persisted drafts yet"
+            body="Start a draft from a template or from scratch. FIFOFlow will keep it on the builder path until it is ready for operational promotion."
+            action={(
+              <button
+                onClick={onAddRecipe}
+                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Start a draft
+              </button>
+            )}
+          />
+        ) : (
+          <div className="space-y-3">
+            {drafts.slice(0, 8).map((draft) => (
+              <div
+                key={String(draft.id)}
+                className="grid gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50 lg:grid-cols-[minmax(0,1.15fr)_auto_minmax(210px,auto)]"
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenDraft(Number(draft.id))}
+                  className="min-w-0 text-left"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-950">{draft.draft_name}</span>
+                    <DraftStatusBadge draft={draft} />
+                    {draft.promotion_link ? <WorkflowStatusPill tone="slate">Promoted</WorkflowStatusPill> : null}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {draft.source_recipe_type ?? 'prep'} • {draft.source_type === 'template' ? 'Template draft' : 'Manual draft'} • {draft.ingredient_row_count} rows
+                  </div>
+                </button>
+                <div className="text-xs text-slate-500 lg:text-right">
+                  <div>{draft.ready_row_count}/{draft.ingredient_row_count} rows ready</div>
+                  <div>{draft.unresolved_inventory_count} unmapped</div>
+                </div>
+                <div className="flex flex-col gap-2 lg:items-end">
+                  <div className="text-xs text-slate-500 lg:text-right">
+                    <div>{formatDraftTimestamp(draft.updated_at)}</div>
+                    <div>{draft.promotion_link ? 'Revision-ready' : 'Not yet promoted'}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => onOpenDraft(Number(draft.id))}
+                      className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:text-slate-950"
+                    >
+                      Open draft
+                    </button>
+                    <button
+                      type="button"
+                      disabled={promoteDraft.isPending || queuePromotionDraftId != null || draft.completeness_status !== 'READY'}
+                      onClick={() => {
+                        setQueuePromotionDraftId(Number(draft.id));
+                        promoteDraft.mutate(
+                          { id: Number(draft.id) },
+                          {
+                            onSuccess: () => {
+                              toast(draft.promotion_link ? 'Revision promoted' : 'Recipe promoted', 'success');
+                            },
+                            onError: (mutationError) => {
+                              toast(mutationError.message, 'error');
+                            },
+                            onSettled: () => {
+                              setQueuePromotionDraftId((current) => (current === Number(draft.id) ? null : current));
+                            },
+                          },
+                        );
+                      }}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+                        draft.completeness_status === 'READY'
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-200'
+                          : 'bg-slate-200 text-slate-500 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      {queuePromotionDraftId === Number(draft.id)
+                        ? 'Promoting...'
+                        : draft.promotion_link
+                          ? 'Promote revision'
+                          : 'Promote draft'}
+                    </button>
+                  </div>
+                  {draft.completeness_status !== 'READY' ? (
+                    <div className="text-[11px] text-amber-700 lg:text-right">
+                      Finish this draft inside the composer before promoting it.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </WorkflowPanel>
 
       <WorkflowPanel
         title="Operational Recipe Workspace"
@@ -929,18 +1097,22 @@ interface IngredientRow {
   template_quantity: number | null;
   template_unit: string | null;
   template_sort_order: number | null;
+  template_canonical_ingredient_id: number | null;
 }
 
-function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => void }) {
-  const { data: existing } = useRecipe(recipeId ?? 0);
+function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onDone: () => void }) {
+  const [draftId, setDraftId] = useState<number | null>(initialDraftId ?? null);
+  const { data: existing } = useRecipeDraft(draftId ?? 0);
   const { data: items } = useItems();
   const { data: vendors } = useVendors();
   const { data: templates, isLoading: templatesLoading } = useRecipeTemplates();
-  const createRecipe = useCreateRecipe();
-  const updateRecipe = useUpdateRecipe();
+  const createDraft = useCreateRecipeDraft();
+  const updateDraft = useUpdateRecipeDraft();
+  const deleteDraft = useDeleteRecipeDraft();
+  const promoteDraft = usePromoteRecipeDraft();
   const { toast } = useToast();
 
-  const [creationMode, setCreationMode] = useState<'template' | 'blank' | null>(recipeId ? 'blank' : null);
+  const [creationMode, setCreationMode] = useState<'template' | 'blank' | null>(draftId ? 'blank' : null);
   const [templateSearch, setTemplateSearch] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
   const [name, setName] = useState('');
@@ -959,6 +1131,7 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
     template_quantity: null,
     template_unit: null,
     template_sort_order: null,
+    template_canonical_ingredient_id: null,
   }]);
   const [initialized, setInitialized] = useState(false);
   const [appliedTemplateVersionId, setAppliedTemplateVersionId] = useState<number | null>(null);
@@ -970,29 +1143,31 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
       return;
     }
 
-    if (recipeId && !existing) {
+    if (draftId && !existing) {
       return;
     }
 
     if (existing) {
-      setCreationMode('blank');
-      setName(existing.name);
-      setType(existing.type);
-      setNotes(existing.notes ?? '');
+      setCreationMode(existing.source_type === 'template' ? 'template' : 'blank');
+      setSelectedTemplateId(existing.source_template_id);
+      setName(existing.draft_name);
+      setType(existing.source_recipe_type ?? 'prep');
+      setNotes(existing.draft_notes ?? '');
       setYieldQuantity(existing.yield_quantity != null ? String(existing.yield_quantity) : '');
       setYieldUnit(existing.yield_unit ?? 'each');
       setServingQuantity(existing.serving_quantity != null ? String(existing.serving_quantity) : '');
       setServingUnit(existing.serving_unit ?? 'each');
       setServingCountOverride(existing.serving_count != null ? String(existing.serving_count) : '');
-      setIngredients(existing.items.length > 0
-        ? existing.items.map((ingredient) => ({
-            item_id: ingredient.item_id,
-            quantity: String(ingredient.quantity),
-            unit: ingredient.unit,
-            template_ingredient_name: null,
-            template_quantity: null,
-            template_unit: null,
-            template_sort_order: null,
+      setIngredients(existing.ingredient_rows.length > 0
+        ? existing.ingredient_rows.map((ingredient) => ({
+            item_id: ingredient.item_id ?? 0,
+            quantity: ingredient.quantity != null ? String(ingredient.quantity) : '',
+            unit: ingredient.unit ?? 'each',
+            template_ingredient_name: ingredient.template_ingredient_name,
+            template_quantity: ingredient.template_quantity,
+            template_unit: ingredient.template_unit,
+            template_sort_order: ingredient.template_sort_order,
+            template_canonical_ingredient_id: ingredient.template_ingredient_name ? Number(ingredient.canonical_ingredient_id ?? 0) || null : null,
           }))
         : [{
             item_id: 0,
@@ -1002,12 +1177,13 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
             template_quantity: null,
             template_unit: null,
             template_sort_order: null,
+            template_canonical_ingredient_id: null,
           }]);
-      setAppliedTemplateVersionId(null);
+      setAppliedTemplateVersionId(existing.source_template_version_id);
     }
 
     setInitialized(true);
-  }, [existing, initialized, recipeId]);
+  }, [draftId, existing, initialized]);
 
   useEffect(() => {
     if (creationMode !== 'template' || !templates?.length || selectedTemplateId != null) {
@@ -1033,6 +1209,7 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
     template_quantity: null,
     template_unit: null,
     template_sort_order: null,
+    template_canonical_ingredient_id: null,
   });
 
   const addIngredient = () => {
@@ -1120,11 +1297,12 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
       template_quantity: ingredient.qty,
       template_unit: coerceRecipeUnit(ingredient.unit),
       template_sort_order: ingredient.sort_order,
+      template_canonical_ingredient_id: ingredient.template_canonical_ingredient_id,
     })));
   };
 
   const resetDraftForMode = (mode: 'template' | 'blank') => {
-    if (recipeId) {
+    if (draftId) {
       return;
     }
 
@@ -1144,37 +1322,90 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
   };
 
   const handleSubmit = () => {
-    const data = {
-      name,
-      type,
-      notes: notes || null,
+    const data: Parameters<typeof createDraft.mutate>[0] = {
+      draft_name: name,
+      draft_notes: notes || null,
+      source_recipe_type: type,
+      creation_mode: creationMode === 'template' ? 'template' : 'blank',
+      source_template_id: creationMode === 'template' ? selectedTemplateId : null,
+      source_template_version_id: creationMode === 'template' ? appliedTemplateVersionId : null,
       yield_quantity: yieldQuantity ? Number(yieldQuantity) : null,
       yield_unit: yieldQuantity && yieldUnit ? yieldUnit as Unit : null,
       serving_quantity: servingQuantity ? Number(servingQuantity) : null,
       serving_unit: servingQuantity && servingUnit ? servingUnit as Unit : null,
       serving_count: effectiveServingCount && effectiveServingCount > 0 ? effectiveServingCount : null,
-      items: ingredients
-        .filter((ingredient) => ingredient.item_id > 0 && Number(ingredient.quantity) > 0)
-        .map((ingredient) => ({ item_id: ingredient.item_id, quantity: Number(ingredient.quantity), unit: ingredient.unit })),
+      ingredients: ingredients
+        .filter((ingredient) =>
+          ingredient.item_id > 0
+          || Number(ingredient.quantity) > 0
+          || Boolean(ingredient.template_ingredient_name),
+        )
+        .map((ingredient) => ({
+          item_id: ingredient.item_id > 0 ? ingredient.item_id : null,
+          quantity: Number(ingredient.quantity) > 0 ? Number(ingredient.quantity) : null,
+          unit: ingredient.unit || null,
+          template_ingredient_name: ingredient.template_ingredient_name,
+          template_quantity: ingredient.template_quantity,
+          template_unit: ingredient.template_unit,
+          template_sort_order: ingredient.template_sort_order,
+          template_canonical_ingredient_id: ingredient.template_canonical_ingredient_id,
+        })),
     };
 
-    if (recipeId) {
-      updateRecipe.mutate({ id: recipeId, data }, {
-        onSuccess: () => { toast('Recipe updated', 'success'); onDone(); },
+    if (draftId) {
+      updateDraft.mutate({ id: draftId, data }, {
+        onSuccess: () => { toast('Draft saved', 'success'); },
         onError: (err) => toast(err.message, 'error'),
       });
       return;
     }
 
-    createRecipe.mutate(data, {
-      onSuccess: () => { toast('Recipe created', 'success'); onDone(); },
+    createDraft.mutate(data, {
+      onSuccess: (draft) => {
+        setDraftId(Number(draft.id));
+        toast('Draft saved', 'success');
+      },
       onError: (err) => toast(err.message, 'error'),
     });
   };
 
-  const isPending = createRecipe.isPending || updateRecipe.isPending;
+  const handleDeleteDraft = () => {
+    if (!draftId) {
+      return;
+    }
+    deleteDraft.mutate(draftId, {
+      onSuccess: () => {
+        toast('Draft deleted', 'success');
+        onDone();
+      },
+      onError: (err) => toast(err.message, 'error'),
+    });
+  };
 
-  if (!recipeId && creationMode == null) {
+  const handlePromoteDraft = () => {
+    if (!draftId) {
+      return;
+    }
+    promoteDraft.mutate({ id: draftId }, {
+      onSuccess: () => {
+        toast(existing?.promotion_link ? 'Revision promoted' : 'Recipe promoted', 'success');
+        onDone();
+      },
+      onError: (err) => toast(err.message, 'error'),
+    });
+  };
+
+  const isPending = createDraft.isPending || updateDraft.isPending || deleteDraft.isPending || promoteDraft.isPending;
+
+  if (draftId && !initialized) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm text-sm text-slate-500">
+        Loading saved draft...
+      </div>
+    );
+  }
+
+  if (!draftId && creationMode == null) {
     return (
       <div className="space-y-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1224,7 +1455,7 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">
-              {recipeId ? 'Edit Recipe' : 'New Recipe'}
+              {draftId ? 'Edit Draft Recipe' : 'New Draft Recipe'}
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               {creationMode === 'template'
@@ -1233,7 +1464,7 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {!recipeId && (
+            {!draftId && (
               <button
                 type="button"
                 onClick={() => resetDraftForMode(creationMode === 'template' ? 'blank' : 'template')}
@@ -1695,13 +1926,13 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-slate-500">Estimated batch cost</dt>
                 <dd className="font-semibold text-slate-950">
-                  {existing?.total_cost != null ? `$${existing.total_cost.toFixed(2)}` : 'Preview after save'}
+                  {existing?.promotion_link ? 'See operational cost snapshots' : 'Preview after promotion'}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-slate-500">Estimated cost / serving</dt>
                 <dd className="font-semibold text-slate-950">
-                  {existing?.cost_per_serving != null ? `$${existing.cost_per_serving.toFixed(2)}` : 'Preview after save'}
+                  {existing?.promotion_link ? 'See operational cost snapshots' : 'Preview after promotion'}
                 </dd>
               </div>
             </dl>
@@ -1726,14 +1957,19 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
             </div>
           </div>
 
-          {createRecipe.error && (
+          {createDraft.error && (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {createRecipe.error.message}
+              {createDraft.error.message}
             </div>
           )}
-          {updateRecipe.error && (
+          {updateDraft.error && (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {updateRecipe.error.message}
+              {updateDraft.error.message}
+            </div>
+          )}
+          {promoteDraft.error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {promoteDraft.error.message}
             </div>
           )}
         </div>
@@ -1749,17 +1985,34 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
           onClick={onDone}
           className="border border-border text-text-secondary px-4 py-2 rounded-lg text-sm hover:bg-bg-hover transition-colors"
         >
-          Cancel
+          Return to workspace
         </button>
+        {draftId ? (
+          <button
+            onClick={handleDeleteDraft}
+            disabled={isPending}
+            className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-40"
+          >
+            Delete Draft
+          </button>
+        ) : null}
         <button
           onClick={handleSubmit}
           disabled={isPending || !name.trim() || saveBlockingReason != null}
           className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 transition-colors"
         >
-          {recipeId ? 'Save Draft Changes' : 'Create Draft Recipe'}
+          {draftId ? 'Save Draft Changes' : 'Create Draft Recipe'}
         </button>
+        {draftId ? (
+          <button
+            onClick={handlePromoteDraft}
+            disabled={isPending || !usageReady}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:opacity-40"
+          >
+            {existing?.promotion_link ? 'Promote Revision' : 'Promote to Operations'}
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
-

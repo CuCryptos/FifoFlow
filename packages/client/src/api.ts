@@ -25,14 +25,12 @@ import type {
   CloseCountSessionInput,
   CreateItemInput,
   CreateCountSessionInput,
-  CreateRecipeInput,
   CreateStorageAreaInput,
   CreateVendorInput,
   CreateVendorPriceInput,
   CreateVenueInput,
   CreateOrderInput,
   UpdateOrderInput,
-  UpdateRecipeInput,
   UpdateVendorPriceInput,
   RecordCountEntryInput,
   SetItemCountInput,
@@ -336,7 +334,63 @@ export interface RecipeTemplateDetailPayload extends RecipeTemplateSummaryPayloa
     qty: number;
     unit: string;
     sort_order: number;
+    template_canonical_ingredient_id: number | null;
+    template_canonical_name: string | null;
+    template_mapping_status: string | null;
   }>;
+}
+
+export interface RecipeDraftIngredientPayload {
+  parsed_row_id: number | string;
+  resolution_row_id: number | string | null;
+  line_index: number;
+  raw_ingredient_text: string;
+  quantity: number | null;
+  unit: string | null;
+  item_id: number | null;
+  item_name: string | null;
+  template_ingredient_name: string | null;
+  template_quantity: number | null;
+  template_unit: string | null;
+  template_sort_order: number | null;
+  canonical_ingredient_id: number | string | null;
+  canonical_ingredient_name: string | null;
+  canonical_match_status: string | null;
+  inventory_mapping_status: string | null;
+  review_status: string | null;
+  mapping_explanation: string | null;
+}
+
+export interface RecipeDraftSummaryPayload {
+  id: number | string;
+  recipe_builder_job_id: number | string;
+  draft_name: string;
+  draft_notes: string | null;
+  source_type: 'freeform' | 'template';
+  source_template_id: number | null;
+  source_template_version_id: number | null;
+  source_recipe_type: 'dish' | 'prep' | null;
+  yield_quantity: number | null;
+  yield_unit: string | null;
+  serving_quantity: number | null;
+  serving_unit: string | null;
+  serving_count: number | null;
+  completeness_status: 'READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'INCOMPLETE' | 'CREATED';
+  costability_status: 'COSTABLE' | 'NEEDS_REVIEW' | 'NOT_COSTABLE';
+  ingredient_row_count: number;
+  ready_row_count: number;
+  review_row_count: number;
+  blocked_row_count: number;
+  unresolved_canonical_count: number;
+  unresolved_inventory_count: number;
+  job_status: 'PENDING' | 'PARSED' | 'ASSEMBLED' | 'NEEDS_REVIEW' | 'BLOCKED' | 'CREATED' | 'FAILED';
+  promotion_link: { recipe_id: number | string; recipe_version_id: number | string | null } | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RecipeDraftDetailPayload extends RecipeDraftSummaryPayload {
+  ingredient_rows: RecipeDraftIngredientPayload[];
 }
 
 export interface PackFreshnessEntryPayload {
@@ -598,12 +652,23 @@ export const api = {
   recipes: {
     list: () => fetchJson<RecipeWithCost[]>('/recipes'),
     get: (id: number) => fetchJson<RecipeDetail>(`/recipes/${id}`),
-    create: (data: CreateRecipeInput) =>
-      fetchJson<RecipeDetail>('/recipes', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: number, data: UpdateRecipeInput) =>
-      fetchJson<RecipeDetail>(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) =>
       fetchJson<void>(`/recipes/${id}`, { method: 'DELETE' }),
+  },
+  recipeDrafts: {
+    list: () => fetchJson<{ drafts: RecipeDraftSummaryPayload[] }>('/recipe-drafts'),
+    get: (id: number) => fetchJson<RecipeDraftDetailPayload>(`/recipe-drafts/${id}`),
+    create: (data: unknown) =>
+      fetchJson<RecipeDraftDetailPayload>('/recipe-drafts', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: unknown) =>
+      fetchJson<RecipeDraftDetailPayload>(`/recipe-drafts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      fetchJson<void>(`/recipe-drafts/${id}`, { method: 'DELETE' }),
+    promote: (id: number, data?: { created_by?: string; notes?: string | null }) =>
+      fetchJson<{
+        draft: RecipeDraftDetailPayload | null;
+        promotion: Record<string, unknown>;
+      }>(`/recipe-drafts/${id}/promote`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
   },
   recipeTemplates: {
     list: () => fetchJson<{ templates: RecipeTemplateSummaryPayload[] }>('/recipe-templates'),

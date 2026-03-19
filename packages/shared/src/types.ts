@@ -324,6 +324,10 @@ export interface RecipeBuilderParsedRow {
   recipe_builder_job_id: number | string;
   line_index: number;
   raw_line_text: string;
+  source_template_ingredient_name: string | null;
+  source_template_quantity: number | null;
+  source_template_unit: string | null;
+  source_template_sort_order: number | null;
   quantity_raw: string | null;
   quantity_normalized: number | null;
   unit_raw: string | null;
@@ -358,8 +362,12 @@ export interface RecipeBuilderDraftRecipe {
   id: number | string;
   recipe_builder_job_id: number | string;
   draft_name: string;
+  draft_notes: string | null;
   yield_quantity: number | null;
   yield_unit: string | null;
+  serving_quantity: number | null;
+  serving_unit: string | null;
+  serving_count: number | null;
   completeness_status: RecipeBuilderReviewStatus;
   costability_status: RecipeBuilderCostabilityStatus;
   ingredient_row_count: number;
@@ -371,47 +379,6 @@ export interface RecipeBuilderDraftRecipe {
   source_recipe_type: RecipeType | null;
   created_at?: string;
   updated_at?: string;
-}
-
-export interface ProductRecipe {
-  id: number;
-  venue_id: number;
-  venue_name: string;
-  recipe_id: number;
-  recipe_name: string;
-  recipe_type: RecipeType;
-  portions_per_guest: number;
-}
-
-export interface IngredientSource {
-  recipe_name: string;
-  quantity_per_guest: number;
-  guest_count: number;
-  subtotal: number;
-}
-
-export interface CalculatedIngredient {
-  item_id: number;
-  item_name: string;
-  item_unit: Unit;
-  recipe_unit: string;
-  total_needed: number;
-  total_needed_order: number | null;
-  current_qty: number;
-  converted_stock: number | null;
-  shortage: number;
-  shortage_order: number | null;
-  vendor_id: number | null;
-  vendor_name: string | null;
-  order_unit: Unit | null;
-  order_unit_price: number | null;
-  estimated_cost: number | null;
-  sources: IngredientSource[];
-}
-
-export interface OrderCalculationResult {
-  ingredients: CalculatedIngredient[];
-  total_estimated_cost: number;
 }
 
 export interface InvoiceLine {

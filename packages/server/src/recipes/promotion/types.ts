@@ -71,6 +71,9 @@ export type RecipePromotionBlockingCode =
   | 'MISSING_DRAFT_NAME'
   | 'MISSING_YIELD_QUANTITY'
   | 'MISSING_YIELD_UNIT'
+  | 'MISSING_SERVING_QUANTITY'
+  | 'MISSING_SERVING_UNIT'
+  | 'MISSING_SERVING_COUNT'
   | 'BLOCKED_ROW_PRESENT'
   | 'UNRESOLVED_CANONICAL_IDENTITY'
   | 'UNTRUSTED_PARSE_ROW'
@@ -121,7 +124,23 @@ export interface RecipePromotionRepository {
   withTransaction<T>(work: () => Promise<T>): Promise<T>;
   loadDraftContext(jobId: number | string): Promise<RecipePromotionDraftContext | null>;
   getActivePromotionLink(draftId: number | string): Promise<RecipeBuilderPromotionLink | null>;
-  createRecipe(input: { name: string; type: RecipeType; notes?: string | null }): Promise<Recipe>;
+  createRecipe(input: {
+    name: string;
+    type: RecipeType;
+    notes?: string | null;
+    serving_quantity?: number | null;
+    serving_unit?: string | null;
+    serving_count?: number | null;
+  }): Promise<Recipe>;
+  updateRecipeMetadata(input: {
+    recipe_id: number | string;
+    name: string;
+    type: RecipeType;
+    notes?: string | null;
+    serving_quantity?: number | null;
+    serving_unit?: string | null;
+    serving_count?: number | null;
+  }): Promise<Recipe>;
   getRecipeById(id: number | string): Promise<Recipe | null>;
   createRecipeVersion(input: {
     recipe_id: number | string;

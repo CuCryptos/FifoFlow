@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { UNITS } from '@fifoflow/shared';
+import { SQLiteRecipeBuilderRepository } from '../recipes/builder/index.js';
 
 function normalizeTemplateUnit(value: string | null | undefined): string | null {
   if (!value) {
@@ -22,6 +23,7 @@ function normalizeTemplateUnit(value: string | null | undefined): string | null 
 
 export function createRecipeTemplateRoutes(db: Database.Database): Router {
   const router = Router();
+  const builderRepository = new SQLiteRecipeBuilderRepository(db);
 
   router.get('/', (_req, res) => {
     const templates = db.prepare(
@@ -63,7 +65,7 @@ export function createRecipeTemplateRoutes(db: Database.Database): Router {
     });
   });
 
-  router.get('/:templateId', (req, res) => {
+  router.get('/:templateId', async (req, res) => {
     const templateId = Number(req.params.templateId);
     if (!Number.isInteger(templateId) || templateId <= 0) {
       res.status(400).json({ error: 'Template id must be a positive integer.' });
@@ -102,31 +104,22 @@ export function createRecipeTemplateRoutes(db: Database.Database): Router {
       return;
     }
 
-    const ingredients = db.prepare(
-      `
-        SELECT
-          ingredient_name,
-          qty,
-          unit,
-          sort_order
-        FROM recipe_template_ingredients
-        WHERE recipe_template_version_id = ?
-        ORDER BY sort_order ASC
-      `,
-    ).all(summary.active_version_id) as Array<{
-      ingredient_name: string;
-      qty: number;
-      unit: string;
-      sort_order: number;
-    }>;
+    const ingredients = await builderRepository.listTemplateSourceRows(templateId, summary.active_version_id);
 
     res.json({
       ...summary,
       yield_unit: normalizeTemplateUnit(summary.yield_unit),
       ingredient_count: ingredients.length,
       ingredients: ingredients.map((ingredient) => ({
-        ...ingredient,
+        ingredient_name: ingredient.ingredient_name,
+        qty: ingredient.qty,
         unit: normalizeTemplateUnit(ingredient.unit),
+        sort_order: ingredient.sort_order,
+        template_canonical_ingredient_id: ingredient.mapped_canonical_ingredient_id == null
+          ? null
+          : Number(ingredient.mapped_canonical_ingredient_id),
+        template_canonical_name: ingredient.mapped_canonical_name,
+        template_mapping_status: ingredient.template_mapping_status,
       })),
     });
   });

@@ -26,13 +26,11 @@ import type {
   OrderDetail,
   OrderItem,
   OrderWithVendor,
-  ProductRecipe,
   Recipe,
   RecipeDetail,
   RecipeItem,
   RecipeWithCost,
   SaveForecastInput,
-  SetProductRecipeInput,
   StorageArea,
   Transaction,
   TransactionWithItem,
@@ -1376,15 +1374,6 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async deleteRecipe(id: number): Promise<void> {
-    const used = this.db.prepare(
-      'SELECT COUNT(*) as count FROM product_recipes WHERE recipe_id = ?'
-    ).get(id) as { count: number };
-    if (used.count > 0) {
-      const err = new Error('Cannot delete recipe that is assigned to a product menu');
-      (err as any).status = 409;
-      throw err;
-    }
-
     const recipeVersionIds = this.db
       .prepare('SELECT id FROM recipe_versions WHERE recipe_id = ?')
       .all(id) as Array<{ id: number }>;
@@ -1417,46 +1406,6 @@ export class SqliteInventoryStore implements InventoryStore {
     });
 
     deleteRecipeTransaction(id, recipeVersionIds.map((row) => row.id));
-  }
-
-  // ── Product Recipes ─────────────────────────────────────────
-
-  async listProductRecipes(venueId?: number): Promise<ProductRecipe[]> {
-    let sql = `
-      SELECT pr.*, v.name as venue_name, r.name as recipe_name, r.type as recipe_type
-      FROM product_recipes pr
-      JOIN venues v ON pr.venue_id = v.id
-      JOIN recipes r ON pr.recipe_id = r.id
-    `;
-    const params: unknown[] = [];
-    if (venueId !== undefined) {
-      sql += ' WHERE pr.venue_id = ?';
-      params.push(venueId);
-    }
-    sql += ' ORDER BY v.name, r.name';
-    return this.db.prepare(sql).all(...params) as ProductRecipe[];
-  }
-
-  async setProductRecipe(venueId: number, input: SetProductRecipeInput): Promise<ProductRecipe> {
-    this.db.prepare(`
-      INSERT INTO product_recipes (venue_id, recipe_id, portions_per_guest)
-      VALUES (?, ?, ?)
-      ON CONFLICT(venue_id, recipe_id) DO UPDATE SET portions_per_guest = excluded.portions_per_guest
-    `).run(venueId, input.recipe_id, input.portions_per_guest);
-
-    const row = this.db.prepare(`
-      SELECT pr.*, v.name as venue_name, r.name as recipe_name, r.type as recipe_type
-      FROM product_recipes pr
-      JOIN venues v ON pr.venue_id = v.id
-      JOIN recipes r ON pr.recipe_id = r.id
-      WHERE pr.venue_id = ? AND pr.recipe_id = ?
-    `).get(venueId, input.recipe_id) as ProductRecipe;
-
-    return row;
-  }
-
-  async deleteProductRecipe(id: number): Promise<void> {
-    this.db.prepare('DELETE FROM product_recipes WHERE id = ?').run(id);
   }
 
   // ── Forecasts ─────────────────────────────────────────────────

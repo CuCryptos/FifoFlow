@@ -172,9 +172,20 @@ export async function executeRecipePromotion(
       ? await repository.createRecipe({
           name: context.draft.draft_name,
           type: context.draft.source_recipe_type ?? 'prep',
-          notes: buildPromotionNotes(context),
+          notes: context.draft.draft_notes ?? buildPromotionNotes(context),
+          serving_quantity: context.draft.serving_quantity,
+          serving_unit: context.draft.serving_unit,
+          serving_count: context.draft.serving_count,
         })
-      : await repository.getRecipeById(revisionTargetRecipeId!);
+      : await repository.updateRecipeMetadata({
+          recipe_id: revisionTargetRecipeId!,
+          name: context.draft.draft_name,
+          type: context.draft.source_recipe_type ?? 'prep',
+          notes: context.draft.draft_notes ?? buildPromotionNotes(context),
+          serving_quantity: context.draft.serving_quantity,
+          serving_unit: context.draft.serving_unit,
+          serving_count: context.draft.serving_count,
+        });
 
     if (!recipe) {
       throw new Error('Promotion target recipe could not be loaded.');
@@ -248,6 +259,17 @@ export function evaluateDraftPromotion(
   }
   if (!context.draft.yield_unit) {
     blockingReasons.push({ code: 'MISSING_YIELD_UNIT', message: 'Yield unit is required for operational promotion.' });
+  }
+  if (context.draft.source_recipe_type === 'dish') {
+    if (context.draft.serving_quantity == null) {
+      blockingReasons.push({ code: 'MISSING_SERVING_QUANTITY', message: 'Serving quantity is required for dish promotion.' });
+    }
+    if (!context.draft.serving_unit) {
+      blockingReasons.push({ code: 'MISSING_SERVING_UNIT', message: 'Serving unit is required for dish promotion.' });
+    }
+    if (context.draft.serving_count == null) {
+      blockingReasons.push({ code: 'MISSING_SERVING_COUNT', message: 'Servings per batch are required for dish promotion.' });
+    }
   }
 
   for (const row of context.resolution_rows) {

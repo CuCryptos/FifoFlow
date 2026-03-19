@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import type { InventoryStore } from '../store/types.js';
-import { createRecipeSchema, updateRecipeSchema } from '@fifoflow/shared';
 
 export function createRecipeRoutes(store: InventoryStore): Router {
   const router = Router();
@@ -17,31 +16,6 @@ export function createRecipeRoutes(store: InventoryStore): Router {
       return;
     }
     res.json(recipe);
-  });
-
-  router.post('/', async (req, res) => {
-    const parsed = createRecipeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.flatten() });
-      return;
-    }
-    const recipe = await store.createRecipe(parsed.data);
-    res.status(201).json(recipe);
-  });
-
-  router.put('/:id', async (req, res) => {
-    const existing = await store.getRecipeById(Number(req.params.id));
-    if (!existing) {
-      res.status(404).json({ error: 'Recipe not found' });
-      return;
-    }
-    const parsed = updateRecipeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.flatten() });
-      return;
-    }
-    const updated = await store.updateRecipe(existing.id, parsed.data);
-    res.json(updated);
   });
 
   router.delete('/:id', async (req, res) => {

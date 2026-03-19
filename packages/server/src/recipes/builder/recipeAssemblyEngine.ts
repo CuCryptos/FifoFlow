@@ -52,6 +52,10 @@ export async function executeRecipeBuilderJob(
       parsedInputRows.map((row) => ({
         line_index: row.line_index,
         raw_line_text: row.raw_line_text,
+        source_template_ingredient_name: row.template_context?.ingredient_name ?? null,
+        source_template_quantity: row.template_context?.qty ?? null,
+        source_template_unit: row.template_context?.unit ?? null,
+        source_template_sort_order: row.template_context?.sort_order ?? null,
         quantity_raw: row.parsed.quantity_raw,
         quantity_normalized: row.parsed.quantity_normalized,
         unit_raw: row.parsed.unit_raw,
@@ -96,11 +100,20 @@ export async function executeRecipeBuilderJob(
     const unresolvedCanonicalRows = persistedResolutionRows.filter((row) => row.canonical_ingredient_id == null).length;
     const unresolvedInventoryRows = persistedResolutionRows.filter((row) => row.inventory_mapping_status !== 'MAPPED').length;
     const hasYield = (request.yield_quantity ?? null) != null && (request.yield_unit ?? null) != null;
+    const requiresServingMath = request.source_recipe_type === 'dish';
+    const hasServingMath = !requiresServingMath
+      || (
+        (request.serving_quantity ?? null) != null
+        && (request.serving_unit ?? null) != null
+        && (request.serving_count ?? null) != null
+      );
     const completenessStatus = deriveDraftCompletenessStatus({
       blockedRows,
       reviewRows,
       unresolvedCanonicalRows,
       hasYield,
+      requiresServingMath,
+      hasServingMath,
     });
     const costabilityStatus = deriveCostabilityStatus({
       completenessStatus,
@@ -111,8 +124,12 @@ export async function executeRecipeBuilderJob(
     const draftUpsert = await dependencies.repository.upsertDraftRecipe({
       recipe_builder_job_id: job.id,
       draft_name: request.draft_name ?? deriveDraftName(request, parsedInputRows),
+      draft_notes: request.draft_notes ?? null,
       yield_quantity: request.yield_quantity ?? null,
       yield_unit: request.yield_unit ?? null,
+      serving_quantity: request.serving_quantity ?? null,
+      serving_unit: request.serving_unit ?? null,
+      serving_count: request.serving_count ?? null,
       completeness_status: completenessStatus,
       costability_status: costabilityStatus,
       ingredient_row_count: persistedParsedRows.length,

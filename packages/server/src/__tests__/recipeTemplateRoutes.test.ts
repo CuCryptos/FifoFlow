@@ -63,8 +63,24 @@ describe('Recipe template routes', () => {
       yield_unit: 'L',
     });
     expect(response.body.ingredients).toEqual([
-      expect.objectContaining({ ingredient_name: 'olive oil', qty: 1.2, unit: 'L', sort_order: 1 }),
-      expect.objectContaining({ ingredient_name: 'rice vinegar', qty: 0.8, unit: 'L', sort_order: 2 }),
+      expect.objectContaining({
+        ingredient_name: 'olive oil',
+        qty: 1.2,
+        unit: 'L',
+        sort_order: 1,
+        template_canonical_ingredient_id: null,
+        template_canonical_name: null,
+        template_mapping_status: null,
+      }),
+      expect.objectContaining({
+        ingredient_name: 'rice vinegar',
+        qty: 0.8,
+        unit: 'L',
+        sort_order: 2,
+        template_canonical_ingredient_id: null,
+        template_canonical_name: null,
+        template_mapping_status: null,
+      }),
     ]);
   });
 });

@@ -175,6 +175,10 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
           recipe_builder_job_id,
           line_index,
           raw_line_text,
+          source_template_ingredient_name,
+          source_template_quantity,
+          source_template_unit,
+          source_template_sort_order,
           quantity_raw,
           quantity_normalized,
           unit_raw,
@@ -184,7 +188,7 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
           parse_status,
           parser_confidence,
           explanation_text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     );
 
@@ -193,6 +197,10 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
         jobId,
         row.line_index,
         row.raw_line_text,
+        row.source_template_ingredient_name ?? null,
+        row.source_template_quantity ?? null,
+        row.source_template_unit ?? null,
+        row.source_template_sort_order ?? null,
         row.quantity_raw,
         row.quantity_normalized,
         row.unit_raw,
@@ -263,8 +271,12 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
           INSERT INTO recipe_builder_draft_recipes (
             recipe_builder_job_id,
             draft_name,
+            draft_notes,
             yield_quantity,
             yield_unit,
+            serving_quantity,
+            serving_unit,
+            serving_count,
             completeness_status,
             costability_status,
             ingredient_row_count,
@@ -274,13 +286,17 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
             unresolved_canonical_count,
             unresolved_inventory_count,
             source_recipe_type
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       ).run(
         draft.recipe_builder_job_id,
         draft.draft_name,
+        draft.draft_notes,
         draft.yield_quantity,
         draft.yield_unit,
+        draft.serving_quantity,
+        draft.serving_unit,
+        draft.serving_count,
         draft.completeness_status,
         draft.costability_status,
         draft.ingredient_row_count,
@@ -298,8 +314,12 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
       `
         UPDATE recipe_builder_draft_recipes
         SET draft_name = ?,
+            draft_notes = ?,
             yield_quantity = ?,
             yield_unit = ?,
+            serving_quantity = ?,
+            serving_unit = ?,
+            serving_count = ?,
             completeness_status = ?,
             costability_status = ?,
             ingredient_row_count = ?,
@@ -314,8 +334,12 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
       `,
     ).run(
       draft.draft_name,
+      draft.draft_notes,
       draft.yield_quantity,
       draft.yield_unit,
+      draft.serving_quantity,
+      draft.serving_unit,
+      draft.serving_count,
       draft.completeness_status,
       draft.costability_status,
       draft.ingredient_row_count,
@@ -386,6 +410,10 @@ interface ParsedRow {
   recipe_builder_job_id: number;
   line_index: number;
   raw_line_text: string;
+  source_template_ingredient_name: string | null;
+  source_template_quantity: number | null;
+  source_template_unit: string | null;
+  source_template_sort_order: number | null;
   quantity_raw: string | null;
   quantity_normalized: number | null;
   unit_raw: string | null;
@@ -420,8 +448,12 @@ interface DraftRow {
   id: number;
   recipe_builder_job_id: number;
   draft_name: string;
+  draft_notes: string | null;
   yield_quantity: number | null;
   yield_unit: string | null;
+  serving_quantity: number | null;
+  serving_unit: string | null;
+  serving_count: number | null;
   completeness_status: RecipeBuilderDraftRecipe['completeness_status'];
   costability_status: RecipeBuilderDraftRecipe['costability_status'];
   ingredient_row_count: number;

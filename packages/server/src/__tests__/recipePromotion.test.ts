@@ -153,6 +153,10 @@ describe('recipe promotion engine', () => {
         {
           line_index: 1,
           raw_line_text: 'unparsed line',
+          source_template_ingredient_name: null,
+          source_template_quantity: null,
+          source_template_unit: null,
+          source_template_sort_order: null,
           quantity_raw: null,
           quantity_normalized: null,
           unit_raw: null,
@@ -181,8 +185,12 @@ describe('recipe promotion engine', () => {
       await builderRepository.upsertDraftRecipe({
         recipe_builder_job_id: job.id,
         draft_name: 'Blocked Draft',
+        draft_notes: null,
         yield_quantity: 1,
         yield_unit: 'quart',
+        serving_quantity: null,
+        serving_unit: null,
+        serving_count: null,
         completeness_status: 'BLOCKED',
         costability_status: 'NOT_COSTABLE',
         ingredient_row_count: 1,

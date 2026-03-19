@@ -24,12 +24,10 @@ import type {
   Order,
   OrderDetail,
   OrderWithVendor,
-  ProductRecipe,
   Recipe,
   RecipeDetail,
   ReconciliationResult,
   SaveForecastInput,
-  SetProductRecipeInput,
   StorageArea,
   Transaction,
   TransactionWithItem,
@@ -618,12 +616,6 @@ export class SupabaseInventoryStore implements InventoryStore {
   async createRecipe(_input: CreateRecipeInput): Promise<RecipeDetail> { return this.notImplemented('createRecipe'); }
   async updateRecipe(_id: number, _input: UpdateRecipeInput): Promise<RecipeDetail> { return this.notImplemented('updateRecipe'); }
   async deleteRecipe(_id: number): Promise<void> { return this.notImplemented('deleteRecipe'); }
-
-  // Product Recipes — stubs
-
-  async listProductRecipes(_venueId?: number): Promise<ProductRecipe[]> { return []; }
-  async setProductRecipe(_venueId: number, _input: SetProductRecipeInput): Promise<ProductRecipe> { return this.notImplemented('setProductRecipe'); }
-  async deleteProductRecipe(_id: number): Promise<void> { return this.notImplemented('deleteProductRecipe'); }
 
   // Forecasts — stubs
 

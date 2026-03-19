@@ -24,13 +24,11 @@ import type {
   OrderDetail,
   OrderItem,
   OrderWithVendor,
-  ProductRecipe,
   Recipe,
   RecipeDetail,
   RecipeWithCost,
   ReconciliationResult,
   SaveForecastInput,
-  SetProductRecipeInput,
   StorageArea,
   Transaction,
   TransactionType,
@@ -200,11 +198,6 @@ export interface InventoryStore {
   createRecipe(input: CreateRecipeInput): Promise<RecipeDetail>;
   updateRecipe(id: number, input: UpdateRecipeInput): Promise<RecipeDetail>;
   deleteRecipe(id: number): Promise<void>;
-
-  // Product Recipes
-  listProductRecipes(venueId?: number): Promise<ProductRecipe[]>;
-  setProductRecipe(venueId: number, input: SetProductRecipeInput): Promise<ProductRecipe>;
-  deleteProductRecipe(id: number): Promise<void>;
 
   // Forecasts
   listForecasts(): Promise<Forecast[]>;

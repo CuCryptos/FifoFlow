@@ -28,39 +28,40 @@ describe('Recipes API', () => {
     db.close();
   });
 
-  it('creates recipes with yield and serving metadata', async () => {
-    const itemId = Number(
-      db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)")
-        .run('House Pinot Noir', 'Beverage', 'bottle')
-        .lastInsertRowid,
-    );
-
-    const response = await request(app)
+  it('does not expose legacy recipe create or update endpoints', async () => {
+    const created = await request(app)
       .post('/api/recipes')
       .send({
-        name: 'Pinot Pour',
+        name: 'Legacy Create Attempt',
         type: 'dish',
-        notes: '6 bottle case, 5 ounce pour',
-        yield_quantity: 6,
-        yield_unit: 'bottle',
-        serving_quantity: 5,
-        serving_unit: 'fl oz',
-        serving_count: 30,
-        items: [{ item_id: itemId, quantity: 6, unit: 'bottle' }],
+        items: [],
       });
 
-    expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({
-      name: 'Pinot Pour',
-      yield_quantity: 6,
-      yield_unit: 'bottle',
-      serving_quantity: 5,
-      serving_unit: 'fl oz',
-      serving_count: 30,
-      total_cost: null,
-      cost_per_serving: null,
-    });
-    expect(response.body.items).toHaveLength(1);
+    expect(created.status).toBe(404);
+
+    const recipeId = Number(
+      db.prepare(
+        `
+          INSERT INTO recipes (
+            name,
+            type,
+            yield_quantity,
+            yield_unit,
+            serving_quantity,
+            serving_unit,
+            serving_count
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+      ).run('Read Only Legacy', 'prep', 1, 'qt', null, null, null).lastInsertRowid,
+    );
+
+    const updated = await request(app)
+      .put(`/api/recipes/${recipeId}`)
+      .send({
+        notes: 'attempted legacy update',
+      });
+
+    expect(updated.status).toBe(404);
   });
 
   it('deletes a legacy recipe and clears promotion lineage references', async () => {
@@ -174,35 +175,5 @@ describe('Recipes API', () => {
       promoted_recipe_id: null,
       promoted_recipe_version_id: null,
     });
-  });
-
-  it('returns conflict when deleting a recipe assigned to a product menu', async () => {
-    const venueId = Number(
-      db.prepare("INSERT INTO venues (name, sort_order, show_in_menus) VALUES (?, ?, ?)")
-        .run('Patio', 1, 1)
-        .lastInsertRowid,
-    );
-    const recipeId = Number(
-      db.prepare(
-        `
-          INSERT INTO recipes (
-            name,
-            type,
-            yield_quantity,
-            yield_unit
-          ) VALUES (?, ?, ?, ?)
-        `,
-      ).run('Cannot Delete Assigned', 'dish', 1, 'each').lastInsertRowid,
-    );
-    db.prepare('INSERT INTO product_recipes (venue_id, recipe_id, portions_per_guest) VALUES (?, ?, ?)')
-      .run(venueId, recipeId, 1);
-
-    const response = await request(app).delete(`/api/recipes/${recipeId}`);
-
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({
-      error: 'Cannot delete recipe that is assigned to a product menu',
-    });
-    expect(db.prepare('SELECT id FROM recipes WHERE id = ?').get(recipeId)).toBeTruthy();
   });
 });

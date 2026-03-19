@@ -274,23 +274,64 @@ export const updateRecipeSchema = z.object({
   }
 });
 
-export const setProductRecipeSchema = z.object({
-  recipe_id: z.number().int().positive(),
-  portions_per_guest: z.number().positive().default(1.0),
+export const recipeDraftIngredientSchema = z.object({
+  item_id: z.number().int().positive().nullable(),
+  quantity: z.number().positive().nullable(),
+  unit: z.string().min(1).nullable(),
+  template_ingredient_name: z.string().min(1).nullable().optional(),
+  template_quantity: z.number().positive().nullable().optional(),
+  template_unit: z.string().min(1).nullable().optional(),
+  template_sort_order: z.number().int().min(0).nullable().optional(),
+  template_canonical_ingredient_id: z.number().int().positive().nullable().optional(),
 });
 
-export const calculateOrderSchema = z.object({
-  guest_counts: z.array(z.object({
-    venue_id: z.number().int().positive(),
-    guest_count: z.number().int().min(0),
-  })).min(1),
-  vendor_id: z.number().int().positive().optional(),
+export const upsertRecipeDraftSchema = z.object({
+  draft_name: z.string().min(1, 'Draft name is required').max(200),
+  draft_notes: z.string().max(2000).nullable().optional(),
+  source_recipe_type: z.enum(['dish', 'prep'] as const),
+  creation_mode: z.enum(['template', 'blank'] as const),
+  source_template_id: z.number().int().positive().nullable().optional(),
+  source_template_version_id: z.number().int().positive().nullable().optional(),
+  yield_quantity: z.number().positive().nullable().optional(),
+  yield_unit: z.enum(UNITS).nullable().optional(),
+  serving_quantity: z.number().positive().nullable().optional(),
+  serving_unit: z.enum(UNITS).nullable().optional(),
+  serving_count: z.number().positive().nullable().optional(),
+  ingredients: z.array(recipeDraftIngredientSchema).default([]),
+}).superRefine((data, ctx) => {
+  if (data.creation_mode === 'template' && data.source_template_id == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['source_template_id'],
+      message: 'Template mode requires a source template.',
+    });
+  }
+
+  const yieldQuantityProvided = data.yield_quantity !== undefined;
+  const yieldUnitProvided = data.yield_unit !== undefined;
+  if (yieldQuantityProvided !== yieldUnitProvided) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: yieldQuantityProvided ? ['yield_unit'] : ['yield_quantity'],
+      message: 'Yield quantity and yield unit must be provided together.',
+    });
+  }
+
+  const servingQuantityProvided = data.serving_quantity !== undefined;
+  const servingUnitProvided = data.serving_unit !== undefined;
+  if (servingQuantityProvided !== servingUnitProvided) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: servingQuantityProvided ? ['serving_unit'] : ['serving_quantity'],
+      message: 'Serving quantity and serving unit must be provided together.',
+    });
+  }
 });
 
 export type CreateRecipeInput = z.infer<typeof createRecipeSchema>;
 export type UpdateRecipeInput = z.infer<typeof updateRecipeSchema>;
-export type SetProductRecipeInput = z.infer<typeof setProductRecipeSchema>;
-export type CalculateOrderInput = z.infer<typeof calculateOrderSchema>;
+export type RecipeDraftIngredientInput = z.infer<typeof recipeDraftIngredientSchema>;
+export type UpsertRecipeDraftInput = z.infer<typeof upsertRecipeDraftSchema>;
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type UpdateVendorInput = z.infer<typeof updateVendorSchema>;
 export type CreateVendorPriceInput = z.infer<typeof createVendorPriceSchema>;
