@@ -275,6 +275,8 @@ function DraftStatusBadge({ draft }: { draft: RecipeDraftSummaryPayload }) {
 }
 
 type DraftQueueFilter = 'all' | 'READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'PROMOTED';
+type DraftQueueFocusFilter = 'all' | 'TEMPLATE_DRAFTS' | 'TEMPLATE_UNMAPPED';
+type DraftQueueSort = 'updated_at' | 'unmapped_count' | 'promotion_readiness';
 
 function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFilter, 'all'> {
   if (draft.promotion_link) {
@@ -287,6 +289,32 @@ function resolveDraftQueueFilter(draft: RecipeDraftSummaryPayload): Exclude<Draf
     return 'BLOCKED';
   }
   return 'NEEDS_REVIEW';
+}
+
+function resolveDraftPromotionReadinessScore(draft: RecipeDraftSummaryPayload): number {
+  if (draft.completeness_status === 'READY' && !draft.promotion_link) {
+    return 4;
+  }
+  if (draft.completeness_status === 'READY' && draft.promotion_link) {
+    return 3;
+  }
+  if (draft.completeness_status === 'NEEDS_REVIEW' || draft.completeness_status === 'INCOMPLETE') {
+    return 2;
+  }
+  if (draft.completeness_status === 'BLOCKED') {
+    return 1;
+  }
+  return 0;
+}
+
+function resolveDraftFocusFilter(draft: RecipeDraftSummaryPayload): Exclude<DraftQueueFocusFilter, 'all'> | null {
+  if (draft.source_type === 'template' && draft.unresolved_inventory_count > 0) {
+    return 'TEMPLATE_UNMAPPED';
+  }
+  if (draft.source_type === 'template') {
+    return 'TEMPLATE_DRAFTS';
+  }
+  return null;
 }
 
 function formatPromotionOutcomeLabel(outcome: {
@@ -311,9 +339,12 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
   const { data: drafts, isLoading: draftsLoading, error: draftsError } = useRecipeDrafts();
   const promoteDraft = usePromoteRecipeDraft();
   const { toast } = useToast();
+  const operationalWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const [selectedRecipeVersionId, setSelectedRecipeVersionId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'COSTABLE_NOW' | 'OPERATIONAL_ONLY' | 'BLOCKED_FOR_COSTING'>('all');
   const [draftFilter, setDraftFilter] = useState<DraftQueueFilter>('all');
+  const [draftFocusFilter, setDraftFocusFilter] = useState<DraftQueueFocusFilter>('all');
+  const [draftSort, setDraftSort] = useState<DraftQueueSort>('updated_at');
   const [queuePromotionDraftId, setQueuePromotionDraftId] = useState<number | null>(null);
   const [queuePromotionOutcomes, setQueuePromotionOutcomes] = useState<Record<number, RecipeDraftPromotionResultPayload>>({});
 
@@ -326,7 +357,37 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
     BLOCKED: draftRows.filter((draft) => resolveDraftQueueFilter(draft) === 'BLOCKED').length,
     PROMOTED: draftRows.filter((draft) => resolveDraftQueueFilter(draft) === 'PROMOTED').length,
   };
-  const filteredDrafts = draftRows.filter((draft) => draftFilter === 'all' || resolveDraftQueueFilter(draft) === draftFilter);
+  const draftFocusCounts = {
+    all: draftRows.length,
+    TEMPLATE_DRAFTS: draftRows.filter((draft) => draft.source_type === 'template').length,
+    TEMPLATE_UNMAPPED: draftRows.filter((draft) => draft.source_type === 'template' && draft.unresolved_inventory_count > 0).length,
+  };
+  const filteredDrafts = useMemo(() => {
+    const rows = draftRows
+      .filter((draft) => draftFilter === 'all' || resolveDraftQueueFilter(draft) === draftFilter)
+      .filter((draft) => {
+        if (draftFocusFilter === 'all') {
+          return true;
+        }
+        return resolveDraftFocusFilter(draft) === draftFocusFilter;
+      });
+
+    return [...rows].sort((left, right) => {
+      if (draftSort === 'unmapped_count') {
+        return right.unresolved_inventory_count - left.unresolved_inventory_count
+          || right.review_row_count - left.review_row_count
+          || right.ready_row_count - left.ready_row_count;
+      }
+
+      if (draftSort === 'promotion_readiness') {
+        return resolveDraftPromotionReadinessScore(right) - resolveDraftPromotionReadinessScore(left)
+          || right.unresolved_inventory_count - left.unresolved_inventory_count
+          || new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
+      }
+
+      return new Date(right.updated_at ?? 0).getTime() - new Date(left.updated_at ?? 0).getTime();
+    });
+  }, [draftFilter, draftFocusFilter, draftRows, draftSort]);
   const filteredSummaries = summaries.filter((summary) => statusFilter === 'all' || summary.costability_classification === statusFilter);
   const selectedSummary = filteredSummaries.find((summary) => summary.recipe_version_id === selectedRecipeVersionId)
     ?? filteredSummaries[0]
@@ -396,6 +457,29 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                 </WorkflowChip>
               ))}
             </WorkflowFocusBar>
+            <WorkflowFocusBar>
+              {([
+                ['all', 'All sources'],
+                ['TEMPLATE_DRAFTS', 'Template drafts'],
+                ['TEMPLATE_UNMAPPED', 'Template unmapped'],
+              ] as const).map(([value, label]) => (
+                <WorkflowChip key={value} active={draftFocusFilter === value} onClick={() => setDraftFocusFilter(value)}>
+                  {label} {draftFocusCounts[value]}
+                </WorkflowChip>
+              ))}
+            </WorkflowFocusBar>
+            <label className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Sort
+              <select
+                value={draftSort}
+                onChange={(event) => setDraftSort(event.target.value as DraftQueueSort)}
+                className="bg-transparent text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-900 outline-none"
+              >
+                <option value="updated_at">Updated</option>
+                <option value="unmapped_count">Unmapped</option>
+                <option value="promotion_readiness">Promotion readiness</option>
+              </select>
+            </label>
             <button
               onClick={onAddRecipe}
               className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
@@ -425,7 +509,7 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
         ) : !filteredDrafts.length ? (
           <WorkflowEmptyState
             title="No drafts matched this lane"
-            body="The current queue filter has no matching drafts. Switch lanes or create a new draft."
+            body="The current queue and source filters have no matching drafts. Switch filters or create a new draft."
           />
         ) : (
           <div className="space-y-3">
@@ -450,6 +534,10 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                       <span className="text-sm font-semibold text-slate-950">{draft.draft_name}</span>
                       <DraftStatusBadge draft={draft} />
                       {draft.promotion_link ? <WorkflowStatusPill tone="slate">Promoted</WorkflowStatusPill> : null}
+                      {draft.source_type === 'template' ? <WorkflowStatusPill tone="slate">Template</WorkflowStatusPill> : null}
+                      {draft.source_type === 'template' && draft.unresolved_inventory_count > 0 ? (
+                        <WorkflowStatusPill tone="amber">Template mapping cleanup</WorkflowStatusPill>
+                      ) : null}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
                       {draft.source_recipe_type ?? 'prep'} • {draft.source_type === 'template' ? 'Template draft' : 'Manual draft'} • {draft.ingredient_row_count} rows
@@ -470,6 +558,28 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
                       <div>{draft.promotion_link ? 'Revision-ready' : 'Not yet promoted'}</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      {draft.promotion_link?.recipe_version_id != null ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const linkedSummary = summaries.find(
+                              (summary) => String(summary.recipe_version_id) === String(draft.promotion_link?.recipe_version_id),
+                            );
+
+                            if (!linkedSummary) {
+                              toast('Promoted recipe is not visible in the current venue scope.', 'error');
+                              return;
+                            }
+
+                            setStatusFilter('all');
+                            setSelectedRecipeVersionId(Number(linkedSummary.recipe_version_id));
+                            operationalWorkspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                          className="rounded-full border border-emerald-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                        >
+                          Open promoted recipe
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => onOpenDraft(Number(draft.id))}
@@ -527,92 +637,94 @@ function OperationalRecipes({ onAddRecipe, onOpenDraft }: { onAddRecipe: () => v
         )}
       </WorkflowPanel>
 
-      <WorkflowPanel
-        title="Operational Recipe Workspace"
-        description="Review promoted recipe readiness, inspect ingredient-level resolution, and see whether the current live data path is trustworthy enough for costing."
-        actions={(
-          <WorkflowFocusBar>
-            {([
-              ['all', 'All'],
-              ['COSTABLE_NOW', 'Costable Now'],
-              ['OPERATIONAL_ONLY', 'Operational Only'],
-              ['BLOCKED_FOR_COSTING', 'Blocked'],
-            ] as const).map(([value, label]) => (
-              <WorkflowChip key={value} active={statusFilter === value} onClick={() => setStatusFilter(value)}>
-                {label}
-              </WorkflowChip>
-            ))}
-          </WorkflowFocusBar>
-        )}
-      >
-        {!filteredSummaries.length ? (
-          <WorkflowEmptyState
-            title="No promoted recipes matched this lane"
-            body="Either no promoted operational versions exist yet for this scope, or the current filter is excluding them."
-            action={(
-              <button
-                onClick={onAddRecipe}
-                className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-              >
-                Add Recipe
-              </button>
-            )}
-          />
-        ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70">
-              <table className="w-full text-sm">
-                <thead className="bg-white/90">
-                  <tr className="text-left text-slate-500">
-                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Recipe</th>
-                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Status</th>
-                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Coverage</th>
-                    <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Latest Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSummaries.map((summary) => {
-                    const selected = summary.recipe_version_id === selectedSummary?.recipe_version_id;
-                    return (
-                      <tr
-                        key={summary.recipe_version_id}
-                        onClick={() => setSelectedRecipeVersionId(summary.recipe_version_id)}
-                        className={selected
-                          ? 'cursor-pointer border-b border-slate-200 bg-white'
-                          : 'cursor-pointer border-b border-slate-200 hover:bg-white/80'}
-                      >
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-slate-950">{summary.recipe_name}</div>
-                          <div className="text-xs text-slate-500">
-                            v{summary.version_number} • {summary.recipe_type} • {formatYield(summary)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <WorkflowStatusBadge classification={summary.costability_classification} />
-                        </td>
-                        <td className="px-4 py-3 align-top text-right">
-                          <div className="font-mono text-slate-950">{summary.costable_percent.toFixed(0)}%</div>
-                          <div className="text-xs text-slate-500">
-                            {summary.resolved_row_count}/{summary.ingredient_row_count} rows
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 align-top text-right">
-                          <div className="font-mono text-slate-950">{formatRecipeCurrency(summary.latest_snapshot?.total_cost ?? null)}</div>
-                          <div className="text-xs text-slate-500">
-                            {summary.latest_snapshot ? `${summary.latest_snapshot.completeness_status} snapshot` : 'No snapshot yet'}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+      <div ref={operationalWorkspaceRef}>
+        <WorkflowPanel
+          title="Operational Recipe Workspace"
+          description="Review promoted recipe readiness, inspect ingredient-level resolution, and see whether the current live data path is trustworthy enough for costing."
+          actions={(
+            <WorkflowFocusBar>
+              {([
+                ['all', 'All'],
+                ['COSTABLE_NOW', 'Costable Now'],
+                ['OPERATIONAL_ONLY', 'Operational Only'],
+                ['BLOCKED_FOR_COSTING', 'Blocked'],
+              ] as const).map(([value, label]) => (
+                <WorkflowChip key={value} active={statusFilter === value} onClick={() => setStatusFilter(value)}>
+                  {label}
+                </WorkflowChip>
+              ))}
+            </WorkflowFocusBar>
+          )}
+        >
+          {!filteredSummaries.length ? (
+            <WorkflowEmptyState
+              title="No promoted recipes matched this lane"
+              body="Either no promoted operational versions exist yet for this scope, or the current filter is excluding them."
+              action={(
+                <button
+                  onClick={onAddRecipe}
+                  className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Add Recipe
+                </button>
+              )}
+            />
+          ) : (
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/90">
+                    <tr className="text-left text-slate-500">
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Recipe</th>
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide">Status</th>
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Coverage</th>
+                      <th className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-right">Latest Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSummaries.map((summary) => {
+                      const selected = summary.recipe_version_id === selectedSummary?.recipe_version_id;
+                      return (
+                        <tr
+                          key={summary.recipe_version_id}
+                          onClick={() => setSelectedRecipeVersionId(summary.recipe_version_id)}
+                          className={selected
+                            ? 'cursor-pointer border-b border-slate-200 bg-white'
+                            : 'cursor-pointer border-b border-slate-200 hover:bg-white/80'}
+                        >
+                          <td className="px-4 py-3 align-top">
+                            <div className="font-medium text-slate-950">{summary.recipe_name}</div>
+                            <div className="text-xs text-slate-500">
+                              v{summary.version_number} • {summary.recipe_type} • {formatYield(summary)}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <WorkflowStatusBadge classification={summary.costability_classification} />
+                          </td>
+                          <td className="px-4 py-3 align-top text-right">
+                            <div className="font-mono text-slate-950">{summary.costable_percent.toFixed(0)}%</div>
+                            <div className="text-xs text-slate-500">
+                              {summary.resolved_row_count}/{summary.ingredient_row_count} rows
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 align-top text-right">
+                            <div className="font-mono text-slate-950">{formatRecipeCurrency(summary.latest_snapshot?.total_cost ?? null)}</div>
+                            <div className="text-xs text-slate-500">
+                              {summary.latest_snapshot ? `${summary.latest_snapshot.completeness_status} snapshot` : 'No snapshot yet'}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-            {selectedSummary && <OperationalRecipeDetail summary={selectedSummary} />}
-          </div>
-        )}
-      </WorkflowPanel>
+              {selectedSummary && <OperationalRecipeDetail summary={selectedSummary} />}
+            </div>
+          )}
+        </WorkflowPanel>
+      </div>
     </div>
   );
 }
