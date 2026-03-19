@@ -29,64 +29,30 @@ import type {
   RecipeWorkflowIngredientDiffPayload,
 } from '../api';
 
-type RecipeTab = 'operational' | 'recipes' | 'menus' | 'calculate' | 'weekly';
-
 export function Recipes() {
-  const [activeTab, setActiveTab] = useState<RecipeTab>('operational');
-  const [openCreateRecipe, setOpenCreateRecipe] = useState(false);
-
-  const launchRecipeCreate = () => {
-    setActiveTab('recipes');
-    setOpenCreateRecipe(true);
-  };
+  const [showDraftComposer, setShowDraftComposer] = useState(false);
 
   return (
     <WorkflowPage
       eyebrow="Recipe Operations"
       title="Promote, validate, and cost operational recipes through the same identity spine the backend trusts."
-      description="The recipes surface now starts from promoted operational versions, scoped ingredient fulfillment, vendor lineage, and cost snapshot trust. Legacy maintenance tools still exist, but they are secondary to the operational workflow."
+      description="The recipes surface is now operational-workflow-first. Draft creation starts in the new composer, then promotion, ingredient resolution, and costing stay aligned to the backend workflow."
       actions={(
         <div className="flex flex-wrap items-center justify-end gap-3">
           <button
-            onClick={launchRecipeCreate}
+            onClick={() => setShowDraftComposer(true)}
             className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
           >
-            Add Recipe
+            New Draft Recipe
           </button>
-          <div className="rounded-full border border-slate-300 bg-white/80 p-1">
-            <div className="flex flex-wrap gap-1">
-              {([
-                ['operational', 'Operational Workflow'],
-                ['recipes', 'Legacy Recipes'],
-                ['menus', 'Product Menus'],
-                ['calculate', 'Calculate Order'],
-                ['weekly', 'Weekly Order'],
-              ] as const).map(([tab, label]) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={activeTab === tab
-                    ? 'rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white'
-                    : 'rounded-full px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-950'}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       )}
     >
-      {activeTab === 'operational' && <OperationalRecipes onAddRecipe={launchRecipeCreate} />}
-      {activeTab === 'recipes' && (
-        <RecipeList
-          forceCreate={openCreateRecipe}
-          onCreateHandled={() => setOpenCreateRecipe(false)}
-        />
+      {showDraftComposer ? (
+        <RecipeForm onDone={() => setShowDraftComposer(false)} />
+      ) : (
+        <OperationalRecipes onAddRecipe={() => setShowDraftComposer(true)} />
       )}
-      {activeTab === 'menus' && <ProductMenus />}
-      {activeTab === 'calculate' && <CalculateOrder />}
-      {activeTab === 'weekly' && <WeeklyOrder />}
     </WorkflowPage>
   );
 }
@@ -987,7 +953,7 @@ function ItemSearchInput({
 
 // ── Recipe List Tab ───────────────────────────────────────────
 
-function RecipeList({
+export function RecipeList({
   forceCreate = false,
   onCreateHandled,
 }: {
@@ -1987,7 +1953,7 @@ function RecipeForm({ recipeId, onDone }: { recipeId?: number; onDone: () => voi
 
 // ── Product Menus Tab ─────────────────────────────────────────
 
-function ProductMenus() {
+export function ProductMenus() {
   const { data: venues, isLoading: venuesLoading } = useVenues();
   const { data: recipes } = useRecipes();
   const { data: productRecipes, isLoading: prLoading } = useProductRecipes();
@@ -2205,7 +2171,7 @@ function ProductMenus() {
 
 type ForecastStep = 'idle' | 'parsing' | 'mapping';
 
-function CalculateOrder() {
+export function CalculateOrder() {
   const { data: allVenues } = useVenues();
   const venues = allVenues?.filter((v) => v.show_in_menus);
   const { data: vendors } = useVendors();
@@ -3043,7 +3009,7 @@ interface WeeklyIngredientRow {
 
 const ceilHalfW = (n: number) => Math.ceil(n * 2) / 2;
 
-function WeeklyOrder() {
+export function WeeklyOrder() {
   const calculateOrder = useCalculateOrder();
   const createOrder = useCreateOrder();
   const { toast } = useToast();
