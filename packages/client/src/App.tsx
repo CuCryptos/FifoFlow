@@ -19,6 +19,7 @@ const Reports = lazy(async () => ({ default: (await import('./pages/Reports')).R
 const SnackBar = lazy(() => import('./pages/SnackBar'));
 const SignalDetail = lazy(async () => ({ default: (await import('./pages/SignalDetail')).SignalDetail }));
 const RecommendationsPage = lazy(async () => ({ default: (await import('./pages/Recommendations')).RecommendationsPage }));
+const AllergyAssistant = lazy(async () => ({ default: (await import('./pages/AllergyAssistant')).AllergyAssistant }));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +46,7 @@ export default function App() {
                 <Route path="/recipes" element={<RoutedPage><Recipes /></RoutedPage>} />
                 <Route path="/recipes/drafts/:draftId" element={<RoutedPage><DraftRecipeDetailPage /></RoutedPage>} />
                 <Route path="/recipes/promoted/:recipeVersionId" element={<RoutedPage><PromotedRecipeDetailPage /></RoutedPage>} />
+                <Route path="/allergy-assistant" element={<RoutedPage><AllergyAssistant /></RoutedPage>} />
                 <Route path="/activity" element={<RoutedPage><Activity /></RoutedPage>} />
                 <Route path="/counts" element={<RoutedPage><Counts /></RoutedPage>} />
                 <Route path="/reports" element={<RoutedPage><Reports /></RoutedPage>} />

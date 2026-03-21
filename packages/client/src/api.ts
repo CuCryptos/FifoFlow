@@ -317,6 +317,44 @@ export interface RecipeWorkflowDetailPayload {
   ingredient_rows: OperationalRecipeIngredientRowPayload[];
 }
 
+export interface AllergyDocumentPayload {
+  id: number;
+  venue_id: number | null;
+  filename: string;
+  mime_type: string;
+  page_count: number;
+  chunk_count: number;
+  status: 'ready' | 'failed';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AllergyChatItemPayload {
+  recipe_version_id: number;
+  recipe_name: string;
+  rationale: string;
+  evidence_chunk_ids: number[];
+}
+
+export interface AllergyChatChunkPayload {
+  id: number;
+  document_id: number;
+  page_id: number;
+  page_number: number;
+  chunk_index: number;
+  chunk_text: string;
+}
+
+export interface AllergyChatResponsePayload {
+  allergen_focus: string | null;
+  answer_markdown: string;
+  safe_items: AllergyChatItemPayload[];
+  avoid_items: AllergyChatItemPayload[];
+  caution_items: AllergyChatItemPayload[];
+  unknown_items: AllergyChatItemPayload[];
+  cited_chunks: AllergyChatChunkPayload[];
+}
+
 export interface RecipeTemplateSummaryPayload {
   template_id: number;
   name: string;
@@ -708,6 +746,42 @@ export const api = {
       const query = qs.toString();
       return fetchJson<RecipeWorkflowDetailPayload>(`/recipe-workflow/operational-summary/${recipeVersionId}${query ? `?${query}` : ''}`);
     },
+  },
+  allergyAssistant: {
+    listDocuments: (venueId?: number | null) => {
+      const qs = venueId != null ? `?venue_id=${venueId}` : '';
+      return fetchJson<{ documents: AllergyDocumentPayload[] }>(`/allergy-assistant/documents${qs}`);
+    },
+    uploadDocuments: async (files: File[], venueId?: number | null) => {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append('files', file);
+      }
+      if (venueId != null) {
+        formData.append('venue_id', String(venueId));
+      }
+      const res = await fetch(`${BASE}/allergy-assistant/documents/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(typeof error.error === 'string' ? error.error : res.statusText);
+      }
+      return res.json() as Promise<{ documents: AllergyDocumentPayload[] }>;
+    },
+    deleteDocument: async (documentId: number) => {
+      const res = await fetch(`${BASE}/allergy-assistant/documents/${documentId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(typeof error.error === 'string' ? error.error : res.statusText);
+      }
+    },
+    ask: (input: { question: string; venue_id?: number | null; document_ids?: number[] }) =>
+      fetchJson<AllergyChatResponsePayload>('/allergy-assistant/chat', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
   invoices: {
