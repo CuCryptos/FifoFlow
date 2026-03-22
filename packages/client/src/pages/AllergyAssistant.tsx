@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, FileText, MessageSquare, ShieldAlert, Trash2, UploadCloud } from 'lucide-react';
 import { api, type AllergyChatResponsePayload, type AllergyDocumentPayload } from '../api';
@@ -9,6 +9,7 @@ export function AllergyAssistant() {
   const { selectedVenueId } = useVenueContext();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [question, setQuestion] = useState('A guest has a guava allergy. What can they eat on the menu, what should they avoid, and what needs kitchen confirmation?');
@@ -24,6 +25,9 @@ export function AllergyAssistant() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['allergy-documents'] });
       setFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       toast(`Uploaded ${data.documents.length} allergy chart${data.documents.length === 1 ? '' : 's'}.`, 'success');
     },
     onError: (error: Error) => {
@@ -96,11 +100,18 @@ export function AllergyAssistant() {
 
             <div className="mt-5 rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5">
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".pdf,.png,.jpg,.jpeg,.webp"
                 multiple
                 onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-                className="block w-full text-sm text-slate-700"
+                className="sr-only"
+              />
+              <input
+                type="text"
+                readOnly
+                value={files.length > 0 ? files.map((file) => file.name).join(', ') : 'No files selected yet'}
+                className="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
               />
               <div className="mt-3 text-xs text-slate-500">
                 Use venue-scoped charts whenever possible so the chef chat stays grounded in the right menu context.
@@ -113,11 +124,20 @@ export function AllergyAssistant() {
               <div className="mt-4 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => uploadMutation.mutate(files)}
-                  disabled={files.length === 0 || uploadMutation.isPending}
+                  onClick={() => {
+                    if (uploadMutation.isPending) {
+                      return;
+                    }
+                    if (files.length === 0) {
+                      fileInputRef.current?.click();
+                      return;
+                    }
+                    uploadMutation.mutate(files);
+                  }}
+                  disabled={uploadMutation.isPending}
                   className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {uploadMutation.isPending ? 'Uploading charts...' : 'Upload charts'}
+                  {uploadMutation.isPending ? 'Uploading charts...' : files.length === 0 ? 'Choose allergy charts' : 'Upload charts'}
                 </button>
               </div>
             </div>
