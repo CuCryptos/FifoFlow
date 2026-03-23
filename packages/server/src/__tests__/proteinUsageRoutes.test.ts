@@ -321,6 +321,75 @@ describe('Protein usage routes', () => {
       ]),
     );
   });
+
+  it('saves future monthly forecast counts and uses them in the summary without double counting daily forecasts', async () => {
+    seedForecast(db, {
+      id: 7,
+      filename: 'april-daily-forecast.pdf',
+      entries: [
+        { product_code: 'APR01', product_name: 'APR01 Tenderloin Dinner', forecast_date: '2026-04-10', guest_count: 120 },
+      ],
+    });
+
+    const proteins = db.prepare('SELECT id, name FROM protein_usage_items ORDER BY sort_order ASC').all() as Array<{ id: number; name: string }>;
+    const tenderloin = proteins.find((item) => item.name === '5oz Tenderloin');
+    expect(tenderloin).toBeDefined();
+
+    const saveRulesResponse = await request(app)
+      .post('/api/protein-usage/rules/bulk')
+      .send({
+        venue_id: 7,
+        rules: [
+          { forecast_product_name: 'APR01 Tenderloin Dinner', protein_item_id: tenderloin!.id, usage_per_pax: 1 },
+        ],
+      });
+
+    expect(saveRulesResponse.status).toBe(200);
+
+    const saveMonthlyResponse = await request(app)
+      .post('/api/protein-usage/monthly-forecasts/bulk')
+      .send({
+        venue_id: 7,
+        rows: [
+          { forecast_product_name: 'APR01 Tenderloin Dinner', forecast_month: '2026-04', guest_count: 3000 },
+          { forecast_product_name: 'APR01 Tenderloin Dinner', forecast_month: '2026-05', guest_count: 6200 },
+        ],
+      });
+
+    expect(saveMonthlyResponse.status).toBe(200);
+    expect(saveMonthlyResponse.body.monthly_forecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ forecast_product_name: 'APR01 Tenderloin Dinner', forecast_month: '2026-04', guest_count: 3000 }),
+        expect.objectContaining({ forecast_product_name: 'APR01 Tenderloin Dinner', forecast_month: '2026-05', guest_count: 6200 }),
+      ]),
+    );
+
+    const configResponse = await request(app).get('/api/protein-usage/config?venue_id=7');
+    expect(configResponse.status).toBe(200);
+    expect(configResponse.body.monthly_forecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ forecast_product_name: 'APR01 Tenderloin Dinner', forecast_month: '2026-04', guest_count: 3000 }),
+        expect.objectContaining({ forecast_product_name: 'APR01 Tenderloin Dinner', forecast_month: '2026-05', guest_count: 6200 }),
+      ]),
+    );
+
+    const monthSummaryResponse = await request(app)
+      .get('/api/protein-usage/summary?venue_id=7&start=2026-04-01&end=2026-05-31&group_by=month');
+
+    expect(monthSummaryResponse.status).toBe(200);
+    expect(monthSummaryResponse.body.periods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          period: '2026-04',
+          total_guest_count: 120,
+        }),
+        expect.objectContaining({
+          period: '2026-05',
+          total_guest_count: 6200,
+        }),
+      ]),
+    );
+  });
 });
 
 function seedForecast(

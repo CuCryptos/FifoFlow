@@ -30,6 +30,16 @@ interface HiddenForecastProductRecord {
   created_at: string;
 }
 
+interface MonthlyForecastRecord {
+  id: number;
+  venue_id: number;
+  forecast_product_name: string;
+  forecast_month: string;
+  guest_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 interface ForecastProductAggregate {
   product_code: string | null;
   product_name: string;
@@ -123,6 +133,37 @@ function parseVenueId(value: unknown): number | null {
   return Number.isFinite(venueId) && venueId > 0 ? venueId : null;
 }
 
+function isIsoMonth(value: string): boolean {
+  return /^\d{4}-\d{2}$/.test(value);
+}
+
+function monthForDate(dateText: string): string {
+  return dateText.slice(0, 7);
+}
+
+function monthStartDate(monthText: string): string {
+  return `${monthText}-01`;
+}
+
+function monthEndDate(monthText: string): string {
+  const [yearText, monthValueText] = monthText.split('-');
+  const year = Number(yearText);
+  const monthIndex = Number(monthValueText) - 1;
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0));
+  return lastDay.toISOString().slice(0, 10);
+}
+
+function listDatesInRange(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(`${end}T00:00:00Z`);
+  while (cursor <= endDate) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
 function normalizeRuleRows(input: unknown): Array<{
   forecast_product_name: string;
   protein_item_id: number;
@@ -170,6 +211,28 @@ function normalizeProteinItemRows(input: unknown): Array<{
       };
     })
     .filter((row) => Number.isFinite(row.protein_item_id) && row.protein_item_id > 0);
+}
+
+function normalizeMonthlyForecastRows(input: unknown): Array<{
+  forecast_product_name: string;
+  forecast_month: string;
+  guest_count: number;
+}> {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => {
+      const row = entry as Record<string, unknown>;
+      return {
+        forecast_product_name: String(row.forecast_product_name ?? '').trim(),
+        forecast_month: String(row.forecast_month ?? '').trim(),
+        guest_count: Number(row.guest_count ?? 0),
+      };
+    })
+    .filter((row) => row.forecast_product_name.length > 0 && isIsoMonth(row.forecast_month) && Number.isFinite(row.guest_count) && row.guest_count >= 0);
 }
 
 function listProteinItems(db: Database.Database): ProteinUsageItemRecord[] {
@@ -230,6 +293,21 @@ function listHiddenForecastProducts(db: Database.Database, venueId: number): Hid
       ORDER BY forecast_product_name ASC
     `,
   ).all(venueId) as HiddenForecastProductRecord[];
+}
+
+function listMonthlyForecasts(db: Database.Database, venueId: number): MonthlyForecastRecord[] {
+  return db.prepare(
+    `
+      SELECT mf.id, mf.venue_id, mf.forecast_product_name, mf.forecast_month, mf.guest_count, mf.created_at, mf.updated_at
+      FROM protein_usage_monthly_forecasts mf
+      LEFT JOIN protein_usage_hidden_products hp
+        ON hp.forecast_product_name = mf.forecast_product_name
+       AND hp.venue_id = mf.venue_id
+      WHERE mf.venue_id = ?
+        AND hp.id IS NULL
+      ORDER BY mf.forecast_month ASC, mf.forecast_product_name ASC
+    `,
+  ).all(venueId) as MonthlyForecastRecord[];
 }
 
 function listForecastProductAggregates(db: Database.Database, venueId: number): ForecastProductAggregate[] {
@@ -362,6 +440,51 @@ function restoreForecastProducts(
   return listHiddenForecastProducts(db, venueId);
 }
 
+function saveMonthlyForecasts(
+  db: Database.Database,
+  venueId: number,
+  rows: Array<{
+    forecast_product_name: string;
+    forecast_month: string;
+    guest_count: number;
+  }>,
+): MonthlyForecastRecord[] {
+  const upsert = db.prepare(
+    `
+      INSERT INTO protein_usage_monthly_forecasts (
+        venue_id,
+        forecast_product_name,
+        forecast_month,
+        guest_count
+      ) VALUES (?, ?, ?, ?)
+      ON CONFLICT(venue_id, forecast_product_name, forecast_month)
+      DO UPDATE SET
+        guest_count = excluded.guest_count
+    `,
+  );
+  const remove = db.prepare(
+    `
+      DELETE FROM protein_usage_monthly_forecasts
+      WHERE venue_id = ?
+        AND forecast_product_name = ?
+        AND forecast_month = ?
+    `,
+  );
+
+  const transaction = db.transaction(() => {
+    for (const row of rows) {
+      if (row.guest_count > 0) {
+        upsert.run(venueId, row.forecast_product_name, row.forecast_month, row.guest_count);
+      } else {
+        remove.run(venueId, row.forecast_product_name, row.forecast_month);
+      }
+    }
+  });
+
+  transaction();
+  return listMonthlyForecasts(db, venueId);
+}
+
 function buildProteinUsageSummary(
   db: Database.Database,
   input: {
@@ -401,6 +524,35 @@ function buildProteinUsageSummary(
     protein_item_id: number;
     usage_per_pax: number;
   }>;
+
+  const monthlyRows = db.prepare(
+    `
+      SELECT
+        mf.forecast_month,
+        mf.forecast_product_name,
+        mf.guest_count,
+        r.protein_item_id,
+        r.usage_per_pax
+      FROM protein_usage_monthly_forecasts mf
+      INNER JOIN forecast_protein_usage_rules r
+        ON r.forecast_product_name = mf.forecast_product_name
+      LEFT JOIN protein_usage_hidden_products hp
+        ON hp.forecast_product_name = mf.forecast_product_name
+       AND hp.venue_id = mf.venue_id
+      WHERE mf.venue_id = ?
+        AND mf.forecast_month >= ?
+        AND mf.forecast_month <= ?
+        AND hp.id IS NULL
+      ORDER BY mf.forecast_month ASC, mf.forecast_product_name ASC
+    `,
+  ).all(input.venueId, monthForDate(input.start), monthForDate(input.end)) as Array<{
+    forecast_month: string;
+    forecast_product_name: string;
+    guest_count: number;
+    protein_item_id: number;
+    usage_per_pax: number;
+  }>;
+  const dailyCoverageKeys = new Set(rows.map((row) => `${row.product_name}::${monthForDate(row.forecast_date)}`));
 
   const periodMap = new Map<string, ProteinUsageSummaryRow>();
   const totalsMap = new Map<number, {
@@ -445,15 +597,15 @@ function buildProteinUsageSummary(
     last_date: string;
   }>;
 
-  for (const row of rows) {
-    const protein = proteinById.get(row.protein_item_id);
+  const applyUsageRow = (forecastDate: string, proteinItemId: number, guestCount: number, usagePerPax: number) => {
+    const protein = proteinById.get(proteinItemId);
     if (!protein) {
-      continue;
+      return;
     }
 
-    const period = periodForDate(row.forecast_date, input.groupBy);
-    const isHistorical = row.forecast_date < today;
-    const usage = row.guest_count * row.usage_per_pax;
+    const period = periodForDate(forecastDate, input.groupBy);
+    const isHistorical = forecastDate < today;
+    const usage = guestCount * usagePerPax;
 
     const periodRow = periodMap.get(period) ?? {
       period,
@@ -463,11 +615,11 @@ function buildProteinUsageSummary(
       proteins: [],
     };
 
-    periodRow.total_guest_count += row.guest_count;
+    periodRow.total_guest_count += guestCount;
     if (isHistorical) {
-      periodRow.historical_guest_count += row.guest_count;
+      periodRow.historical_guest_count += guestCount;
     } else {
-      periodRow.projected_guest_count += row.guest_count;
+      periodRow.projected_guest_count += guestCount;
     }
 
     let periodProtein = periodRow.proteins.find((entry) => entry.protein_item_id === protein.id);
@@ -526,6 +678,31 @@ function buildProteinUsageSummary(
     }
     totalsMap.set(protein.id, totalEntry);
     periodMap.set(period, periodRow);
+  };
+
+  for (const row of rows) {
+    applyUsageRow(row.forecast_date, row.protein_item_id, row.guest_count, row.usage_per_pax);
+  }
+
+  for (const row of monthlyRows) {
+    if (dailyCoverageKeys.has(`${row.forecast_product_name}::${row.forecast_month}`)) {
+      continue;
+    }
+    const fullMonthDates = listDatesInRange(monthStartDate(row.forecast_month), monthEndDate(row.forecast_month));
+    const inWindowDates = fullMonthDates.filter((date) => date >= input.start && date <= input.end);
+    if (inWindowDates.length === 0) {
+      continue;
+    }
+
+    if (input.groupBy === 'month') {
+      applyUsageRow(monthStartDate(row.forecast_month), row.protein_item_id, row.guest_count, row.usage_per_pax);
+      continue;
+    }
+
+    const dailyGuestCount = row.guest_count / fullMonthDates.length;
+    for (const date of inWindowDates) {
+      applyUsageRow(date, row.protein_item_id, dailyGuestCount, row.usage_per_pax);
+    }
   }
 
   return {
@@ -563,6 +740,7 @@ export function createProteinUsageRoutes(db: Database.Database): Router {
       rule_rows: listProteinRules(db, venueId),
       forecast_products: listForecastProductAggregates(db, venueId),
       hidden_products: listHiddenForecastProducts(db, venueId),
+      monthly_forecasts: listMonthlyForecasts(db, venueId),
     });
   });
 
@@ -633,6 +811,24 @@ export function createProteinUsageRoutes(db: Database.Database): Router {
 
     res.json({
       hidden_products: restoreForecastProducts(db, venueId, productNames),
+    });
+  });
+
+  router.post('/monthly-forecasts/bulk', (req, res) => {
+    const venueId = parseVenueId(req.body.venue_id);
+    const rows = normalizeMonthlyForecastRows(req.body.rows);
+
+    if (!venueId) {
+      res.status(400).json({ error: 'venue_id is required' });
+      return;
+    }
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'rows are required' });
+      return;
+    }
+
+    res.json({
+      monthly_forecasts: saveMonthlyForecasts(db, venueId, rows),
     });
   });
 

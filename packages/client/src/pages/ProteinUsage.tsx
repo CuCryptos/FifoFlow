@@ -33,6 +33,24 @@ function startOfMonth(): string {
   return formatDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
 }
 
+function buildPlanningMonths(monthCount: number): string[] {
+  const months: string[] = [];
+  const cursor = new Date();
+  cursor.setUTCDate(1);
+  cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  for (let index = 0; index < monthCount; index += 1) {
+    months.push(cursor.toISOString().slice(0, 7));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}
+
+function formatMonthLabel(monthText: string): string {
+  const [yearText, monthValueText] = monthText.split('-');
+  const date = new Date(Date.UTC(Number(yearText), Number(monthValueText) - 1, 1));
+  return date.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
 function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
@@ -53,6 +71,8 @@ export function ProteinUsage() {
   const [parsedForecast, setParsedForecast] = useState<ForecastParseResult | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<string, string>>({});
   const [proteinItemDrafts, setProteinItemDrafts] = useState<Record<number, { case_unit_label: string; portions_per_case: string }>>({});
+  const [monthlyForecastDrafts, setMonthlyForecastDrafts] = useState<Record<string, string>>({});
+  const planningMonths = useMemo(() => buildPlanningMonths(21), []);
 
   const configQuery = useQuery({
     queryKey: ['protein-usage', 'config', selectedVenueId],
@@ -76,12 +96,24 @@ export function ProteinUsage() {
       return;
     }
 
-    const signature = JSON.stringify(configQuery.data.rule_rows.map((rule) => [
-      rule.forecast_product_name,
-      rule.protein_item_id,
-      rule.usage_per_pax,
-      rule.notes,
-    ]));
+    const signature = JSON.stringify({
+      rule_rows: configQuery.data.rule_rows.map((rule) => [
+        rule.forecast_product_name,
+        rule.protein_item_id,
+        rule.usage_per_pax,
+        rule.notes,
+      ]),
+      protein_items: configQuery.data.protein_items.map((protein) => [
+        protein.id,
+        protein.case_unit_label,
+        protein.portions_per_case,
+      ]),
+      monthly_forecasts: configQuery.data.monthly_forecasts.map((row) => [
+        row.forecast_product_name,
+        row.forecast_month,
+        row.guest_count,
+      ]),
+    });
     if (signature === configSignatureRef.current) {
       return;
     }
@@ -101,6 +133,12 @@ export function ProteinUsage() {
       };
     }
     setProteinItemDrafts(nextProteinDrafts);
+
+    const nextMonthlyDrafts: Record<string, string> = {};
+    for (const row of configQuery.data.monthly_forecasts) {
+      nextMonthlyDrafts[buildMonthlyForecastKey(row.forecast_product_name, row.forecast_month)] = String(row.guest_count);
+    }
+    setMonthlyForecastDrafts(nextMonthlyDrafts);
   }, [configQuery.data]);
 
   const parseMutation = useMutation({
@@ -182,6 +220,19 @@ export function ProteinUsage() {
     },
   });
 
+  const saveMonthlyForecastsMutation = useMutation({
+    mutationFn: (rows: Array<{ forecast_product_name: string; forecast_month: string; guest_count: number }>) =>
+      api.proteinUsage.saveMonthlyForecasts({ venue_id: selectedVenueId!, rows }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'config'] });
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'summary'] });
+      toast('Monthly forecast plan saved.', 'success');
+    },
+    onError: (error: Error) => {
+      toast(`Monthly forecast save failed: ${error.message}`, 'error');
+    },
+  });
+
   const proteinItems = configQuery.data?.protein_items ?? [];
   const forecastProducts = configQuery.data?.forecast_products ?? [];
   const hiddenProducts = configQuery.data?.hidden_products ?? [];
@@ -200,6 +251,7 @@ export function ProteinUsage() {
     configSignatureRef.current = '';
     setRuleDrafts({});
     setProteinItemDrafts({});
+    setMonthlyForecastDrafts({});
   }, [selectedVenueId]);
 
   const saveableRuleRows = useMemo(() => {
@@ -227,6 +279,17 @@ export function ProteinUsage() {
         : null,
     })).filter((row) => row.portions_per_case == null || (Number.isFinite(row.portions_per_case) && row.portions_per_case > 0))
   , [proteinItemDrafts, proteinItems]);
+
+  const saveableMonthlyForecastRows = useMemo(() =>
+    Object.entries(monthlyForecastDrafts).map(([key, value]) => {
+      const [forecastProductName, forecastMonth] = key.split('::');
+      return {
+        forecast_product_name: forecastProductName,
+        forecast_month: forecastMonth,
+        guest_count: Number(value || 0),
+      };
+    }).filter((row) => planningMonths.includes(row.forecast_month) && Number.isFinite(row.guest_count) && row.guest_count >= 0)
+  , [monthlyForecastDrafts, planningMonths]);
 
   if (!selectedVenueId) {
     return (
@@ -492,6 +555,66 @@ export function ProteinUsage() {
       ) : null}
 
       <WorkflowPanel
+        title="Future Monthly Forecast Plan"
+        description="Enter long-range monthly guest counts per product. Month view uses these totals directly. Day, week, and custom views prorate monthly totals evenly across the days in each month."
+        actions={(
+          <button
+            type="button"
+            onClick={() => saveMonthlyForecastsMutation.mutate(saveableMonthlyForecastRows)}
+            disabled={saveMonthlyForecastsMutation.isPending || saveableMonthlyForecastRows.length === 0}
+            className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {saveMonthlyForecastsMutation.isPending ? 'Saving monthly plan...' : 'Save monthly plan'}
+          </button>
+        )}
+      >
+        {forecastProducts.length === 0 ? (
+          <WorkflowEmptyState
+            title="No products available for monthly planning"
+            body="Save at least one parsed forecast first. Monthly plans attach to the forecast product catalog already in this venue."
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+            <table className="w-full min-w-[1320px] text-sm">
+              <thead className="bg-slate-50 text-left text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Code</th>
+                  <th className="px-4 py-3 font-medium">Forecast product</th>
+                  {planningMonths.map((month) => (
+                    <th key={month} className="px-4 py-3 font-medium">{formatMonthLabel(month)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.slice(0, 20).map((product) => (
+                  <tr key={`monthly-${product.product_code ?? 'no-code'}-${product.product_name}`} className="border-t border-slate-100">
+                    <td className="px-4 py-3 text-slate-600">{product.product_code ?? '—'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{product.product_name}</td>
+                    {planningMonths.map((month) => {
+                      const key = buildMonthlyForecastKey(product.product_name, month);
+                      return (
+                        <td key={month} className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={monthlyForecastDrafts[key] ?? ''}
+                            onChange={(event) => setMonthlyForecastDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                            placeholder="0"
+                            className="w-24 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </WorkflowPanel>
+
+      <WorkflowPanel
         title="Per-Pax Usage Rules"
         description="Set how much of each tracked meat is consumed per guest for each forecast product. Leave a value at 0 to exclude that meat from the product."
         actions={(
@@ -704,6 +827,10 @@ export function ProteinUsage() {
 
 function buildRuleKey(forecastProductName: string, proteinItemId: number): string {
   return `${forecastProductName}::${proteinItemId}`;
+}
+
+function buildMonthlyForecastKey(forecastProductName: string, forecastMonth: string): string {
+  return `${forecastProductName}::${forecastMonth}`;
 }
 
 function VenuePicker({
