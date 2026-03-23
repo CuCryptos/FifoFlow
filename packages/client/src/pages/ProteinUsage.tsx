@@ -158,8 +158,33 @@ export function ProteinUsage() {
     },
   });
 
+  const hideProductsMutation = useMutation({
+    mutationFn: (productNames: string[]) => api.proteinUsage.hideProducts({ venue_id: selectedVenueId!, product_names: productNames }),
+    onSuccess: (_, productNames) => {
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'config'] });
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'summary'] });
+      toast(`Hidden ${productNames.length} forecast product${productNames.length === 1 ? '' : 's'} from this venue.`, 'success');
+    },
+    onError: (error: Error) => {
+      toast(`Hide failed: ${error.message}`, 'error');
+    },
+  });
+
+  const restoreProductsMutation = useMutation({
+    mutationFn: (productNames: string[]) => api.proteinUsage.restoreProducts({ venue_id: selectedVenueId!, product_names: productNames }),
+    onSuccess: (_, productNames) => {
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'config'] });
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'summary'] });
+      toast(`Restored ${productNames.length} hidden forecast product${productNames.length === 1 ? '' : 's'} to this venue.`, 'success');
+    },
+    onError: (error: Error) => {
+      toast(`Restore failed: ${error.message}`, 'error');
+    },
+  });
+
   const proteinItems = configQuery.data?.protein_items ?? [];
   const forecastProducts = configQuery.data?.forecast_products ?? [];
+  const hiddenProducts = configQuery.data?.hidden_products ?? [];
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     if (!query) {
@@ -446,6 +471,26 @@ export function ProteinUsage() {
         </div>
       </WorkflowPanel>
 
+      {hiddenProducts.length > 0 ? (
+        <WorkflowPanel
+          title="Hidden Venue Products"
+          description="These forecast products are hidden from the selected venue’s protein planning workspace. Restore them if they become relevant again."
+        >
+          <div className="flex flex-wrap gap-2">
+            {hiddenProducts.map((product) => (
+              <button
+                key={product.id}
+                type="button"
+                onClick={() => restoreProductsMutation.mutate([product.forecast_product_name])}
+                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
+              >
+                {product.forecast_product_name} · Restore
+              </button>
+            ))}
+          </div>
+        </WorkflowPanel>
+      ) : null}
+
       <WorkflowPanel
         title="Per-Pax Usage Rules"
         description="Set how much of each tracked meat is consumed per guest for each forecast product. Leave a value at 0 to exclude that meat from the product."
@@ -505,6 +550,13 @@ export function ProteinUsage() {
                         ) : (
                           <WorkflowStatusPill tone="amber">Unconfigured</WorkflowStatusPill>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => hideProductsMutation.mutate([product.product_name])}
+                          className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-950"
+                        >
+                          Remove from venue
+                        </button>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-700">{product.total_guest_count}</td>

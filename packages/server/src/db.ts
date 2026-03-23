@@ -279,6 +279,17 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_forecast_protein_usage_rules_venue
       ON forecast_protein_usage_rules(venue_id, forecast_product_name);
 
+    CREATE TABLE IF NOT EXISTS protein_usage_hidden_products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      forecast_product_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(venue_id, forecast_product_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_protein_usage_hidden_products_venue
+      ON protein_usage_hidden_products(venue_id, forecast_product_name);
+
     CREATE TRIGGER IF NOT EXISTS update_protein_usage_items_timestamp
     AFTER UPDATE ON protein_usage_items
     BEGIN

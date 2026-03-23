@@ -377,6 +377,13 @@ export interface ProteinUsageRulePayload {
   updated_at: string;
 }
 
+export interface ProteinUsageHiddenProductPayload {
+  id: number;
+  venue_id: number;
+  forecast_product_name: string;
+  created_at: string;
+}
+
 export interface ProteinUsageForecastProductPayload {
   product_code: string | null;
   product_name: string;
@@ -872,6 +879,7 @@ export const api = {
         protein_items: ProteinUsageItemPayload[];
         rule_rows: ProteinUsageRulePayload[];
         forecast_products: ProteinUsageForecastProductPayload[];
+        hidden_products: ProteinUsageHiddenProductPayload[];
       }>(`/protein-usage/config?venue_id=${venueId}`),
     saveRules: (input: {
       venue_id: number;
@@ -894,6 +902,16 @@ export const api = {
       }>;
     }) =>
       fetchJson<{ protein_items: ProteinUsageItemPayload[] }>('/protein-usage/config/items', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    hideProducts: (input: { venue_id: number; product_names: string[] }) =>
+      fetchJson<{ hidden_products: ProteinUsageHiddenProductPayload[] }>('/protein-usage/hidden-products/hide', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    restoreProducts: (input: { venue_id: number; product_names: string[] }) =>
+      fetchJson<{ hidden_products: ProteinUsageHiddenProductPayload[] }>('/protein-usage/hidden-products/restore', {
         method: 'POST',
         body: JSON.stringify(input),
       }),

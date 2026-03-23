@@ -23,6 +23,13 @@ interface ProteinUsageRuleRecord {
   updated_at: string;
 }
 
+interface HiddenForecastProductRecord {
+  id: number;
+  venue_id: number;
+  forecast_product_name: string;
+  created_at: string;
+}
+
 interface ForecastProductAggregate {
   product_code: string | null;
   product_name: string;
@@ -214,6 +221,17 @@ function listProteinRules(db: Database.Database, venueId: number): ProteinUsageR
   ).all(venueId) as ProteinUsageRuleRecord[];
 }
 
+function listHiddenForecastProducts(db: Database.Database, venueId: number): HiddenForecastProductRecord[] {
+  return db.prepare(
+    `
+      SELECT id, venue_id, forecast_product_name, created_at
+      FROM protein_usage_hidden_products
+      WHERE venue_id = ?
+      ORDER BY forecast_product_name ASC
+    `,
+  ).all(venueId) as HiddenForecastProductRecord[];
+}
+
 function listForecastProductAggregates(db: Database.Database, venueId: number): ForecastProductAggregate[] {
   return db.prepare(
     `
@@ -231,10 +249,14 @@ function listForecastProductAggregates(db: Database.Database, venueId: number): 
       LEFT JOIN forecast_protein_usage_rules r
         ON r.forecast_product_name = lfe.product_name
        AND r.venue_id = ?
+      LEFT JOIN protein_usage_hidden_products hp
+        ON hp.forecast_product_name = lfe.product_name
+       AND hp.venue_id = ?
+      WHERE hp.id IS NULL
       GROUP BY lfe.product_code, lfe.product_name
       ORDER BY total_guest_count DESC, lfe.product_name ASC
     `,
-  ).all(venueId) as ForecastProductAggregate[];
+  ).all(venueId, venueId) as ForecastProductAggregate[];
 }
 
 function saveProteinRules(
@@ -285,6 +307,61 @@ function saveProteinRules(
   return listProteinRules(db, venueId);
 }
 
+function hideForecastProducts(
+  db: Database.Database,
+  venueId: number,
+  productNames: string[],
+): HiddenForecastProductRecord[] {
+  const insert = db.prepare(
+    `
+      INSERT INTO protein_usage_hidden_products (venue_id, forecast_product_name)
+      VALUES (?, ?)
+      ON CONFLICT(venue_id, forecast_product_name) DO NOTHING
+    `,
+  );
+
+  const removeRules = db.prepare(
+    `
+      DELETE FROM forecast_protein_usage_rules
+      WHERE venue_id = ?
+        AND forecast_product_name = ?
+    `,
+  );
+
+  const transaction = db.transaction(() => {
+    for (const productName of productNames) {
+      insert.run(venueId, productName);
+      removeRules.run(venueId, productName);
+    }
+  });
+
+  transaction();
+  return listHiddenForecastProducts(db, venueId);
+}
+
+function restoreForecastProducts(
+  db: Database.Database,
+  venueId: number,
+  productNames: string[],
+): HiddenForecastProductRecord[] {
+  const remove = db.prepare(
+    `
+      DELETE FROM protein_usage_hidden_products
+      WHERE venue_id = ?
+        AND forecast_product_name = ?
+    `,
+  );
+
+  const transaction = db.transaction(() => {
+    for (const productName of productNames) {
+      remove.run(venueId, productName);
+    }
+  });
+
+  transaction();
+  return listHiddenForecastProducts(db, venueId);
+}
+
 function buildProteinUsageSummary(
   db: Database.Database,
   input: {
@@ -310,10 +387,14 @@ function buildProteinUsageSummary(
       FROM latest_forecast_entries lfe
       INNER JOIN forecast_protein_usage_rules r
         ON r.forecast_product_name = lfe.product_name
+      LEFT JOIN protein_usage_hidden_products hp
+        ON hp.forecast_product_name = lfe.product_name
+       AND hp.venue_id = ?
       WHERE r.venue_id = ?
+        AND hp.id IS NULL
       ORDER BY lfe.forecast_date ASC, lfe.product_name ASC
     `,
-  ).all(input.start, input.end, input.venueId) as Array<{
+  ).all(input.start, input.end, input.venueId, input.venueId) as Array<{
     forecast_date: string;
     product_name: string;
     guest_count: number;
@@ -348,11 +429,15 @@ function buildProteinUsageSummary(
       LEFT JOIN forecast_protein_usage_rules r
         ON r.forecast_product_name = lfe.product_name
        AND r.venue_id = ?
+      LEFT JOIN protein_usage_hidden_products hp
+        ON hp.forecast_product_name = lfe.product_name
+       AND hp.venue_id = ?
+      WHERE hp.id IS NULL
       GROUP BY lfe.product_name
       HAVING COUNT(r.id) = 0
       ORDER BY total_guest_count DESC, lfe.product_name ASC
     `,
-  ).all(input.start, input.end, input.venueId) as Array<{
+  ).all(input.start, input.end, input.venueId, input.venueId) as Array<{
     product_name: string;
     entry_count: number;
     total_guest_count: number;
@@ -477,6 +562,7 @@ export function createProteinUsageRoutes(db: Database.Database): Router {
       protein_items: listProteinItems(db),
       rule_rows: listProteinRules(db, venueId),
       forecast_products: listForecastProductAggregates(db, venueId),
+      hidden_products: listHiddenForecastProducts(db, venueId),
     });
   });
 
@@ -507,6 +593,46 @@ export function createProteinUsageRoutes(db: Database.Database): Router {
 
     res.json({
       protein_items: saveProteinItems(db, rows),
+    });
+  });
+
+  router.post('/hidden-products/hide', (req, res) => {
+    const venueId = parseVenueId(req.body.venue_id);
+    const productNames = Array.isArray(req.body.product_names)
+      ? req.body.product_names.map((value: unknown) => String(value ?? '').trim()).filter((value: string) => value.length > 0)
+      : [];
+
+    if (!venueId) {
+      res.status(400).json({ error: 'venue_id is required' });
+      return;
+    }
+    if (productNames.length === 0) {
+      res.status(400).json({ error: 'product_names are required' });
+      return;
+    }
+
+    res.json({
+      hidden_products: hideForecastProducts(db, venueId, productNames),
+    });
+  });
+
+  router.post('/hidden-products/restore', (req, res) => {
+    const venueId = parseVenueId(req.body.venue_id);
+    const productNames = Array.isArray(req.body.product_names)
+      ? req.body.product_names.map((value: unknown) => String(value ?? '').trim()).filter((value: string) => value.length > 0)
+      : [];
+
+    if (!venueId) {
+      res.status(400).json({ error: 'venue_id is required' });
+      return;
+    }
+    if (productNames.length === 0) {
+      res.status(400).json({ error: 'product_names are required' });
+      return;
+    }
+
+    res.json({
+      hidden_products: restoreForecastProducts(db, venueId, productNames),
     });
   });
 

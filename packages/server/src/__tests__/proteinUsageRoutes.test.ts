@@ -261,6 +261,66 @@ describe('Protein usage routes', () => {
       ]),
     );
   });
+
+  it('hides removed forecast products from the venue workspace and can restore them', async () => {
+    const usageDate = '2026-03-27';
+
+    seedForecast(db, {
+      id: 6,
+      filename: 'cleanup-forecast.pdf',
+      entries: [
+        { product_code: 'KEEP01', product_name: 'KEEP01 Prime Dinner', forecast_date: usageDate, guest_count: 60 },
+        { product_code: 'HIDE01', product_name: 'HIDE01 Staff Meal', forecast_date: usageDate, guest_count: 25 },
+      ],
+    });
+
+    const hideResponse = await request(app)
+      .post('/api/protein-usage/hidden-products/hide')
+      .send({
+        venue_id: 7,
+        product_names: ['HIDE01 Staff Meal'],
+      });
+
+    expect(hideResponse.status).toBe(200);
+    expect(hideResponse.body.hidden_products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          forecast_product_name: 'HIDE01 Staff Meal',
+        }),
+      ]),
+    );
+
+    const configResponse = await request(app).get('/api/protein-usage/config?venue_id=7');
+    expect(configResponse.status).toBe(200);
+    expect(configResponse.body.forecast_products).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({ product_name: 'HIDE01 Staff Meal' }),
+      ]),
+    );
+    expect(configResponse.body.hidden_products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ forecast_product_name: 'HIDE01 Staff Meal' }),
+      ]),
+    );
+
+    const restoreResponse = await request(app)
+      .post('/api/protein-usage/hidden-products/restore')
+      .send({
+        venue_id: 7,
+        product_names: ['HIDE01 Staff Meal'],
+      });
+
+    expect(restoreResponse.status).toBe(200);
+    expect(restoreResponse.body.hidden_products).toEqual([]);
+
+    const restoredConfigResponse = await request(app).get('/api/protein-usage/config?venue_id=7');
+    expect(restoredConfigResponse.status).toBe(200);
+    expect(restoredConfigResponse.body.forecast_products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ product_name: 'HIDE01 Staff Meal' }),
+      ]),
+    );
+  });
 });
 
 function seedForecast(
