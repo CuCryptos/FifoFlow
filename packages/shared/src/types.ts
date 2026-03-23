@@ -419,6 +419,7 @@ export interface InvoiceParseResult {
 // ── Forecast Types ──────────────────────────────────────────
 
 export interface ForecastProduct {
+  product_code?: string | null;
   product_name: string;
   group: string;
   counts: Record<string, number>;
@@ -451,6 +452,7 @@ export interface Forecast {
 export interface ForecastEntry {
   id: number;
   forecast_id: number;
+  product_code: string | null;
   product_name: string;
   forecast_date: string;
   guest_count: number;

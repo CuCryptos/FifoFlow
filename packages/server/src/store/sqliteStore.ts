@@ -1366,12 +1366,12 @@ export class SqliteInventoryStore implements InventoryStore {
 
     const forecastId = Number(result.lastInsertRowid);
     const insertEntry = this.db.prepare(
-      'INSERT INTO forecast_entries (forecast_id, product_name, forecast_date, guest_count) VALUES (?, ?, ?, ?)'
+      'INSERT INTO forecast_entries (forecast_id, product_code, product_name, forecast_date, guest_count) VALUES (?, ?, ?, ?, ?)'
     );
     for (const product of input.products) {
       for (const [date, count] of Object.entries(product.counts)) {
         if (count > 0) {
-          insertEntry.run(forecastId, product.product_name, date, count);
+          insertEntry.run(forecastId, product.product_code ?? null, product.product_name, date, count);
         }
       }
     }

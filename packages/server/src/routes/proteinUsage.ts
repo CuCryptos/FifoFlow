@@ -22,6 +22,7 @@ interface ProteinUsageRuleRecord {
 }
 
 interface ForecastProductAggregate {
+  product_code: string | null;
   product_name: string;
   forecast_count: number;
   entry_count: number;
@@ -29,6 +30,41 @@ interface ForecastProductAggregate {
   first_date: string;
   last_date: string;
   configured_rule_count: number;
+}
+
+function latestForecastEntriesCte(whereClause = ''): string {
+  return `
+    WITH ranked_forecast_entries AS (
+      SELECT
+        fe.id,
+        fe.forecast_id,
+        fe.product_code,
+        fe.product_name,
+        fe.forecast_date,
+        fe.guest_count,
+        f.created_at AS forecast_created_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY COALESCE(fe.product_code, ''), fe.product_name, fe.forecast_date
+          ORDER BY f.created_at DESC, fe.forecast_id DESC, fe.id DESC
+        ) AS row_rank
+      FROM forecast_entries fe
+      INNER JOIN forecasts f
+        ON f.id = fe.forecast_id
+      ${whereClause}
+    ),
+    latest_forecast_entries AS (
+      SELECT
+        id,
+        forecast_id,
+        product_code,
+        product_name,
+        forecast_date,
+        guest_count,
+        forecast_created_at
+      FROM ranked_forecast_entries
+      WHERE row_rank = 1
+    )
+  `;
 }
 
 interface ProteinUsageSummaryRow {
@@ -122,20 +158,22 @@ function listProteinRules(db: Database.Database, venueId: number): ProteinUsageR
 function listForecastProductAggregates(db: Database.Database, venueId: number): ForecastProductAggregate[] {
   return db.prepare(
     `
+      ${latestForecastEntriesCte()}
       SELECT
-        fe.product_name,
-        COUNT(DISTINCT fe.forecast_id) AS forecast_count,
+        lfe.product_code,
+        lfe.product_name,
+        COUNT(DISTINCT lfe.forecast_id) AS forecast_count,
         COUNT(*) AS entry_count,
-        SUM(fe.guest_count) AS total_guest_count,
-        MIN(fe.forecast_date) AS first_date,
-        MAX(fe.forecast_date) AS last_date,
+        SUM(lfe.guest_count) AS total_guest_count,
+        MIN(lfe.forecast_date) AS first_date,
+        MAX(lfe.forecast_date) AS last_date,
         COUNT(DISTINCT r.id) AS configured_rule_count
-      FROM forecast_entries fe
+      FROM latest_forecast_entries lfe
       LEFT JOIN forecast_protein_usage_rules r
-        ON r.forecast_product_name = fe.product_name
+        ON r.forecast_product_name = lfe.product_name
        AND r.venue_id = ?
-      GROUP BY fe.product_name
-      ORDER BY total_guest_count DESC, fe.product_name ASC
+      GROUP BY lfe.product_code, lfe.product_name
+      ORDER BY total_guest_count DESC, lfe.product_name ASC
     `,
   ).all(venueId) as ForecastProductAggregate[];
 }
@@ -203,21 +241,20 @@ function buildProteinUsageSummary(
 
   const rows = db.prepare(
     `
+      ${latestForecastEntriesCte('WHERE fe.forecast_date >= ? AND fe.forecast_date <= ?')}
       SELECT
-        fe.forecast_date,
-        fe.product_name,
-        fe.guest_count,
+        lfe.forecast_date,
+        lfe.product_name,
+        lfe.guest_count,
         r.protein_item_id,
         r.usage_per_pax
-      FROM forecast_entries fe
+      FROM latest_forecast_entries lfe
       INNER JOIN forecast_protein_usage_rules r
-        ON r.forecast_product_name = fe.product_name
+        ON r.forecast_product_name = lfe.product_name
       WHERE r.venue_id = ?
-        AND fe.forecast_date >= ?
-        AND fe.forecast_date <= ?
-      ORDER BY fe.forecast_date ASC, fe.product_name ASC
+      ORDER BY lfe.forecast_date ASC, lfe.product_name ASC
     `,
-  ).all(input.venueId, input.start, input.end) as Array<{
+  ).all(input.start, input.end, input.venueId) as Array<{
     forecast_date: string;
     product_name: string;
     guest_count: number;
@@ -236,23 +273,22 @@ function buildProteinUsageSummary(
   }>();
   const unmappedForecastProducts = db.prepare(
     `
+      ${latestForecastEntriesCte('WHERE fe.forecast_date >= ? AND fe.forecast_date <= ?')}
       SELECT
-        fe.product_name,
+        lfe.product_name,
         COUNT(*) AS entry_count,
-        SUM(fe.guest_count) AS total_guest_count,
-        MIN(fe.forecast_date) AS first_date,
-        MAX(fe.forecast_date) AS last_date
-      FROM forecast_entries fe
+        SUM(lfe.guest_count) AS total_guest_count,
+        MIN(lfe.forecast_date) AS first_date,
+        MAX(lfe.forecast_date) AS last_date
+      FROM latest_forecast_entries lfe
       LEFT JOIN forecast_protein_usage_rules r
-        ON r.forecast_product_name = fe.product_name
+        ON r.forecast_product_name = lfe.product_name
        AND r.venue_id = ?
-      WHERE fe.forecast_date >= ?
-        AND fe.forecast_date <= ?
-      GROUP BY fe.product_name
+      GROUP BY lfe.product_name
       HAVING COUNT(r.id) = 0
-      ORDER BY total_guest_count DESC, fe.product_name ASC
+      ORDER BY total_guest_count DESC, lfe.product_name ASC
     `,
-  ).all(input.venueId, input.start, input.end) as Array<{
+  ).all(input.start, input.end, input.venueId) as Array<{
     product_name: string;
     entry_count: number;
     total_guest_count: number;

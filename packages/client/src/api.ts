@@ -376,6 +376,7 @@ export interface ProteinUsageRulePayload {
 }
 
 export interface ProteinUsageForecastProductPayload {
+  product_code: string | null;
   product_name: string;
   forecast_count: number;
   entry_count: number;

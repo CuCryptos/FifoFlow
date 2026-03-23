@@ -61,7 +61,8 @@ export function createForecastRoutes(store: InventoryStore): Router {
   "dates": ["YYYY-MM-DD", "YYYY-MM-DD", ...],
   "products": [
     {
-      "product_name": "exact name as shown, e.g. 'EARLY BIRD WHALE WATCH (EBW)'",
+      "product_code": "exact printed product code if one exists, otherwise null",
+      "product_name": "full exact printed product label including any code, name, abbreviation, or parentheses",
       "group": "the section header, e.g. 'SOH' or 'RAH' or 'RSH'",
       "counts": {
         "YYYY-MM-DD": 150,
@@ -73,13 +74,17 @@ export function createForecastRoutes(store: InventoryStore): Router {
 
 Rules:
 - Read every row and every column of the table
+- Capture every operating date column exactly as printed and map each count to its exact date
+- Preserve the exact printed product identifier from the row. Do not shorten, normalize, or rename the product label.
+- If the row has a distinct product code, return it in product_code. If not, use null.
 - Parse all dates to YYYY-MM-DD format (the year in the header is 2-digit, expand to 4-digit, e.g. 26 = 2026)
 - For each product row, map the guest counts to the corresponding date column
 - "X" means no service — treat as 0
 - Empty or blank cells = 0
 - Only include rows that represent bookable products with guest counts (rows with numbers)
 - Do NOT include rows that are purely structural (deck assignments like "Dk#1 - BOW", room names like "Room AB" unless they have numeric guest counts)
-- Keep the exact product names as printed
+- Keep the exact product labels as printed, including product code/name text
+- Never invent a product, date, or guest count that is not present on the PDF
 - Return ONLY the JSON object, no other text`,
             },
           ],

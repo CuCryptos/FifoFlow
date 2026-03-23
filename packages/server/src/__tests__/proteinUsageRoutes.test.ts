@@ -130,6 +130,75 @@ describe('Protein usage routes', () => {
       ]),
     );
   });
+
+  it('uses the most recent uploaded forecast entry when the same product and date overlap', async () => {
+    const overlapDate = '2026-03-25';
+
+    seedForecast(db, {
+      id: 3,
+      filename: 'forecast-week-1.pdf',
+      entries: [
+        { product_code: 'STK101', product_name: 'STK101 Steak Dinner', forecast_date: overlapDate, guest_count: 100 },
+      ],
+    });
+
+    seedForecast(db, {
+      id: 4,
+      filename: 'forecast-week-2.pdf',
+      entries: [
+        { product_code: 'STK101', product_name: 'STK101 Steak Dinner', forecast_date: overlapDate, guest_count: 140 },
+      ],
+    });
+
+    const configResponse = await request(app).get('/api/protein-usage/config?venue_id=7');
+    expect(configResponse.status).toBe(200);
+    expect(configResponse.body.forecast_products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          product_code: 'STK101',
+          product_name: 'STK101 Steak Dinner',
+          entry_count: 1,
+          total_guest_count: 140,
+        }),
+      ]),
+    );
+
+    const proteins = db.prepare('SELECT id, name FROM protein_usage_items ORDER BY sort_order ASC').all() as Array<{ id: number; name: string }>;
+    const tenderloin = proteins.find((item) => item.name === '5oz Tenderloin');
+    expect(tenderloin).toBeDefined();
+
+    const saveRulesResponse = await request(app)
+      .post('/api/protein-usage/rules/bulk')
+      .send({
+        venue_id: 7,
+        rules: [
+          { forecast_product_name: 'STK101 Steak Dinner', protein_item_id: tenderloin!.id, usage_per_pax: 1 },
+        ],
+      });
+
+    expect(saveRulesResponse.status).toBe(200);
+
+    const summaryResponse = await request(app)
+      .get(`/api/protein-usage/summary?venue_id=7&start=${overlapDate}&end=${overlapDate}&group_by=day`);
+
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryResponse.body.totals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          protein_name: '5oz Tenderloin',
+          total_usage: 140,
+        }),
+      ]),
+    );
+    expect(summaryResponse.body.periods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          period: overlapDate,
+          total_guest_count: 140,
+        }),
+      ]),
+    );
+  });
 });
 
 function seedForecast(
@@ -137,7 +206,7 @@ function seedForecast(
   input: {
     id: number;
     filename: string;
-    entries: Array<{ product_name: string; forecast_date: string; guest_count: number }>;
+    entries: Array<{ product_code?: string | null; product_name: string; forecast_date: string; guest_count: number }>;
   },
 ) {
   const dates = Array.from(new Set(input.entries.map((entry) => entry.forecast_date))).sort();
@@ -150,13 +219,13 @@ function seedForecast(
 
   const insertEntry = db.prepare(
     `
-      INSERT INTO forecast_entries (forecast_id, product_name, forecast_date, guest_count)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO forecast_entries (forecast_id, product_code, product_name, forecast_date, guest_count)
+      VALUES (?, ?, ?, ?, ?)
     `,
   );
 
   input.entries.forEach((entry) => {
-    insertEntry.run(input.id, entry.product_name, entry.forecast_date, entry.guest_count);
+    insertEntry.run(input.id, entry.product_code ?? null, entry.product_name, entry.forecast_date, entry.guest_count);
   });
 }
 

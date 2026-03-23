@@ -270,6 +270,7 @@ export const saveForecastSchema = z.object({
   filename: z.string().min(1),
   dates: z.array(z.string()).min(1),
   products: z.array(z.object({
+    product_code: z.string().min(1).nullable().optional(),
     product_name: z.string().min(1),
     group: z.string().min(1),
     counts: z.record(z.string(), z.number().int().min(0)),

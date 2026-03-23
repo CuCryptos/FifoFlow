@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SaveForecastInput } from '@fifoflow/shared';
+import type { ForecastParseResult, SaveForecastInput } from '@fifoflow/shared';
 import { api } from '../api';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
@@ -50,7 +50,7 @@ export function ProteinUsage() {
   const [groupBy, setGroupBy] = useState<GroupBy>('week');
   const [productSearch, setProductSearch] = useState('');
   const [queuedFile, setQueuedFile] = useState<File | null>(null);
-  const [parsedForecast, setParsedForecast] = useState<Awaited<ReturnType<typeof api.forecasts.parse>> | null>(null);
+  const [parsedForecast, setParsedForecast] = useState<ForecastParseResult | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<string, string>>({});
 
   const configQuery = useQuery({
@@ -142,7 +142,10 @@ export function ProteinUsage() {
     if (!query) {
       return forecastProducts;
     }
-    return forecastProducts.filter((product) => product.product_name.toLowerCase().includes(query));
+    return forecastProducts.filter((product) =>
+      product.product_name.toLowerCase().includes(query)
+      || (product.product_code ?? '').toLowerCase().includes(query)
+    );
   }, [forecastProducts, productSearch]);
 
   useEffect(() => {
@@ -203,7 +206,9 @@ export function ProteinUsage() {
               onChange={(event) => setQueuedFile(event.target.files?.[0] ?? null)}
             />
             <div className="text-sm font-semibold text-slate-900">{queuedFile?.name ?? 'No forecast PDF selected'}</div>
-            <div className="mt-1 text-sm text-slate-600">Upload historical or future forecast PDFs with guest counts per product.</div>
+            <div className="mt-1 text-sm text-slate-600">
+              Upload historical or future forecast PDFs with guest counts per product. If a later upload includes the same product and date, Protein Usage uses the most recent uploaded number instead of stacking the counts.
+            </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -267,26 +272,74 @@ export function ProteinUsage() {
             </div>
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <table className="w-full text-sm">
+              <div className="border-b border-slate-200 bg-white px-4 py-3">
+                <div className="text-sm font-semibold text-slate-900">Review and edit guest counts before save</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Adjust any parsed counts directly here. The saved forecast preserves exact printed product labels, optional product codes, and date-level guest counts.
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] text-sm">
                 <thead className="bg-slate-50 text-left text-slate-500">
                   <tr>
+                    <th className="px-4 py-3 font-medium">Product code</th>
                     <th className="px-4 py-3 font-medium">Forecast product</th>
                     <th className="px-4 py-3 font-medium">Group</th>
                     <th className="px-4 py-3 font-medium">Total guests</th>
+                    {parsedForecast.dates.map((date) => (
+                      <th key={date} className="px-4 py-3 font-medium">{date}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {parsedForecast.products.slice(0, 8).map((product) => (
-                    <tr key={product.product_name} className="border-t border-slate-100">
+                  {parsedForecast.products.map((product, productIndex) => (
+                    <tr key={`${product.product_code ?? 'no-code'}-${product.product_name}-${productIndex}`} className="border-t border-slate-100">
+                      <td className="px-4 py-3 text-slate-600">{product.product_code ?? '—'}</td>
                       <td className="px-4 py-3 text-slate-900">{product.product_name}</td>
                       <td className="px-4 py-3 text-slate-600">{product.group}</td>
                       <td className="px-4 py-3 text-slate-700">
                         {Object.values(product.counts).reduce((sum, value) => sum + value, 0)}
                       </td>
+                      {parsedForecast.dates.map((date) => (
+                        <td key={date} className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={product.counts[date] ?? 0}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value);
+                              setParsedForecast((current) => {
+                                if (!current) {
+                                  return current;
+                                }
+                                const nextProducts = current.products.map((entry, entryIndex) => {
+                                  if (entryIndex !== productIndex) {
+                                    return entry;
+                                  }
+                                  return {
+                                    ...entry,
+                                    counts: {
+                                      ...entry.counts,
+                                      [date]: Number.isFinite(nextValue) && nextValue >= 0 ? Math.round(nextValue) : 0,
+                                    },
+                                  };
+                                });
+                                return {
+                                  ...current,
+                                  products: nextProducts,
+                                };
+                              });
+                            }}
+                            className="w-24 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         ) : null}
@@ -327,6 +380,7 @@ export function ProteinUsage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-500">
                 <tr>
+                  <th className="px-4 py-3 font-medium">Code</th>
                   <th className="px-4 py-3 font-medium">Forecast product</th>
                   <th className="px-4 py-3 font-medium">Guests</th>
                   {proteinItems.map((protein) => (
@@ -339,7 +393,8 @@ export function ProteinUsage() {
               </thead>
               <tbody>
                 {filteredProducts.slice(0, 40).map((product) => (
-                  <tr key={product.product_name} className="border-t border-slate-100">
+                  <tr key={`${product.product_code ?? 'no-code'}-${product.product_name}`} className="border-t border-slate-100">
+                    <td className="px-4 py-3 text-slate-600">{product.product_code ?? '—'}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{product.product_name}</div>
                       <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">

@@ -230,6 +230,7 @@ export function initializeDb(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS forecast_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       forecast_id INTEGER NOT NULL REFERENCES forecasts(id) ON DELETE CASCADE,
+      product_code TEXT,
       product_name TEXT NOT NULL,
       forecast_date TEXT NOT NULL,
       guest_count INTEGER NOT NULL DEFAULT 0
@@ -418,6 +419,11 @@ export function initializeDb(db: Database.Database): void {
   const salesColumns = db.pragma('table_info(sales)') as Array<{ name: string }>;
   if (salesColumns.length > 0 && !salesColumns.some((c) => c.name === 'unit_qty')) {
     db.exec('ALTER TABLE sales ADD COLUMN unit_qty INTEGER NOT NULL DEFAULT 1;');
+  }
+
+  const forecastEntryColumns = db.pragma('table_info(forecast_entries)') as Array<{ name: string }>;
+  if (forecastEntryColumns.length > 0 && !forecastEntryColumns.some((c) => c.name === 'product_code')) {
+    db.exec('ALTER TABLE forecast_entries ADD COLUMN product_code TEXT;');
   }
 
   db.exec(`
