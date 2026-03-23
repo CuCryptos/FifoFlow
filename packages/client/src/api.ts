@@ -356,6 +356,75 @@ export interface AllergyChatResponsePayload {
   cited_chunks: AllergyChatChunkPayload[];
 }
 
+export interface ProteinUsageItemPayload {
+  id: number;
+  name: string;
+  unit_label: string;
+  sort_order: number;
+  active: number;
+}
+
+export interface ProteinUsageRulePayload {
+  id: number;
+  venue_id: number;
+  forecast_product_name: string;
+  protein_item_id: number;
+  usage_per_pax: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProteinUsageForecastProductPayload {
+  product_name: string;
+  forecast_count: number;
+  entry_count: number;
+  total_guest_count: number;
+  first_date: string;
+  last_date: string;
+  configured_rule_count: number;
+}
+
+export interface ProteinUsageSummaryPayload {
+  filters: {
+    venue_id: number;
+    start: string;
+    end: string;
+    group_by: 'day' | 'week' | 'month';
+    today: string;
+  };
+  proteins: ProteinUsageItemPayload[];
+  totals: Array<{
+    protein_item_id: number;
+    protein_name: string;
+    unit_label: string;
+    historical_usage: number;
+    projected_usage: number;
+    total_usage: number;
+  }>;
+  periods: Array<{
+    period: string;
+    historical_guest_count: number;
+    projected_guest_count: number;
+    total_guest_count: number;
+    proteins: Array<{
+      protein_item_id: number;
+      protein_name: string;
+      unit_label: string;
+      historical_usage: number;
+      projected_usage: number;
+      total_usage: number;
+    }>;
+  }>;
+  unmapped_forecast_products: Array<{
+    product_name: string;
+    entry_count: number;
+    total_guest_count: number;
+    first_date: string;
+    last_date: string;
+  }>;
+}
+
 export interface RecipeTemplateSummaryPayload {
   template_id: number;
   name: string;
@@ -783,6 +852,36 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+  },
+  proteinUsage: {
+    config: (venueId: number) =>
+      fetchJson<{
+        protein_items: ProteinUsageItemPayload[];
+        rule_rows: ProteinUsageRulePayload[];
+        forecast_products: ProteinUsageForecastProductPayload[];
+      }>(`/protein-usage/config?venue_id=${venueId}`),
+    saveRules: (input: {
+      venue_id: number;
+      rules: Array<{
+        forecast_product_name: string;
+        protein_item_id: number;
+        usage_per_pax: number;
+        notes?: string | null;
+      }>;
+    }) =>
+      fetchJson<{ rule_rows: ProteinUsageRulePayload[] }>('/protein-usage/rules/bulk', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    summary: (params: { venue_id: number; start: string; end: string; group_by: 'day' | 'week' | 'month' }) => {
+      const qs = new URLSearchParams({
+        venue_id: String(params.venue_id),
+        start: params.start,
+        end: params.end,
+        group_by: params.group_by,
+      });
+      return fetchJson<ProteinUsageSummaryPayload>(`/protein-usage/summary?${qs}`);
+    },
   },
   reconcile: () => fetchJson<Record<string, unknown>>('/reconcile', { method: 'POST' }),
   invoices: {

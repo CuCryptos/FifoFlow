@@ -251,6 +251,43 @@ export function initializeDb(db: Database.Database): void {
       UPDATE forecast_product_mappings SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
+    CREATE TABLE IF NOT EXISTS protein_usage_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      unit_label TEXT NOT NULL DEFAULT 'portion',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS forecast_protein_usage_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      forecast_product_name TEXT NOT NULL,
+      protein_item_id INTEGER NOT NULL REFERENCES protein_usage_items(id) ON DELETE CASCADE,
+      usage_per_pax REAL NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(venue_id, forecast_product_name, protein_item_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_forecast_protein_usage_rules_venue
+      ON forecast_protein_usage_rules(venue_id, forecast_product_name);
+
+    CREATE TRIGGER IF NOT EXISTS update_protein_usage_items_timestamp
+    AFTER UPDATE ON protein_usage_items
+    BEGIN
+      UPDATE protein_usage_items SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_forecast_protein_usage_rules_timestamp
+    AFTER UPDATE ON forecast_protein_usage_rules
+    BEGIN
+      UPDATE forecast_protein_usage_rules SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
     CREATE TABLE IF NOT EXISTS sales (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL REFERENCES items(id),
@@ -382,6 +419,14 @@ export function initializeDb(db: Database.Database): void {
   if (salesColumns.length > 0 && !salesColumns.some((c) => c.name === 'unit_qty')) {
     db.exec('ALTER TABLE sales ADD COLUMN unit_qty INTEGER NOT NULL DEFAULT 1;');
   }
+
+  db.exec(`
+    INSERT OR IGNORE INTO protein_usage_items (name, unit_label, sort_order) VALUES
+      ('5oz Tenderloin', 'portion', 1),
+      ('Prime Tenderloin', 'portion', 2),
+      ('Top Round', 'portion', 3),
+      ('Chicken', 'portion', 4);
+  `);
 
   // Backfill vendor_prices from existing item vendor+pricing data
   db.exec(`

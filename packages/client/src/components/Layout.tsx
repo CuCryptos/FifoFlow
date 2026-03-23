@@ -17,6 +17,7 @@ import {
   NotebookText,
   ListChecks,
   ShieldPlus,
+  Beef,
 } from 'lucide-react';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useVenues } from '../hooks/useVenues';
@@ -30,6 +31,7 @@ const navItems = [
   { to: '/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/recipes', label: 'Recipes', icon: UtensilsCrossed },
   { to: '/allergy-assistant', label: 'Allergy Assistant', icon: ShieldPlus },
+  { to: '/protein-usage', label: 'Protein Usage', icon: Beef },
   { to: '/counts', label: 'Counts', icon: ClipboardCheck },
   { to: '/activity', label: 'Activity', icon: Activity },
   { to: '/reports', label: 'Reports', icon: BarChart3 },

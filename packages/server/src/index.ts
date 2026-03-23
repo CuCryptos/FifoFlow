@@ -20,6 +20,7 @@ import { createRecipeWorkflowRoutes } from './routes/recipeWorkflow.js';
 import { createRecipeTemplateRoutes } from './routes/recipeTemplates.js';
 import { createRecipeDraftRoutes } from './routes/recipeDrafts.js';
 import { createAllergyAssistantRoutes } from './routes/allergyAssistant.js';
+import { createProteinUsageRoutes } from './routes/proteinUsage.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
 import path from 'node:path';
@@ -55,6 +56,7 @@ app.use('/api/sales', createSalesRoutes(store));
 app.use('/api/intelligence', createIntelligenceRoutes(getDb()));
 app.use('/api/recipe-workflow', createRecipeWorkflowRoutes(getDb()));
 app.use('/api/allergy-assistant', createAllergyAssistantRoutes(getDb()));
+app.use('/api/protein-usage', createProteinUsageRoutes(getDb()));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', store: storeDriver });
