@@ -324,14 +324,15 @@ export interface AllergyDocumentPayload {
   mime_type: string;
   page_count: number;
   chunk_count: number;
+  product_count: number;
   status: 'ready' | 'failed';
   created_at: string;
   updated_at: string;
 }
 
 export interface AllergyChatItemPayload {
-  recipe_version_id: number;
-  recipe_name: string;
+  product_id: number;
+  product_name: string;
   rationale: string;
   evidence_chunk_ids: number[];
 }

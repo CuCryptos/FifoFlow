@@ -4,34 +4,50 @@ import request from 'supertest';
 import Database from 'better-sqlite3';
 import { initializeDb } from '../db.js';
 import { createAllergyAssistantRoutes } from '../routes/allergyAssistant.js';
-import { SQLiteOperationalRecipeCostReadRepository } from '../intelligence/recipeCost/recipeCostRepositories.js';
 
 function createTestApp() {
   const db = new Database(':memory:');
   initializeDb(db);
-  new SQLiteOperationalRecipeCostReadRepository(db);
 
   const fakeAi = {
     async transcribeImagePage() {
-      return 'Allergy chart\nGuava Glazed Salmon | contains guava\nHouse Salad | safe for guava allergy';
+      return 'Allergy chart\nGuava Glazed Salmon | contains guava\nHouse Salad | guava free';
+    },
+    async extractProductsFromPage() {
+      return [
+        {
+          page_number: 1,
+          product_name: 'Guava Glazed Salmon',
+          source_row_text: 'Guava Glazed Salmon | contains guava',
+          allergen_summary: 'contains guava',
+          dietary_notes: null,
+        },
+        {
+          page_number: 1,
+          product_name: 'House Salad',
+          source_row_text: 'House Salad | guava free',
+          allergen_summary: 'guava free',
+          dietary_notes: null,
+        },
+      ];
     },
     async answerQuestion() {
       return {
         allergen_focus: 'guava',
-        answer_markdown: 'Avoid the guava salmon. The house salad is charted as safe.',
+        answer_markdown: 'Avoid the guava salmon. The house salad is charted as guava free.',
         safe_items: [
           {
-            recipe_version_id: 2,
-            recipe_name: 'House Salad',
-            rationale: 'The uploaded allergy chart marks this item safe for guava allergy.',
+            product_id: 2,
+            product_name: 'House Salad',
+            rationale: 'The uploaded allergy chart marks this product guava free.',
             evidence_chunk_ids: [2],
           },
         ],
         avoid_items: [
           {
-            recipe_version_id: 1,
-            recipe_name: 'Guava Glazed Salmon',
-            rationale: 'The uploaded allergy chart says this item contains guava.',
+            product_id: 1,
+            product_name: 'Guava Glazed Salmon',
+            rationale: 'The uploaded allergy chart says this product contains guava.',
             evidence_chunk_ids: [1],
           },
         ],
@@ -57,25 +73,13 @@ describe('Allergy assistant routes', () => {
   beforeEach(() => {
     ({ app, db } = createTestApp());
     db.prepare("INSERT INTO venues (id, name, sort_order, show_in_menus) VALUES (2, 'Dining Room', 1, 1)").run();
-    seedPromotedDishRecipe(db, {
-      recipeId: 1,
-      recipeVersionId: 1,
-      name: 'Guava Glazed Salmon',
-      ingredients: ['salmon', 'guava puree'],
-    });
-    seedPromotedDishRecipe(db, {
-      recipeId: 2,
-      recipeVersionId: 2,
-      name: 'House Salad',
-      ingredients: ['romaine', 'cucumber'],
-    });
   });
 
   afterEach(() => {
     db.close();
   });
 
-  it('uploads an allergy chart and stores chunked page evidence', async () => {
+  it('uploads an allergy chart and stores parsed product rows', async () => {
     const response = await request(app)
       .post('/api/allergy-assistant/documents/upload')
       .field('venue_id', '2')
@@ -90,24 +94,57 @@ describe('Allergy assistant routes', () => {
       filename: 'allergy-chart.png',
       venue_id: 2,
       page_count: 1,
+      product_count: 2,
       status: 'ready',
     });
 
     const page = db.prepare('SELECT extracted_text FROM allergy_document_pages LIMIT 1').get() as { extracted_text: string };
     expect(page.extracted_text).toContain('Guava Glazed Salmon');
 
-    const chunkCount = db.prepare('SELECT COUNT(*) AS count FROM allergy_document_chunks').get() as { count: number };
-    expect(chunkCount.count).toBeGreaterThan(0);
+    const productRows = db.prepare(
+      'SELECT product_name, allergen_summary, source_row_text FROM allergy_document_products ORDER BY id ASC',
+    ).all() as Array<{ product_name: string; allergen_summary: string | null; source_row_text: string }>;
+
+    expect(productRows).toEqual([
+      {
+        product_name: 'Guava Glazed Salmon',
+        allergen_summary: 'contains guava',
+        source_row_text: 'Guava Glazed Salmon | contains guava',
+      },
+      {
+        product_name: 'House Salad',
+        allergen_summary: 'guava free',
+        source_row_text: 'House Salad | guava free',
+      },
+    ]);
   });
 
-  it('answers chef allergy questions against stored evidence and promoted dish recipes', async () => {
+  it('answers chef questions from stored chart products without recipes', async () => {
     seedAllergyDocument(db, {
       id: 10,
       venueId: 2,
       filename: 'hawaii-menu-allergens.pdf',
       chunks: [
         'Guava Glazed Salmon | contains guava',
-        'House Salad | safe for guava allergy',
+        'House Salad | guava free',
+      ],
+      products: [
+        {
+          id: 1,
+          pageNumber: 1,
+          productName: 'Guava Glazed Salmon',
+          sourceRowText: 'Guava Glazed Salmon | contains guava',
+          allergenSummary: 'contains guava',
+          sourceChunkIds: [1],
+        },
+        {
+          id: 2,
+          pageNumber: 1,
+          productName: 'House Salad',
+          sourceRowText: 'House Salad | guava free',
+          allergenSummary: 'guava free',
+          sourceChunkIds: [2],
+        },
       ],
     });
 
@@ -115,106 +152,50 @@ describe('Allergy assistant routes', () => {
       .post('/api/allergy-assistant/chat')
       .send({
         venue_id: 2,
-        question: 'A guest has a guava allergy. What can they eat on the menu?',
+        question: 'A guest has a guava allergy. Which products on this chart are safe?',
       });
 
     expect(response.status).toBe(200);
     expect(response.body.allergen_focus).toBe('guava');
     expect(response.body.avoid_items).toEqual([
       expect.objectContaining({
-        recipe_version_id: 1,
-        recipe_name: 'Guava Glazed Salmon',
+        product_id: 1,
+        product_name: 'Guava Glazed Salmon',
       }),
     ]);
     expect(response.body.safe_items).toEqual([
       expect.objectContaining({
-        recipe_version_id: 2,
-        recipe_name: 'House Salad',
+        product_id: 2,
+        product_name: 'House Salad',
       }),
     ]);
     expect(response.body.cited_chunks).toHaveLength(2);
   });
 });
 
-function seedPromotedDishRecipe(
-  db: Database.Database,
-  input: { recipeId: number; recipeVersionId: number; name: string; ingredients: string[] },
-) {
-  db.prepare(
-    `
-      INSERT INTO recipes (id, name, type, notes, serving_quantity, serving_unit, serving_count)
-      VALUES (?, ?, 'dish', null, 1, 'plate', 1)
-    `,
-  ).run(input.recipeId, input.name);
-
-  db.prepare(
-    `
-      INSERT INTO recipe_versions (
-        id,
-        recipe_id,
-        version_number,
-        status,
-        yield_quantity,
-        yield_unit,
-        source_builder_job_id,
-        source_builder_draft_recipe_id,
-        source_template_id,
-        source_template_version_id,
-        source_text_snapshot
-      ) VALUES (?, ?, 1, 'active', 1, 'batch', null, null, null, null, null)
-    `,
-  ).run(input.recipeVersionId, input.recipeId);
-
-  const insertIngredient = db.prepare(
-    `
-      INSERT INTO recipe_ingredients (
-        recipe_version_id,
-        line_index,
-        source_parsed_row_id,
-        source_resolution_row_id,
-        raw_ingredient_text,
-        canonical_ingredient_id,
-        inventory_item_id,
-        quantity_normalized,
-        unit_normalized,
-        preparation_note
-      ) VALUES (?, ?, null, null, ?, ?, null, 1, 'each', null)
-    `,
-  );
-
-  input.ingredients.forEach((ingredient, index) => {
-    const canonicalIngredientId = Number(
-      db.prepare(
-        `
-          INSERT INTO canonical_ingredients (
-            canonical_name,
-            normalized_canonical_name,
-            category,
-            base_unit,
-            source_hash
-          ) VALUES (?, ?, 'allergy-test', 'each', ?)
-        `,
-      ).run(
-        ingredient,
-        ingredient.toLowerCase(),
-        `allergy:${input.recipeVersionId}:${index}:${ingredient.toLowerCase()}`,
-      ).lastInsertRowid,
-    );
-
-    insertIngredient.run(input.recipeVersionId, index, ingredient, canonicalIngredientId);
-  });
-}
-
 function seedAllergyDocument(
   db: Database.Database,
-  input: { id: number; venueId: number | null; filename: string; chunks: string[] },
+  input: {
+    id: number;
+    venueId: number | null;
+    filename: string;
+    chunks: string[];
+    products: Array<{
+      id: number;
+      pageNumber: number;
+      productName: string;
+      sourceRowText: string;
+      allergenSummary: string | null;
+      sourceChunkIds: number[];
+    }>;
+  },
 ) {
   db.prepare(
     `
-      INSERT INTO allergy_documents (id, venue_id, filename, mime_type, page_count, chunk_count, status)
-      VALUES (?, ?, ?, 'application/pdf', 1, ?, 'ready')
+      INSERT INTO allergy_documents (id, venue_id, filename, mime_type, page_count, chunk_count, product_count, status)
+      VALUES (?, ?, ?, 'application/pdf', 1, ?, ?, 'ready')
     `,
-  ).run(input.id, input.venueId, input.filename, input.chunks.length);
+  ).run(input.id, input.venueId, input.filename, input.chunks.length, input.products.length);
 
   const pageId = Number(
     db.prepare(
@@ -232,7 +213,41 @@ function seedAllergyDocument(
     `,
   );
 
+  const persistedChunkIds: number[] = [];
   input.chunks.forEach((chunk, index) => {
-    insertChunk.run(input.id, pageId, index, chunk);
+    const result = insertChunk.run(input.id, pageId, index, chunk);
+    persistedChunkIds.push(Number(result.lastInsertRowid));
+  });
+
+  const insertProduct = db.prepare(
+    `
+      INSERT INTO allergy_document_products (
+        id,
+        document_id,
+        page_id,
+        page_number,
+        product_name,
+        normalized_product_name,
+        source_row_text,
+        allergen_summary,
+        dietary_notes,
+        source_chunk_ids
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, null, ?)
+    `,
+  );
+
+  input.products.forEach((product) => {
+    const actualChunkIds = product.sourceChunkIds.map((chunkOrder) => persistedChunkIds[chunkOrder - 1]).filter(Boolean);
+    insertProduct.run(
+      product.id,
+      input.id,
+      pageId,
+      product.pageNumber,
+      product.productName,
+      product.productName.toLowerCase(),
+      product.sourceRowText,
+      product.allergenSummary,
+      JSON.stringify(actualChunkIds),
+    );
   });
 }
