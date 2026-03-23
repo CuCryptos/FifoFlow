@@ -52,6 +52,7 @@ export function ProteinUsage() {
   const [queuedFile, setQueuedFile] = useState<File | null>(null);
   const [parsedForecast, setParsedForecast] = useState<ForecastParseResult | null>(null);
   const [ruleDrafts, setRuleDrafts] = useState<Record<string, string>>({});
+  const [proteinItemDrafts, setProteinItemDrafts] = useState<Record<number, { case_unit_label: string; portions_per_case: string }>>({});
 
   const configQuery = useQuery({
     queryKey: ['protein-usage', 'config', selectedVenueId],
@@ -91,6 +92,15 @@ export function ProteinUsage() {
       nextDrafts[buildRuleKey(rule.forecast_product_name, rule.protein_item_id)] = String(rule.usage_per_pax);
     }
     setRuleDrafts(nextDrafts);
+
+    const nextProteinDrafts: Record<number, { case_unit_label: string; portions_per_case: string }> = {};
+    for (const protein of configQuery.data.protein_items) {
+      nextProteinDrafts[protein.id] = {
+        case_unit_label: protein.case_unit_label ?? 'case',
+        portions_per_case: protein.portions_per_case != null ? String(protein.portions_per_case) : '',
+      };
+    }
+    setProteinItemDrafts(nextProteinDrafts);
   }, [configQuery.data]);
 
   const parseMutation = useMutation({
@@ -135,6 +145,19 @@ export function ProteinUsage() {
     },
   });
 
+  const saveProteinItemsMutation = useMutation({
+    mutationFn: (input: { items: Array<{ protein_item_id: number; case_unit_label: string; portions_per_case: number | null }> }) =>
+      api.proteinUsage.saveItems(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'config'] });
+      queryClient.invalidateQueries({ queryKey: ['protein-usage', 'summary'] });
+      toast('Tracked protein case settings saved.', 'success');
+    },
+    onError: (error: Error) => {
+      toast(`Protein settings save failed: ${error.message}`, 'error');
+    },
+  });
+
   const proteinItems = configQuery.data?.protein_items ?? [];
   const forecastProducts = configQuery.data?.forecast_products ?? [];
   const filteredProducts = useMemo(() => {
@@ -151,6 +174,7 @@ export function ProteinUsage() {
   useEffect(() => {
     configSignatureRef.current = '';
     setRuleDrafts({});
+    setProteinItemDrafts({});
   }, [selectedVenueId]);
 
   const saveableRuleRows = useMemo(() => {
@@ -168,6 +192,16 @@ export function ProteinUsage() {
       };
     }).filter((row) => Number.isFinite(row.protein_item_id) && row.protein_item_id > 0 && Number.isFinite(row.usage_per_pax));
   }, [ruleDrafts, selectedVenueId]);
+
+  const saveableProteinItems = useMemo(() =>
+    proteinItems.map((protein) => ({
+      protein_item_id: protein.id,
+      case_unit_label: proteinItemDrafts[protein.id]?.case_unit_label?.trim() || 'case',
+      portions_per_case: proteinItemDrafts[protein.id]?.portions_per_case?.trim()
+        ? Number(proteinItemDrafts[protein.id]?.portions_per_case)
+        : null,
+    })).filter((row) => row.portions_per_case == null || (Number.isFinite(row.portions_per_case) && row.portions_per_case > 0))
+  , [proteinItemDrafts, proteinItems]);
 
   if (!selectedVenueId) {
     return (
@@ -346,6 +380,73 @@ export function ProteinUsage() {
       </WorkflowPanel>
 
       <WorkflowPanel
+        title="Tracked Protein Settings"
+        description="Define how many portions are in a case for each tracked protein. The usage summary uses this to show both portion totals and case totals."
+        actions={(
+          <button
+            type="button"
+            onClick={() => saveProteinItemsMutation.mutate({ items: saveableProteinItems })}
+            disabled={saveProteinItemsMutation.isPending || saveableProteinItems.length === 0}
+            className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {saveProteinItemsMutation.isPending ? 'Saving protein settings...' : 'Save protein settings'}
+          </button>
+        )}
+      >
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">Tracked protein</th>
+                <th className="px-4 py-3 font-medium">Usage unit</th>
+                <th className="px-4 py-3 font-medium">Case label</th>
+                <th className="px-4 py-3 font-medium">Portions per case</th>
+              </tr>
+            </thead>
+            <tbody>
+              {proteinItems.map((protein) => (
+                <tr key={protein.id} className="border-t border-slate-100">
+                  <td className="px-4 py-3 font-medium text-slate-900">{protein.name}</td>
+                  <td className="px-4 py-3 text-slate-600">{protein.unit_label}</td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={proteinItemDrafts[protein.id]?.case_unit_label ?? protein.case_unit_label ?? 'case'}
+                      onChange={(event) => setProteinItemDrafts((current) => ({
+                        ...current,
+                        [protein.id]: {
+                          case_unit_label: event.target.value,
+                          portions_per_case: current[protein.id]?.portions_per_case ?? (protein.portions_per_case != null ? String(protein.portions_per_case) : ''),
+                        },
+                      }))}
+                      className="w-28 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={proteinItemDrafts[protein.id]?.portions_per_case ?? (protein.portions_per_case != null ? String(protein.portions_per_case) : '')}
+                      onChange={(event) => setProteinItemDrafts((current) => ({
+                        ...current,
+                        [protein.id]: {
+                          case_unit_label: current[protein.id]?.case_unit_label ?? protein.case_unit_label ?? 'case',
+                          portions_per_case: event.target.value,
+                        },
+                      }))}
+                      placeholder="Set case conversion"
+                      className="w-36 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </WorkflowPanel>
+
+      <WorkflowPanel
         title="Per-Pax Usage Rules"
         description="Set how much of each tracked meat is consumed per guest for each forecast product. Leave a value at 0 to exclude that meat from the product."
         actions={(
@@ -464,7 +565,11 @@ export function ProteinUsage() {
                   key={total.protein_item_id}
                   label={total.protein_name}
                   value={`${formatNumber(total.total_usage)} ${total.unit_label}`}
-                  detail={`Historical ${formatNumber(total.historical_usage)} • Projected ${formatNumber(total.projected_usage)}`}
+                  detail={
+                    total.total_case_usage != null
+                      ? `Historical ${formatNumber(total.historical_usage)} • Projected ${formatNumber(total.projected_usage)} • ${formatNumber(total.total_case_usage)} ${total.case_unit_label}`
+                      : `Historical ${formatNumber(total.historical_usage)} • Projected ${formatNumber(total.projected_usage)}`
+                  }
                   tone={total.projected_usage > total.historical_usage ? 'amber' : 'blue'}
                 />
               ))}
@@ -479,7 +584,14 @@ export function ProteinUsage() {
                     <th className="px-4 py-3 font-medium">Historical</th>
                     <th className="px-4 py-3 font-medium">Projected</th>
                     {summaryQuery.data.proteins.map((protein) => (
-                      <th key={protein.id} className="px-4 py-3 font-medium">{protein.name}</th>
+                      <th key={protein.id} className="px-4 py-3 font-medium">
+                        <div>{protein.name}</div>
+                        <div className="text-[11px] font-normal text-slate-400">
+                          {protein.portions_per_case != null && protein.portions_per_case > 0
+                            ? `${protein.unit_label} + ${protein.case_unit_label}`
+                            : protein.unit_label}
+                        </div>
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -500,7 +612,16 @@ export function ProteinUsage() {
                         const proteinRow = period.proteins.find((entry) => entry.protein_item_id === protein.id);
                         return (
                           <td key={protein.id} className="px-4 py-3 text-slate-700">
-                            {proteinRow ? `${formatNumber(proteinRow.total_usage)} ${protein.unit_label}` : '—'}
+                            {proteinRow
+                              ? (
+                                <div className="space-y-1">
+                                  <div>{`${formatNumber(proteinRow.total_usage)} ${protein.unit_label}`}</div>
+                                  {proteinRow.total_case_usage != null ? (
+                                    <div className="text-xs text-slate-500">{`${formatNumber(proteinRow.total_case_usage)} ${protein.case_unit_label}`}</div>
+                                  ) : null}
+                                </div>
+                              )
+                              : '—'}
                           </td>
                         );
                       })}

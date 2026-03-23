@@ -6,6 +6,8 @@ interface ProteinUsageItemRecord {
   id: number;
   name: string;
   unit_label: string;
+  case_unit_label: string;
+  portions_per_case: number | null;
   sort_order: number;
   active: number;
 }
@@ -76,9 +78,14 @@ interface ProteinUsageSummaryRow {
     protein_item_id: number;
     protein_name: string;
     unit_label: string;
+    case_unit_label: string;
+    portions_per_case: number | null;
     historical_usage: number;
     projected_usage: number;
     total_usage: number;
+    historical_case_usage: number | null;
+    projected_case_usage: number | null;
+    total_case_usage: number | null;
   }>;
 }
 
@@ -133,15 +140,67 @@ function normalizeRuleRows(input: unknown): Array<{
     .filter((row) => row.forecast_product_name.length > 0 && Number.isFinite(row.protein_item_id) && row.protein_item_id > 0 && Number.isFinite(row.usage_per_pax));
 }
 
+function normalizeProteinItemRows(input: unknown): Array<{
+  protein_item_id: number;
+  case_unit_label: string;
+  portions_per_case: number | null;
+}> {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => {
+      const row = entry as Record<string, unknown>;
+      const portionsPerCase = row.portions_per_case == null || row.portions_per_case === ''
+        ? null
+        : Number(row.portions_per_case);
+      return {
+        protein_item_id: Number(row.protein_item_id),
+        case_unit_label: typeof row.case_unit_label === 'string' && row.case_unit_label.trim().length > 0 ? row.case_unit_label.trim() : 'case',
+        portions_per_case: portionsPerCase != null && Number.isFinite(portionsPerCase) && portionsPerCase > 0 ? portionsPerCase : null,
+      };
+    })
+    .filter((row) => Number.isFinite(row.protein_item_id) && row.protein_item_id > 0);
+}
+
 function listProteinItems(db: Database.Database): ProteinUsageItemRecord[] {
   return db.prepare(
     `
-      SELECT id, name, unit_label, sort_order, active
+      SELECT id, name, unit_label, case_unit_label, portions_per_case, sort_order, active
       FROM protein_usage_items
       WHERE active = 1
       ORDER BY sort_order ASC, name ASC
     `,
   ).all() as ProteinUsageItemRecord[];
+}
+
+function saveProteinItems(
+  db: Database.Database,
+  rows: Array<{
+    protein_item_id: number;
+    case_unit_label: string;
+    portions_per_case: number | null;
+  }>,
+): ProteinUsageItemRecord[] {
+  const update = db.prepare(
+    `
+      UPDATE protein_usage_items
+      SET case_unit_label = ?,
+          portions_per_case = ?
+      WHERE id = ?
+    `,
+  );
+
+  const transaction = db.transaction(() => {
+    for (const row of rows) {
+      update.run(row.case_unit_label, row.portions_per_case, row.protein_item_id);
+    }
+  });
+
+  transaction();
+  return listProteinItems(db);
 }
 
 function listProteinRules(db: Database.Database, venueId: number): ProteinUsageRuleRecord[] {
@@ -267,9 +326,14 @@ function buildProteinUsageSummary(
     protein_item_id: number;
     protein_name: string;
     unit_label: string;
+    case_unit_label: string;
+    portions_per_case: number | null;
     historical_usage: number;
     projected_usage: number;
     total_usage: number;
+    historical_case_usage: number | null;
+    projected_case_usage: number | null;
+    total_case_usage: number | null;
   }>();
   const unmappedForecastProducts = db.prepare(
     `
@@ -327,9 +391,14 @@ function buildProteinUsageSummary(
         protein_item_id: protein.id,
         protein_name: protein.name,
         unit_label: protein.unit_label,
+        case_unit_label: protein.case_unit_label,
+        portions_per_case: protein.portions_per_case,
         historical_usage: 0,
         projected_usage: 0,
         total_usage: 0,
+        historical_case_usage: null,
+        projected_case_usage: null,
+        total_case_usage: null,
       };
       periodRow.proteins.push(periodProtein);
     }
@@ -340,20 +409,35 @@ function buildProteinUsageSummary(
     } else {
       periodProtein.projected_usage += usage;
     }
+    if (protein.portions_per_case != null && protein.portions_per_case > 0) {
+      periodProtein.historical_case_usage = periodProtein.historical_usage / protein.portions_per_case;
+      periodProtein.projected_case_usage = periodProtein.projected_usage / protein.portions_per_case;
+      periodProtein.total_case_usage = periodProtein.total_usage / protein.portions_per_case;
+    }
 
     const totalEntry = totalsMap.get(protein.id) ?? {
       protein_item_id: protein.id,
       protein_name: protein.name,
       unit_label: protein.unit_label,
+      case_unit_label: protein.case_unit_label,
+      portions_per_case: protein.portions_per_case,
       historical_usage: 0,
       projected_usage: 0,
       total_usage: 0,
+      historical_case_usage: null,
+      projected_case_usage: null,
+      total_case_usage: null,
     };
     totalEntry.total_usage += usage;
     if (isHistorical) {
       totalEntry.historical_usage += usage;
     } else {
       totalEntry.projected_usage += usage;
+    }
+    if (protein.portions_per_case != null && protein.portions_per_case > 0) {
+      totalEntry.historical_case_usage = totalEntry.historical_usage / protein.portions_per_case;
+      totalEntry.projected_case_usage = totalEntry.projected_usage / protein.portions_per_case;
+      totalEntry.total_case_usage = totalEntry.total_usage / protein.portions_per_case;
     }
     totalsMap.set(protein.id, totalEntry);
     periodMap.set(period, periodRow);
@@ -411,6 +495,18 @@ export function createProteinUsageRoutes(db: Database.Database): Router {
 
     res.json({
       rule_rows: saveProteinRules(db, venueId, rules),
+    });
+  });
+
+  router.post('/config/items', (req, res) => {
+    const rows = normalizeProteinItemRows(req.body.items);
+    if (rows.length === 0) {
+      res.status(400).json({ error: 'items are required' });
+      return;
+    }
+
+    res.json({
+      protein_items: saveProteinItems(db, rows),
     });
   });
 

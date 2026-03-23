@@ -360,6 +360,8 @@ export interface ProteinUsageItemPayload {
   id: number;
   name: string;
   unit_label: string;
+  case_unit_label: string;
+  portions_per_case: number | null;
   sort_order: number;
   active: number;
 }
@@ -399,9 +401,14 @@ export interface ProteinUsageSummaryPayload {
     protein_item_id: number;
     protein_name: string;
     unit_label: string;
+    case_unit_label: string;
+    portions_per_case: number | null;
     historical_usage: number;
     projected_usage: number;
     total_usage: number;
+    historical_case_usage: number | null;
+    projected_case_usage: number | null;
+    total_case_usage: number | null;
   }>;
   periods: Array<{
     period: string;
@@ -412,9 +419,14 @@ export interface ProteinUsageSummaryPayload {
       protein_item_id: number;
       protein_name: string;
       unit_label: string;
+      case_unit_label: string;
+      portions_per_case: number | null;
       historical_usage: number;
       projected_usage: number;
       total_usage: number;
+      historical_case_usage: number | null;
+      projected_case_usage: number | null;
+      total_case_usage: number | null;
     }>;
   }>;
   unmapped_forecast_products: Array<{
@@ -871,6 +883,17 @@ export const api = {
       }>;
     }) =>
       fetchJson<{ rule_rows: ProteinUsageRulePayload[] }>('/protein-usage/rules/bulk', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    saveItems: (input: {
+      items: Array<{
+        protein_item_id: number;
+        case_unit_label?: string;
+        portions_per_case?: number | null;
+      }>;
+    }) =>
+      fetchJson<{ protein_items: ProteinUsageItemPayload[] }>('/protein-usage/config/items', {
         method: 'POST',
         body: JSON.stringify(input),
       }),

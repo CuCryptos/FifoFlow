@@ -47,10 +47,11 @@ describe('Protein usage routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.protein_items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: '5oz Tenderloin' }),
-        expect.objectContaining({ name: 'Prime Tenderloin' }),
-        expect.objectContaining({ name: 'Top Round' }),
-        expect.objectContaining({ name: 'Chicken' }),
+      expect.objectContaining({ name: '5oz Tenderloin' }),
+      expect.objectContaining({ name: 'Prime Tenderloin' }),
+      expect.objectContaining({ name: 'Top Round' }),
+      expect.objectContaining({ name: 'Chicken' }),
+      expect.objectContaining({ name: 'Lobster' }),
       ]),
     );
     expect(response.body.forecast_products).toEqual(
@@ -195,6 +196,67 @@ describe('Protein usage routes', () => {
         expect.objectContaining({
           period: overlapDate,
           total_guest_count: 140,
+        }),
+      ]),
+    );
+  });
+
+  it('saves protein case settings and returns derived case usage in the summary', async () => {
+    const usageDate = '2026-03-26';
+
+    seedForecast(db, {
+      id: 5,
+      filename: 'lobster-forecast.pdf',
+      entries: [
+        { product_code: 'LOB200', product_name: 'LOB200 Lobster Dinner', forecast_date: usageDate, guest_count: 48 },
+      ],
+    });
+
+    const proteins = db.prepare('SELECT id, name FROM protein_usage_items ORDER BY sort_order ASC').all() as Array<{ id: number; name: string }>;
+    const lobster = proteins.find((item) => item.name === 'Lobster');
+    expect(lobster).toBeDefined();
+
+    const saveProteinSettings = await request(app)
+      .post('/api/protein-usage/config/items')
+      .send({
+        items: [
+          { protein_item_id: lobster!.id, case_unit_label: 'case', portions_per_case: 24 },
+        ],
+      });
+
+    expect(saveProteinSettings.status).toBe(200);
+    expect(saveProteinSettings.body.protein_items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: lobster!.id,
+          name: 'Lobster',
+          case_unit_label: 'case',
+          portions_per_case: 24,
+        }),
+      ]),
+    );
+
+    const saveRulesResponse = await request(app)
+      .post('/api/protein-usage/rules/bulk')
+      .send({
+        venue_id: 7,
+        rules: [
+          { forecast_product_name: 'LOB200 Lobster Dinner', protein_item_id: lobster!.id, usage_per_pax: 1 },
+        ],
+      });
+
+    expect(saveRulesResponse.status).toBe(200);
+
+    const summaryResponse = await request(app)
+      .get(`/api/protein-usage/summary?venue_id=7&start=${usageDate}&end=${usageDate}&group_by=day`);
+
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryResponse.body.totals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          protein_name: 'Lobster',
+          total_usage: 48,
+          total_case_usage: 2,
         }),
       ]),
     );

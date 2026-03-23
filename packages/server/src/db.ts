@@ -256,6 +256,8 @@ export function initializeDb(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       unit_label TEXT NOT NULL DEFAULT 'portion',
+      case_unit_label TEXT NOT NULL DEFAULT 'case',
+      portions_per_case REAL,
       sort_order INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -426,12 +428,21 @@ export function initializeDb(db: Database.Database): void {
     db.exec('ALTER TABLE forecast_entries ADD COLUMN product_code TEXT;');
   }
 
+  const proteinUsageColumns = db.pragma('table_info(protein_usage_items)') as Array<{ name: string }>;
+  if (proteinUsageColumns.length > 0 && !proteinUsageColumns.some((c) => c.name === 'case_unit_label')) {
+    db.exec("ALTER TABLE protein_usage_items ADD COLUMN case_unit_label TEXT NOT NULL DEFAULT 'case';");
+  }
+  if (proteinUsageColumns.length > 0 && !proteinUsageColumns.some((c) => c.name === 'portions_per_case')) {
+    db.exec('ALTER TABLE protein_usage_items ADD COLUMN portions_per_case REAL;');
+  }
+
   db.exec(`
     INSERT OR IGNORE INTO protein_usage_items (name, unit_label, sort_order) VALUES
       ('5oz Tenderloin', 'portion', 1),
       ('Prime Tenderloin', 'portion', 2),
       ('Top Round', 'portion', 3),
-      ('Chicken', 'portion', 4);
+      ('Chicken', 'portion', 4),
+      ('Lobster', 'portion', 5);
   `);
 
   // Backfill vendor_prices from existing item vendor+pricing data
