@@ -50,8 +50,17 @@ function formatMonthLabel(monthText: string): string {
   return date.toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-function formatNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+function ceilToOneDecimal(value: number): number {
+  return Math.ceil(value * 10) / 10;
+}
+
+function formatRoundedUsage(value: number): string {
+  const rounded = ceilToOneDecimal(value);
+  return rounded.toFixed(1).replace(/\.0$/, '');
+}
+
+function formatRoundedGuestCount(value: number): string {
+  return String(Math.ceil(value));
 }
 
 export function ProteinUsage() {
@@ -787,11 +796,13 @@ function formatCaseDisplay(caseValue: number | null, caseUnitLabel: string): str
   if (caseValue == null) {
     return `Set ${caseUnitLabel}`;
   }
-  return `${formatNumber(caseValue)} ${caseUnitLabel}${caseValue === 1 ? '' : 's'}`;
+  const roundedValue = ceilToOneDecimal(caseValue);
+  return `${formatRoundedUsage(caseValue)} ${caseUnitLabel}${roundedValue === 1 ? '' : 's'}`;
 }
 
 function formatPortionDisplay(value: number, unitLabel: string): string {
-  return `${formatNumber(value)} ${unitLabel}${value === 1 ? '' : 's'}`;
+  const roundedValue = ceilToOneDecimal(value);
+  return `${formatRoundedUsage(value)} ${unitLabel}${roundedValue === 1 ? '' : 's'}`;
 }
 
 function UsageSection({
@@ -911,7 +922,7 @@ function UsageSection({
                 return (
                   <tr key={`${title}-${period.period}`} className="border-t border-slate-100 align-top">
                     <td className="px-4 py-3 font-medium text-slate-900">{period.period}</td>
-                    <td className="px-4 py-3 text-slate-700">{formatNumber(guestCount)}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatRoundedGuestCount(guestCount)}</td>
                     {proteins.map((protein) => {
                       const row = periodByProteinId.get(protein.id);
                       const usageValue = mode === 'projected'
