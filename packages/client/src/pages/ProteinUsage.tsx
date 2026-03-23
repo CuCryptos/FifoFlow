@@ -244,6 +244,7 @@ export function ProteinUsage() {
   const proteinItems = configQuery.data?.protein_items ?? [];
   const forecastProducts = configQuery.data?.forecast_products ?? [];
   const hiddenProducts = configQuery.data?.hidden_products ?? [];
+  const selectedVenueName = venues?.find((venue) => venue.id === selectedVenueId)?.name ?? null;
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
     if (!query) {
@@ -724,11 +725,41 @@ export function ProteinUsage() {
         title="Historical And Projected Usage"
         description="Search by exact date, day, week, month, or any custom range. Historical and forward totals are split automatically against today."
         actions={(
-          <WorkflowFocusBar>
-            <WorkflowChip active={groupBy === 'day'} onClick={() => setGroupBy('day')}>Day</WorkflowChip>
-            <WorkflowChip active={groupBy === 'week'} onClick={() => setGroupBy('week')}>Week</WorkflowChip>
-            <WorkflowChip active={groupBy === 'month'} onClick={() => setGroupBy('month')}>Month</WorkflowChip>
-          </WorkflowFocusBar>
+          <div className="flex flex-wrap items-center gap-2">
+            <WorkflowFocusBar>
+              <WorkflowChip active={groupBy === 'day'} onClick={() => setGroupBy('day')}>Day</WorkflowChip>
+              <WorkflowChip active={groupBy === 'week'} onClick={() => setGroupBy('week')}>Week</WorkflowChip>
+              <WorkflowChip active={groupBy === 'month'} onClick={() => setGroupBy('month')}>Month</WorkflowChip>
+            </WorkflowFocusBar>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!summaryQuery.data) {
+                  return;
+                }
+                const { exportProteinUsageToPdf } = await import('../utils/exportProteinUsage');
+                exportProteinUsageToPdf({ summary: summaryQuery.data, venueName: selectedVenueName });
+              }}
+              disabled={!summaryQuery.data || summaryQuery.isLoading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Export PDF
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!summaryQuery.data) {
+                  return;
+                }
+                const { exportProteinUsageToExcel } = await import('../utils/exportProteinUsage');
+                exportProteinUsageToExcel({ summary: summaryQuery.data, venueName: selectedVenueName });
+              }}
+              disabled={!summaryQuery.data || summaryQuery.isLoading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Export Excel
+            </button>
+          </div>
         )}
       >
         <div className="flex flex-wrap items-center gap-2">
