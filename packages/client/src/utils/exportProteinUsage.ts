@@ -48,7 +48,7 @@ function buildTotalSheetRows(summary: ProteinUsageSummaryPayload): Record<string
 }
 
 function buildPeriodSheetRows(summary: ProteinUsageSummaryPayload, mode: 'projected' | 'historical'): Record<string, string | number | null>[] {
-  return summary.periods.map((period) => {
+  const rows = summary.periods.map((period) => {
     const row: Record<string, string | number | null> = {
       Period: period.period,
       Guests: roundGuestCount(mode === 'projected' ? period.projected_guest_count : period.historical_guest_count),
@@ -65,6 +65,29 @@ function buildPeriodSheetRows(summary: ProteinUsageSummaryPayload, mode: 'projec
 
     return row;
   });
+
+  const totalRow: Record<string, string | number | null> = {
+    Period: 'TOTAL',
+    Guests: roundGuestCount(
+      summary.periods.reduce(
+        (sum, period) => sum + (mode === 'projected' ? period.projected_guest_count : period.historical_guest_count),
+        0,
+      ),
+    ),
+  };
+
+  for (const protein of summary.proteins) {
+    const total = summary.totals.find((row) => row.protein_item_id === protein.id);
+    totalRow[`${protein.name} Cases`] = mode === 'projected'
+      ? (total?.projected_case_usage != null ? ceilToOneDecimal(total.projected_case_usage) : null)
+      : (total?.historical_case_usage != null ? ceilToOneDecimal(total.historical_case_usage) : null);
+    totalRow[`${protein.name} Portions`] = mode === 'projected'
+      ? ceilToOneDecimal(total?.projected_usage ?? 0)
+      : ceilToOneDecimal(total?.historical_usage ?? 0);
+  }
+
+  rows.push(totalRow);
+  return rows;
 }
 
 export function exportProteinUsageToExcel({ summary, venueName }: ExportProteinUsageOptions) {
@@ -165,6 +188,24 @@ function buildSectionHtml(
     </tr>`;
   }).join('');
 
+  const totalRowCells = summary.proteins.map((protein) => {
+    const total = summary.totals.find((row) => row.protein_item_id === protein.id);
+    const caseValue = mode === 'projected' ? total?.projected_case_usage ?? null : total?.historical_case_usage ?? null;
+    const portionValue = mode === 'projected' ? total?.projected_usage ?? 0 : total?.historical_usage ?? 0;
+
+    return `<td>
+      <div class="cell-primary">${formatCaseDisplay(caseValue, total?.case_unit_label ?? protein.case_unit_label)}</div>
+      <div class="cell-secondary">${formatPortionDisplay(portionValue, total?.unit_label ?? protein.unit_label)}</div>
+    </td>`;
+  }).join('');
+
+  const totalGuests = roundGuestCount(
+    summary.periods.reduce(
+      (sum, period) => sum + (mode === 'projected' ? period.projected_guest_count : period.historical_guest_count),
+      0,
+    ),
+  );
+
   return `<section class="usage-section">
     <div class="section-eyebrow">${title}</div>
     <h2>${title}</h2>
@@ -180,6 +221,11 @@ function buildSectionHtml(
       </thead>
       <tbody>
         ${rows || `<tr><td colspan="${2 + summary.proteins.length}" class="empty">No ${mode} usage in the selected window.</td></tr>`}
+        <tr class="total-row">
+          <td>TOTAL</td>
+          <td class="text-right mono">${totalGuests}</td>
+          ${totalRowCells}
+        </tr>
       </tbody>
     </table>
   </section>`;
@@ -208,6 +254,7 @@ export function exportProteinUsageToPdf({ summary, venueName }: ExportProteinUsa
       table { width: 100%; border-collapse: collapse; margin-top: 12px; }
       th { background: #f8fafc; color: #475569; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 12px; border-bottom: 2px solid #e2e8f0; }
       td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+      .total-row td { background: #e2e8f0; border-top: 2px solid #94a3b8; font-weight: 700; }
       .text-right { text-align: right; }
       .mono { font-variant-numeric: tabular-nums; }
       .cell-primary { font-size: 14px; font-weight: 700; color: #0f172a; }
