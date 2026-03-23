@@ -4,6 +4,7 @@ import type { SaveForecastInput } from '@fifoflow/shared';
 import { api } from '../api';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
+import { useVenues } from '../hooks/useVenues';
 import {
   WorkflowChip,
   WorkflowEmptyState,
@@ -37,11 +38,12 @@ function formatNumber(value: number): string {
 }
 
 export function ProteinUsage() {
-  const { selectedVenueId } = useVenueContext();
+  const { selectedVenueId, setSelectedVenueId } = useVenueContext();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const configSignatureRef = useRef<string>('');
+  const { data: venues } = useVenues();
 
   const [start, setStart] = useState(() => daysFromToday(-30));
   const [end, setEnd] = useState(() => daysFromToday(30));
@@ -170,6 +172,7 @@ export function ProteinUsage() {
         eyebrow="Protein Usage"
         title="Track forecast-driven meat usage from guest counts."
         description="Choose a venue first. Protein usage rules are venue-specific so the forecast products, per-pax assumptions, and projected usage totals stay operationally grounded."
+        actions={<VenuePicker selectedVenueId={selectedVenueId} setSelectedVenueId={setSelectedVenueId} venues={venues ?? []} />}
       >
         <WorkflowEmptyState
           title="Select a venue to continue"
@@ -184,6 +187,7 @@ export function ProteinUsage() {
       eyebrow="Protein Usage"
       title="Forecast-driven meat usage planning"
       description="Upload historical or future forecasts, set per-pax assumptions for each tracked meat, and query historical versus projected usage by day, week, month, or custom range."
+      actions={<VenuePicker selectedVenueId={selectedVenueId} setSelectedVenueId={setSelectedVenueId} venues={venues ?? []} />}
     >
       <WorkflowPanel
         title="Forecast Intake"
@@ -472,4 +476,32 @@ export function ProteinUsage() {
 
 function buildRuleKey(forecastProductName: string, proteinItemId: number): string {
   return `${forecastProductName}::${proteinItemId}`;
+}
+
+function VenuePicker({
+  selectedVenueId,
+  setSelectedVenueId,
+  venues,
+}: {
+  selectedVenueId: number | null;
+  setSelectedVenueId: (value: number | null) => void;
+  venues: Array<{ id: number; name: string }>;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 shadow-sm">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Venue</div>
+      <select
+        value={selectedVenueId ?? ''}
+        onChange={(event) => setSelectedVenueId(event.target.value ? Number(event.target.value) : null)}
+        className="mt-2 min-w-[220px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400"
+      >
+        <option value="">Select venue</option>
+        {venues.map((venue) => (
+          <option key={venue.id} value={venue.id}>
+            {venue.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
