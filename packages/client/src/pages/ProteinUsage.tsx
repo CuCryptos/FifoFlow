@@ -9,14 +9,13 @@ import {
   WorkflowChip,
   WorkflowEmptyState,
   WorkflowFocusBar,
-  WorkflowMetricCard,
-  WorkflowMetricGrid,
   WorkflowPage,
   WorkflowPanel,
   WorkflowStatusPill,
 } from '../components/workflow/WorkflowPrimitives';
 
 type GroupBy = 'day' | 'week' | 'month';
+type UsageMode = 'projected' | 'historical';
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -290,6 +289,11 @@ export function ProteinUsage() {
       };
     }).filter((row) => planningMonths.includes(row.forecast_month) && Number.isFinite(row.guest_count) && row.guest_count >= 0)
   , [monthlyForecastDrafts, planningMonths]);
+
+  const projectedTotals = summaryQuery.data?.totals.filter((total) => total.projected_usage > 0) ?? [];
+  const historicalTotals = summaryQuery.data?.totals.filter((total) => total.historical_usage > 0) ?? [];
+  const projectedPeriods = summaryQuery.data?.periods.filter((period) => period.projected_guest_count > 0) ?? [];
+  const historicalPeriods = summaryQuery.data?.periods.filter((period) => period.historical_guest_count > 0) ?? [];
 
   if (!selectedVenueId) {
     return (
@@ -734,77 +738,23 @@ export function ProteinUsage() {
           <div className="mt-5 text-sm text-slate-500">Calculating protein usage...</div>
         ) : summaryQuery.data ? (
           <div className="mt-5 space-y-5">
-            <WorkflowMetricGrid>
-              {summaryQuery.data.totals.map((total) => (
-                <WorkflowMetricCard
-                  key={total.protein_item_id}
-                  label={total.protein_name}
-                  value={`${formatNumber(total.total_usage)} ${total.unit_label}`}
-                  detail={
-                    total.total_case_usage != null
-                      ? `Historical ${formatNumber(total.historical_usage)} • Projected ${formatNumber(total.projected_usage)} • ${formatNumber(total.total_case_usage)} ${total.case_unit_label}`
-                      : `Historical ${formatNumber(total.historical_usage)} • Projected ${formatNumber(total.projected_usage)}`
-                  }
-                  tone={total.projected_usage > total.historical_usage ? 'amber' : 'blue'}
-                />
-              ))}
-            </WorkflowMetricGrid>
+            <UsageSection
+              title="Projected Usage"
+              subtitle="Forward-looking demand across the selected window."
+              mode="projected"
+              totals={projectedTotals}
+              periods={projectedPeriods}
+              proteins={summaryQuery.data.proteins}
+            />
 
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Period</th>
-                    <th className="px-4 py-3 font-medium">Guests</th>
-                    <th className="px-4 py-3 font-medium">Historical</th>
-                    <th className="px-4 py-3 font-medium">Projected</th>
-                    {summaryQuery.data.proteins.map((protein) => (
-                      <th key={protein.id} className="px-4 py-3 font-medium">
-                        <div>{protein.name}</div>
-                        <div className="text-[11px] font-normal text-slate-400">
-                          {protein.portions_per_case != null && protein.portions_per_case > 0
-                            ? `${protein.unit_label} + ${protein.case_unit_label}`
-                            : protein.unit_label}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {summaryQuery.data.periods.length === 0 ? (
-                    <tr>
-                      <td colSpan={4 + summaryQuery.data.proteins.length} className="px-4 py-8 text-center text-slate-500">
-                        No protein usage falls in the selected window yet.
-                      </td>
-                    </tr>
-                  ) : summaryQuery.data.periods.map((period) => (
-                    <tr key={period.period} className="border-t border-slate-100">
-                      <td className="px-4 py-3 font-medium text-slate-900">{period.period}</td>
-                      <td className="px-4 py-3 text-slate-700">{period.total_guest_count}</td>
-                      <td className="px-4 py-3 text-slate-700">{period.historical_guest_count}</td>
-                      <td className="px-4 py-3 text-slate-700">{period.projected_guest_count}</td>
-                      {summaryQuery.data.proteins.map((protein) => {
-                        const proteinRow = period.proteins.find((entry) => entry.protein_item_id === protein.id);
-                        return (
-                          <td key={protein.id} className="px-4 py-3 text-slate-700">
-                            {proteinRow
-                              ? (
-                                <div className="space-y-1">
-                                  <div>{`${formatNumber(proteinRow.total_usage)} ${protein.unit_label}`}</div>
-                                  {proteinRow.total_case_usage != null ? (
-                                    <div className="text-xs text-slate-500">{`${formatNumber(proteinRow.total_case_usage)} ${protein.case_unit_label}`}</div>
-                                  ) : null}
-                                </div>
-                              )
-                              : '—'}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <UsageSection
+              title="Historical Usage"
+              subtitle="Consumed demand already elapsed in the selected window."
+              mode="historical"
+              totals={historicalTotals}
+              periods={historicalPeriods}
+              proteins={summaryQuery.data.proteins}
+            />
 
             {summaryQuery.data.unmapped_forecast_products.length > 0 ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -831,6 +781,166 @@ function buildRuleKey(forecastProductName: string, proteinItemId: number): strin
 
 function buildMonthlyForecastKey(forecastProductName: string, forecastMonth: string): string {
   return `${forecastProductName}::${forecastMonth}`;
+}
+
+function formatCaseDisplay(caseValue: number | null, caseUnitLabel: string): string {
+  if (caseValue == null) {
+    return `Set ${caseUnitLabel}`;
+  }
+  return `${formatNumber(caseValue)} ${caseUnitLabel}${caseValue === 1 ? '' : 's'}`;
+}
+
+function formatPortionDisplay(value: number, unitLabel: string): string {
+  return `${formatNumber(value)} ${unitLabel}${value === 1 ? '' : 's'}`;
+}
+
+function UsageSection({
+  title,
+  subtitle,
+  mode,
+  totals,
+  periods,
+  proteins,
+}: {
+  title: string;
+  subtitle: string;
+  mode: UsageMode;
+  totals: Array<{
+    protein_item_id: number;
+    protein_name: string;
+    unit_label: string;
+    case_unit_label: string;
+    portions_per_case: number | null;
+    historical_usage: number;
+    projected_usage: number;
+    total_usage: number;
+    historical_case_usage: number | null;
+    projected_case_usage: number | null;
+    total_case_usage: number | null;
+  }>;
+  periods: Array<{
+    period: string;
+    historical_guest_count: number;
+    projected_guest_count: number;
+    total_guest_count: number;
+    proteins: Array<{
+      protein_item_id: number;
+      protein_name: string;
+      unit_label: string;
+      case_unit_label: string;
+      portions_per_case: number | null;
+      historical_usage: number;
+      projected_usage: number;
+      total_usage: number;
+      historical_case_usage: number | null;
+      projected_case_usage: number | null;
+      total_case_usage: number | null;
+    }>;
+  }>;
+  proteins: Array<{
+    id: number;
+    name: string;
+    unit_label: string;
+    case_unit_label: string;
+    portions_per_case: number | null;
+  }>;
+}) {
+  const guestLabel = mode === 'projected' ? 'Projected guests' : 'Historical guests';
+  const emptyBody = mode === 'projected'
+    ? 'No projected usage in the selected window.'
+    : 'No historical usage in the selected window.';
+
+  const totalsByProteinId = new Map(totals.map((row) => [row.protein_item_id, row]));
+
+  return (
+    <section className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-1">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{title}</div>
+        <h3 className="text-xl font-semibold text-slate-950">{title}</h3>
+        <p className="text-sm text-slate-600">{subtitle}</p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {proteins.map((protein) => {
+          const totalRow = totalsByProteinId.get(protein.id);
+          const usageValue = mode === 'projected'
+            ? totalRow?.projected_usage ?? 0
+            : totalRow?.historical_usage ?? 0;
+          const caseValue = mode === 'projected'
+            ? totalRow?.projected_case_usage ?? null
+            : totalRow?.historical_case_usage ?? null;
+
+          return (
+            <div key={`${title}-${protein.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{protein.name}</div>
+              <div className="mt-3 text-3xl font-semibold leading-none text-slate-950">
+                {formatCaseDisplay(caseValue, totalRow?.case_unit_label ?? protein.case_unit_label ?? 'case')}
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                {formatPortionDisplay(usageValue, totalRow?.unit_label ?? protein.unit_label)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {periods.length === 0 ? (
+        <WorkflowEmptyState
+          title={`No ${mode} usage`}
+          body={emptyBody}
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-slate-50 text-left text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">Period</th>
+                <th className="px-4 py-3 font-medium">{guestLabel}</th>
+                {proteins.map((protein) => (
+                  <th key={`${title}-header-${protein.id}`} className="px-4 py-3 font-medium">
+                    {protein.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {periods.map((period) => {
+                const periodByProteinId = new Map(period.proteins.map((row) => [row.protein_item_id, row]));
+                const guestCount = mode === 'projected' ? period.projected_guest_count : period.historical_guest_count;
+
+                return (
+                  <tr key={`${title}-${period.period}`} className="border-t border-slate-100 align-top">
+                    <td className="px-4 py-3 font-medium text-slate-900">{period.period}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatNumber(guestCount)}</td>
+                    {proteins.map((protein) => {
+                      const row = periodByProteinId.get(protein.id);
+                      const usageValue = mode === 'projected'
+                        ? row?.projected_usage ?? 0
+                        : row?.historical_usage ?? 0;
+                      const caseValue = mode === 'projected'
+                        ? row?.projected_case_usage ?? null
+                        : row?.historical_case_usage ?? null;
+
+                      return (
+                        <td key={`${period.period}-${protein.id}`} className="px-4 py-3">
+                          <div className="text-base font-semibold text-slate-950">
+                            {formatCaseDisplay(caseValue, row?.case_unit_label ?? protein.case_unit_label ?? 'case')}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {formatPortionDisplay(usageValue, row?.unit_label ?? protein.unit_label)}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function VenuePicker({
