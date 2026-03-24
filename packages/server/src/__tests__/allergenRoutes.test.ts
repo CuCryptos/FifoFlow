@@ -142,6 +142,91 @@ describe('Allergen routes', () => {
       ]),
     );
   });
+
+  it('updates item allergen profiles, appends evidence, and patches document product matches', async () => {
+    const profileResponse = await request(app)
+      .put('/api/allergens/items/3/profile')
+      .send({
+        profiles: [
+          {
+            allergen_code: 'milk',
+            status: 'contains',
+            confidence: 'verified',
+            notes: 'Updated by kitchen review',
+            verified_by: 'chef',
+          },
+        ],
+      });
+
+    expect(profileResponse.status).toBe(200);
+    expect(profileResponse.body.allergen_profile).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          allergen_code: 'milk',
+          status: 'contains',
+          confidence: 'verified',
+          notes: 'Updated by kitchen review',
+          verified_by: 'chef',
+        }),
+      ]),
+    );
+
+    const evidenceResponse = await request(app)
+      .post('/api/allergens/items/3/evidence')
+      .send({
+        allergen_code: 'milk',
+        source_type: 'staff_verified',
+        status_claimed: 'contains',
+        confidence_claimed: 'high',
+        source_label: 'Chef log',
+        source_excerpt: 'Contains dairy on line check',
+        captured_by: 'chef',
+      });
+
+    expect(evidenceResponse.status).toBe(200);
+    expect(evidenceResponse.body.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          allergen_code: 'milk',
+          source_type: 'staff_verified',
+          status_claimed: 'contains',
+          confidence_claimed: 'high',
+          source_label: 'Chef log',
+        }),
+      ]),
+    );
+
+    const matchResponse = await request(app)
+      .patch('/api/allergens/document-products/4/match')
+      .send({
+        item_id: 3,
+        match_status: 'confirmed',
+        match_score: 0.96,
+        matched_by: 'operator',
+        notes: 'Confirmed from chef review',
+        active: true,
+      });
+
+    expect(matchResponse.status).toBe(200);
+    expect(matchResponse.body.products).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 4,
+          product_name: 'Mystery Sauce',
+          matches: expect.arrayContaining([
+            expect.objectContaining({
+              item_id: 3,
+              item_name: 'Undeclared Sauce',
+              match_status: 'confirmed',
+              matched_by: 'operator',
+              notes: 'Confirmed from chef review',
+              active: true,
+            }),
+          ]),
+        }),
+      ]),
+    );
+  });
 });
 
 function seedAllergenSlice(db: Database.Database): void {

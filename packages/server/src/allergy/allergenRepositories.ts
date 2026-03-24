@@ -295,6 +295,15 @@ export interface ItemEvidenceInput {
   expires_at?: string | null;
 }
 
+export interface DocumentProductMatchInput {
+  item_id: number;
+  match_status: 'suggested' | 'confirmed' | 'rejected' | 'no_match';
+  match_score?: number | null;
+  matched_by?: 'system' | 'operator';
+  notes?: string | null;
+  active?: boolean;
+}
+
 export interface RecipeOverrideInput {
   allergen_code: string;
   status: AllergenStatus;
@@ -653,6 +662,62 @@ export class SQLiteAllergenRepository {
     transaction();
 
     return this.getItemProfile(itemId);
+  }
+
+  upsertDocumentProductMatch(documentProductId: number, input: DocumentProductMatchInput): DocumentDetail | null {
+    const product = this.db.prepare(
+      `
+        SELECT id, document_id
+        FROM allergy_document_products
+        WHERE id = ?
+        LIMIT 1
+      `,
+    ).get(documentProductId) as { id: number; document_id: number } | undefined;
+
+    if (!product) {
+      return null;
+    }
+
+    const itemExists = this.db.prepare(
+      'SELECT id FROM items WHERE id = ? LIMIT 1',
+    ).get(input.item_id) as { id: number } | undefined;
+    if (!itemExists) {
+      throw new Error(`Unknown inventory item: ${input.item_id}`);
+    }
+
+    const upsertMatch = this.db.prepare(
+      `
+        INSERT INTO allergy_document_product_matches (
+          document_product_id,
+          item_id,
+          match_status,
+          match_score,
+          matched_by,
+          notes,
+          active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(document_product_id, item_id) DO UPDATE SET
+          match_status = excluded.match_status,
+          match_score = excluded.match_score,
+          matched_by = excluded.matched_by,
+          notes = excluded.notes,
+          active = excluded.active
+      `,
+    );
+
+    this.db.transaction(() => {
+      upsertMatch.run(
+        documentProductId,
+        input.item_id,
+        input.match_status,
+        input.match_score ?? null,
+        input.matched_by ?? 'operator',
+        input.notes ?? null,
+        input.active == null ? 1 : (input.active ? 1 : 0),
+      );
+    })();
+
+    return this.getDocumentDetail(product.document_id);
   }
 
   getDocumentDetail(documentId: number): DocumentDetail | null {

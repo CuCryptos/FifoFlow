@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type AllergenQueryInput } from '../api';
 
 export type AllergenStatus = 'contains' | 'may_contain' | 'free_of' | 'unknown';
@@ -58,5 +58,53 @@ export function useAllergenReviewQueue() {
 export function useAllergenQuery() {
   return useMutation({
     mutationFn: (input: AllergenQueryInput) => api.allergens.query(input),
+  });
+}
+
+export function useUpdateAllergenItemProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itemId: number; profiles: Parameters<typeof api.allergens.updateItemProfile>[1] }) =>
+      api.allergens.updateItemProfile(input.itemId, input.profiles),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'reference'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items', variables.itemId] }),
+      ]);
+    },
+  });
+}
+
+export function useAddAllergenEvidence() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itemId: number; evidence: Parameters<typeof api.allergens.addEvidence>[1] }) =>
+      api.allergens.addEvidence(input.itemId, input.evidence),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items', variables.itemId] }),
+      ]);
+    },
+  });
+}
+
+export function useUpdateAllergenDocumentProductMatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { productId: number; match: Parameters<typeof api.allergens.updateDocumentProductMatch>[1] }) =>
+      api.allergens.updateDocumentProductMatch(input.productId, input.match),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+      ]);
+    },
   });
 }

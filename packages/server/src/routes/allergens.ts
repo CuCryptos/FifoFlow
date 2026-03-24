@@ -3,12 +3,18 @@ import type Database from 'better-sqlite3';
 import {
   type AllergenConfidence,
   type AllergenStatus,
+  type DocumentProductMatchInput,
+  type ItemEvidenceInput,
+  type ItemProfileUpdateInput,
   SQLiteAllergenRepository,
 } from '../allergy/allergenRepositories.js';
 import { AllergenQueryService } from '../allergy/allergenQueryService.js';
 
 const ALLERGEN_STATUSES = new Set<AllergenStatus>(['contains', 'may_contain', 'free_of', 'unknown']);
 const ALLERGEN_CONFIDENCES = new Set<AllergenConfidence>(['verified', 'high', 'moderate', 'low', 'unverified', 'unknown']);
+const ALLERGEN_EVIDENCE_SOURCE_TYPES: ItemEvidenceInput['source_type'][] = ['manufacturer_spec', 'vendor_declaration', 'staff_verified', 'label_scan', 'uploaded_chart', 'inferred'];
+const DOCUMENT_MATCH_STATUSES: DocumentProductMatchInput['match_status'][] = ['suggested', 'confirmed', 'rejected', 'no_match'];
+const DOCUMENT_MATCH_ROLES = new Set<DocumentProductMatchInput['matched_by']>(['system', 'operator']);
 
 export function createAllergenRoutes(db: Database.Database): Router {
   const repository = new SQLiteAllergenRepository(db);
@@ -55,6 +61,56 @@ export function createAllergenRoutes(db: Database.Database): Router {
     res.json(detail);
   });
 
+  router.put('/items/:itemId/profile', (req, res) => {
+    const itemId = parseRequiredNumber(req.params.itemId);
+    if (itemId == null) {
+      res.status(400).json({ error: 'Invalid item id' });
+      return;
+    }
+
+    const profiles = parseItemProfileUpdates(req.body);
+    if (profiles == null || profiles.length === 0) {
+      res.status(400).json({ error: 'profiles must be a non-empty array' });
+      return;
+    }
+
+    try {
+      const detail = repository.upsertItemProfile(itemId, profiles);
+      if (!detail) {
+        res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+      res.json(detail);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message ?? 'Failed to update item allergen profile' });
+    }
+  });
+
+  router.post('/items/:itemId/evidence', (req, res) => {
+    const itemId = parseRequiredNumber(req.params.itemId);
+    if (itemId == null) {
+      res.status(400).json({ error: 'Invalid item id' });
+      return;
+    }
+
+    const input = parseItemEvidenceInput(req.body);
+    if (!input) {
+      res.status(400).json({ error: 'Invalid evidence payload' });
+      return;
+    }
+
+    try {
+      const detail = repository.addEvidence(itemId, input);
+      if (!detail) {
+        res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+      res.json(detail);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message ?? 'Failed to add allergen evidence' });
+    }
+  });
+
   router.get('/review-queue', (_req, res) => {
     res.json(repository.getReviewQueue());
   });
@@ -73,6 +129,31 @@ export function createAllergenRoutes(db: Database.Database): Router {
     }
 
     res.json(detail);
+  });
+
+  router.patch('/document-products/:productId/match', (req, res) => {
+    const productId = parseRequiredNumber(req.params.productId);
+    if (productId == null) {
+      res.status(400).json({ error: 'Invalid document product id' });
+      return;
+    }
+
+    const input = parseDocumentProductMatchInput(req.body);
+    if (!input) {
+      res.status(400).json({ error: 'Invalid match payload' });
+      return;
+    }
+
+    try {
+      const detail = repository.upsertDocumentProductMatch(productId, input);
+      if (!detail) {
+        res.status(404).json({ error: 'Document product not found' });
+        return;
+      }
+      res.json(detail);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message ?? 'Failed to update document product match' });
+    }
   });
 
   router.post('/query', (req, res) => {
@@ -119,6 +200,14 @@ function parseOptionalBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function parseOptionalFiniteNumber(value: unknown): number | undefined {
+  if (value == null || value === '') {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function parseOptionalIdList(value: unknown): number[] {
   if (!Array.isArray(value)) {
     return [];
@@ -131,4 +220,128 @@ function parseOptionalIdList(value: unknown): number[] {
         .filter((entry): entry is number => entry != null),
     ),
   );
+}
+
+function parseItemProfileUpdates(value: unknown): ItemProfileUpdateInput[] | null {
+  const rawProfiles = Array.isArray(value)
+    ? value
+    : Array.isArray((value as { profiles?: unknown } | null)?.profiles)
+      ? (value as { profiles: unknown[] }).profiles
+      : Array.isArray((value as { allergen_profile?: unknown } | null)?.allergen_profile)
+        ? (value as { allergen_profile: unknown[] }).allergen_profile
+        : null;
+
+  if (!rawProfiles) {
+    return null;
+  }
+
+  const profiles: ItemProfileUpdateInput[] = [];
+  for (const entry of rawProfiles) {
+    if (!entry || typeof entry !== 'object') {
+      return null;
+    }
+    const allergen_code = typeof (entry as { allergen_code?: unknown }).allergen_code === 'string'
+      ? (entry as { allergen_code: string }).allergen_code.trim().toLowerCase()
+      : '';
+    const status = typeof (entry as { status?: unknown }).status === 'string' && ALLERGEN_STATUSES.has((entry as { status: AllergenStatus }).status)
+      ? (entry as { status: AllergenStatus }).status
+      : null;
+    const confidence = typeof (entry as { confidence?: unknown }).confidence === 'string' && ALLERGEN_CONFIDENCES.has((entry as { confidence: AllergenConfidence }).confidence)
+      ? (entry as { confidence: AllergenConfidence }).confidence
+      : null;
+    if (!allergen_code || !status || !confidence) {
+      return null;
+    }
+    profiles.push({
+      allergen_code,
+      status,
+      confidence,
+      notes: typeof (entry as { notes?: unknown }).notes === 'string' ? (entry as { notes: string }).notes : null,
+      verified_by: typeof (entry as { verified_by?: unknown }).verified_by === 'string' ? (entry as { verified_by: string }).verified_by : null,
+      verified_at: typeof (entry as { verified_at?: unknown }).verified_at === 'string' ? (entry as { verified_at: string }).verified_at : null,
+      last_reviewed_at: typeof (entry as { last_reviewed_at?: unknown }).last_reviewed_at === 'string' ? (entry as { last_reviewed_at: string }).last_reviewed_at : null,
+    });
+  }
+  return profiles;
+}
+
+function parseItemEvidenceInput(value: unknown): ItemEvidenceInput | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const allergen_code = typeof (value as { allergen_code?: unknown }).allergen_code === 'string'
+    ? (value as { allergen_code: string }).allergen_code.trim().toLowerCase()
+    : '';
+  const source_type_raw = typeof (value as { source_type?: unknown }).source_type === 'string'
+    ? (value as { source_type: ItemEvidenceInput['source_type'] }).source_type
+    : null;
+  const source_type = source_type_raw && ALLERGEN_EVIDENCE_SOURCE_TYPES.includes(source_type_raw)
+    ? source_type_raw
+    : null;
+  const status_claimed_raw = typeof (value as { status_claimed?: unknown }).status_claimed === 'string'
+    ? (value as { status_claimed: AllergenStatus }).status_claimed
+    : null;
+  const status_claimed = status_claimed_raw && ALLERGEN_STATUSES.has(status_claimed_raw)
+    ? status_claimed_raw
+    : null;
+  if (!allergen_code || !source_type || !status_claimed) {
+    return null;
+  }
+
+  const confidence_claimed_raw = typeof (value as { confidence_claimed?: unknown }).confidence_claimed === 'string'
+    ? (value as { confidence_claimed: AllergenConfidence }).confidence_claimed
+    : null;
+  const confidence_claimed = confidence_claimed_raw && ALLERGEN_CONFIDENCES.has(confidence_claimed_raw)
+    ? confidence_claimed_raw
+    : undefined;
+
+  return {
+    allergen_code,
+    source_type,
+    status_claimed,
+    confidence_claimed,
+    source_document_id: parseOptionalPositiveNumber((value as { source_document_id?: unknown }).source_document_id),
+    source_product_id: parseOptionalPositiveNumber((value as { source_product_id?: unknown }).source_product_id),
+    source_label: typeof (value as { source_label?: unknown }).source_label === 'string' ? (value as { source_label: string }).source_label : null,
+    source_excerpt: typeof (value as { source_excerpt?: unknown }).source_excerpt === 'string' ? (value as { source_excerpt: string }).source_excerpt : null,
+    captured_by: typeof (value as { captured_by?: unknown }).captured_by === 'string' ? (value as { captured_by: string }).captured_by : null,
+    expires_at: typeof (value as { expires_at?: unknown }).expires_at === 'string' ? (value as { expires_at: string }).expires_at : null,
+  };
+}
+
+function parseDocumentProductMatchInput(value: unknown): DocumentProductMatchInput | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const item_id = parseRequiredNumber((value as { item_id?: unknown }).item_id);
+  const match_status_raw = typeof (value as { match_status?: unknown }).match_status === 'string'
+    ? (value as { match_status: DocumentProductMatchInput['match_status'] }).match_status
+    : null;
+  const match_status = match_status_raw && DOCUMENT_MATCH_STATUSES.includes(match_status_raw)
+    ? match_status_raw
+    : null;
+  if (item_id == null || !match_status) {
+    return null;
+  }
+
+  const matched_by_raw = typeof (value as { matched_by?: unknown }).matched_by === 'string'
+    ? (value as { matched_by: DocumentProductMatchInput['matched_by'] }).matched_by
+    : null;
+  const matched_by = matched_by_raw && DOCUMENT_MATCH_ROLES.has(matched_by_raw)
+    ? matched_by_raw
+    : undefined;
+
+  return {
+    item_id,
+    match_status,
+    match_score: parseOptionalFiniteNumber((value as { match_score?: unknown }).match_score),
+    matched_by,
+    notes: typeof (value as { notes?: unknown }).notes === 'string' ? (value as { notes: string }).notes : null,
+    active: typeof (value as { active?: unknown }).active === 'boolean' ? (value as { active: boolean }).active : undefined,
+  };
+}
+
+function parseOptionalPositiveNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }

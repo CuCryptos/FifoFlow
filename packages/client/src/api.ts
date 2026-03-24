@@ -441,6 +441,38 @@ export interface AllergenItemDetailPayload {
   linked_document_products: AllergenItemLinkedDocumentProductPayload[];
 }
 
+export interface AllergenItemProfileUpdateInput {
+  allergen_code: string;
+  status: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+  confidence: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+  notes?: string | null;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  last_reviewed_at?: string | null;
+}
+
+export interface AllergenItemEvidenceInput {
+  allergen_code: string;
+  source_type: 'manufacturer_spec' | 'vendor_declaration' | 'staff_verified' | 'label_scan' | 'uploaded_chart' | 'inferred';
+  status_claimed: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+  confidence_claimed?: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown' | null;
+  source_document_id?: number | null;
+  source_product_id?: number | null;
+  source_label?: string | null;
+  source_excerpt?: string | null;
+  captured_by?: string | null;
+  expires_at?: string | null;
+}
+
+export interface AllergenDocumentProductMatchUpdateInput {
+  item_id: number;
+  match_status: 'suggested' | 'confirmed' | 'rejected' | 'no_match';
+  match_score?: number | null;
+  matched_by?: 'system' | 'operator';
+  notes?: string | null;
+  active?: boolean;
+}
+
 export interface AllergenDocumentProductMatchPayload {
   id: number;
   item_id: number;
@@ -1024,6 +1056,21 @@ export const api = {
     getItem: (itemId: number) => fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}`),
     getDocument: (documentId: number) => fetchJson<AllergenDocumentDetailPayload>(`/allergens/documents/${documentId}`),
     reviewQueue: () => fetchJson<AllergenReviewQueuePayload>('/allergens/review-queue'),
+    updateItemProfile: (itemId: number, profiles: AllergenItemProfileUpdateInput[]) =>
+      fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}/profile`, {
+        method: 'PUT',
+        body: JSON.stringify({ profiles }),
+      }),
+    addEvidence: (itemId: number, evidence: AllergenItemEvidenceInput) =>
+      fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}/evidence`, {
+        method: 'POST',
+        body: JSON.stringify(evidence),
+      }),
+    updateDocumentProductMatch: (productId: number, input: AllergenDocumentProductMatchUpdateInput) =>
+      fetchJson<AllergenDocumentDetailPayload>(`/allergens/document-products/${productId}/match`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
     query: (input: AllergenQueryInput) =>
       fetchJson<AllergenQueryResponsePayload>('/allergens/query', {
         method: 'POST',
