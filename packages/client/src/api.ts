@@ -356,6 +356,194 @@ export interface AllergyChatResponsePayload {
   cited_chunks: AllergyChatChunkPayload[];
 }
 
+export interface AllergenReferencePayload {
+  id: number;
+  code: string;
+  name: string;
+  category: 'fda_major_9' | 'extended' | 'custom';
+  icon: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface AllergenItemListEntryPayload {
+  id: number;
+  name: string;
+  category: string;
+  vendor_id: number | null;
+  vendor_name: string | null;
+  venue_id: number | null;
+  venue_name: string | null;
+  profile_count: number;
+  contains_count: number;
+  may_contain_count: number;
+  free_of_count: number;
+  unknown_count: number;
+  low_confidence_count: number;
+  needs_review: boolean;
+}
+
+export interface AllergenItemProfilePayload {
+  allergen_id: number;
+  allergen_code: string;
+  allergen_name: string;
+  category: string;
+  status: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+  confidence: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+  notes: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  last_reviewed_at: string | null;
+}
+
+export interface AllergenItemEvidencePayload {
+  id: number;
+  item_allergen_id: number;
+  allergen_code: string;
+  allergen_name: string;
+  source_type: 'manufacturer_spec' | 'vendor_declaration' | 'staff_verified' | 'label_scan' | 'uploaded_chart' | 'inferred';
+  source_document_id: number | null;
+  source_product_id: number | null;
+  source_label: string | null;
+  source_excerpt: string | null;
+  status_claimed: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+  confidence_claimed: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown' | null;
+  captured_by: string | null;
+  captured_at: string;
+  expires_at: string | null;
+}
+
+export interface AllergenItemLinkedDocumentProductPayload {
+  product_id: number;
+  document_id: number;
+  filename: string;
+  page_number: number;
+  product_name: string;
+  source_row_text: string;
+  match_status: string;
+  match_score: number | null;
+  matched_by: string | null;
+  notes: string | null;
+}
+
+export interface AllergenItemDetailPayload {
+  item: {
+    id: number;
+    name: string;
+    category: string;
+    vendor_id: number | null;
+    vendor_name: string | null;
+    venue_id: number | null;
+    venue_name: string | null;
+  };
+  allergen_profile: AllergenItemProfilePayload[];
+  evidence: AllergenItemEvidencePayload[];
+  linked_document_products: AllergenItemLinkedDocumentProductPayload[];
+}
+
+export interface AllergenDocumentProductMatchPayload {
+  id: number;
+  item_id: number;
+  item_name: string;
+  match_status: 'suggested' | 'confirmed' | 'rejected' | 'no_match';
+  match_score: number | null;
+  matched_by: 'system' | 'operator';
+  notes: string | null;
+  active: boolean;
+}
+
+export interface AllergenDocumentProductPayload {
+  id: number;
+  page_id: number | null;
+  page_number: number;
+  product_name: string;
+  normalized_product_name: string;
+  source_row_text: string;
+  allergen_summary: string | null;
+  dietary_notes: string | null;
+  source_chunk_ids: number[];
+  matches: AllergenDocumentProductMatchPayload[];
+}
+
+export interface AllergenDocumentDetailPayload {
+  document: {
+    id: number;
+    venue_id: number | null;
+    filename: string;
+    mime_type: string;
+    page_count: number;
+    chunk_count: number;
+    product_count: number;
+    status: 'ready' | 'failed';
+    created_at: string;
+    updated_at: string;
+  };
+  pages: Array<{
+    id: number;
+    page_number: number;
+    extracted_text: string;
+  }>;
+  chunks: Array<{
+    id: number;
+    page_id: number;
+    page_number: number;
+    chunk_index: number;
+    chunk_text: string;
+  }>;
+  products: AllergenDocumentProductPayload[];
+}
+
+export interface AllergenReviewQueuePayload {
+  items: Array<{
+    item_id: number;
+    item_name: string;
+    reason: string;
+    flagged_profile_count: number;
+  }>;
+  document_products: Array<{
+    product_id: number;
+    document_id: number;
+    filename: string;
+    product_name: string;
+    page_number: number;
+    reason: string;
+  }>;
+  recipes: Array<{
+    recipe_version_id: number;
+    recipe_id: number;
+    recipe_name: string;
+    version_number: number;
+    flagged_rollup_count: number;
+  }>;
+}
+
+export interface AllergenQueryResultPayload {
+  product_id: number;
+  document_id: number;
+  filename: string;
+  page_number: number;
+  product_name: string;
+  matched_item_id: number | null;
+  matched_item_name: string | null;
+  rationale: string;
+  source: 'item_profile' | 'document_evidence';
+  relevant_evidence: string[];
+}
+
+export interface AllergenQueryResponsePayload {
+  allergen_codes: string[];
+  safe: AllergenQueryResultPayload[];
+  modifiable: AllergenQueryResultPayload[];
+  unsafe: AllergenQueryResultPayload[];
+  unknown: AllergenQueryResultPayload[];
+}
+
+export interface AllergenQueryInput {
+  venue_id?: number | null;
+  question: string;
+  allergen_codes?: string[];
+}
+
 export interface ProteinUsageItemPayload {
   id: number;
   name: string;
@@ -812,6 +1000,35 @@ export const api = {
     get: (id: number) => fetchJson<RecipeDetail>(`/recipes/${id}`),
     delete: (id: number) =>
       fetchJson<void>(`/recipes/${id}`, { method: 'DELETE' }),
+  },
+  allergens: {
+    reference: () => fetchJson<{ allergens: AllergenReferencePayload[] }>('/allergens/reference'),
+    listItems: (params?: {
+      search?: string;
+      status?: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+      confidence?: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+      needs_review?: boolean;
+      vendor_id?: number;
+      venue_id?: number;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params?.search) qs.set('search', params.search);
+      if (params?.status) qs.set('status', params.status);
+      if (params?.confidence) qs.set('confidence', params.confidence);
+      if (params?.needs_review != null) qs.set('needs_review', String(params.needs_review));
+      if (params?.vendor_id) qs.set('vendor_id', String(params.vendor_id));
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      const query = qs.toString();
+      return fetchJson<{ items: AllergenItemListEntryPayload[] }>(`/allergens/items${query ? `?${query}` : ''}`);
+    },
+    getItem: (itemId: number) => fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}`),
+    getDocument: (documentId: number) => fetchJson<AllergenDocumentDetailPayload>(`/allergens/documents/${documentId}`),
+    reviewQueue: () => fetchJson<AllergenReviewQueuePayload>('/allergens/review-queue'),
+    query: (input: AllergenQueryInput) =>
+      fetchJson<AllergenQueryResponsePayload>('/allergens/query', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   },
   recipeDrafts: {
     list: () => fetchJson<{ drafts: RecipeDraftSummaryPayload[] }>('/recipe-drafts'),

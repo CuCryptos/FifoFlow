@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './contexts/ToastContext';
 import { VenueProvider } from './contexts/VenueContext';
@@ -19,7 +19,9 @@ const Reports = lazy(async () => ({ default: (await import('./pages/Reports')).R
 const SnackBar = lazy(() => import('./pages/SnackBar'));
 const SignalDetail = lazy(async () => ({ default: (await import('./pages/SignalDetail')).SignalDetail }));
 const RecommendationsPage = lazy(async () => ({ default: (await import('./pages/Recommendations')).RecommendationsPage }));
-const AllergyAssistant = lazy(async () => ({ default: (await import('./pages/AllergyAssistant')).AllergyAssistant }));
+const Allergens = lazy(async () => ({ default: (await import('./pages/Allergens')).Allergens }));
+const AllergenItemDetail = lazy(async () => ({ default: (await import('./pages/AllergenItemDetail')).AllergenItemDetail }));
+const AllergenDocumentDetail = lazy(async () => ({ default: (await import('./pages/AllergenDocumentDetail')).AllergenDocumentDetail }));
 const ProteinUsage = lazy(async () => ({ default: (await import('./pages/ProteinUsage')).ProteinUsage }));
 
 const queryClient = new QueryClient({
@@ -47,7 +49,10 @@ export default function App() {
                 <Route path="/recipes" element={<RoutedPage><Recipes /></RoutedPage>} />
                 <Route path="/recipes/drafts/:draftId" element={<RoutedPage><DraftRecipeDetailPage /></RoutedPage>} />
                 <Route path="/recipes/promoted/:recipeVersionId" element={<RoutedPage><PromotedRecipeDetailPage /></RoutedPage>} />
-                <Route path="/allergy-assistant" element={<RoutedPage><AllergyAssistant /></RoutedPage>} />
+                <Route path="/allergens" element={<RoutedPage><Allergens /></RoutedPage>} />
+                <Route path="/allergens/items/:itemId" element={<RoutedPage><AllergenItemDetail /></RoutedPage>} />
+                <Route path="/allergens/documents/:documentId" element={<RoutedPage><AllergenDocumentDetail /></RoutedPage>} />
+                <Route path="/allergy-assistant" element={<Navigate to="/allergens" replace />} />
                 <Route path="/protein-usage" element={<RoutedPage><ProteinUsage /></RoutedPage>} />
                 <Route path="/activity" element={<RoutedPage><Activity /></RoutedPage>} />
                 <Route path="/counts" element={<RoutedPage><Counts /></RoutedPage>} />

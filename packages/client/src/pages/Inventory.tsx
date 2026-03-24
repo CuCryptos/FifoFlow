@@ -4,7 +4,6 @@ import { useItems, useItem, useReorderSuggestions, useUpdateItem, useBulkUpdateI
 import {
   useInventoryWorkflow,
   type InventoryExportGroupBy,
-  type InventorySortField as SortField,
   type InventoryWorkflowFocus,
 } from '../hooks/useInventoryWorkflow';
 import { useInventorySelection } from '../hooks/useInventorySelection';
@@ -18,15 +17,16 @@ import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
 import { InventoryUnitEconomicsSummary, deriveInventoryUnitEconomics } from '../components/inventory/InventoryUnitEconomicsSummary';
+import { InventoryBatchActions } from '../components/inventory/InventoryBatchActions';
+import { InventoryFiltersBar } from '../components/inventory/InventoryFiltersBar';
+import { INVENTORY_FOCUS_COPY, InventoryLaneCard } from '../components/inventory/InventoryLaneCard';
+import { InventoryQueueCard } from '../components/inventory/InventoryQueueCard';
 import {
-  WorkflowChip,
   WorkflowEmptyState,
-  WorkflowFocusBar,
   WorkflowMetricCard,
   WorkflowMetricGrid,
   WorkflowPage,
   WorkflowPanel,
-  WorkflowStatusPill,
 } from '../components/workflow/WorkflowPrimitives';
 
 const AddItemModal = lazy(async () => ({ default: (await import('../components/AddItemModal')).AddItemModal }));
@@ -43,108 +43,6 @@ function formatCurrency(value: number | null): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-const INVENTORY_FOCUS_COPY: Record<InventoryWorkflowFocus, { title: string; body: string; tone: 'slate' | 'amber' | 'red' | 'blue' }> = {
-  all: {
-    title: 'Full inventory catalog',
-    body: 'Use this lane to review the full operating catalog, then narrow into a specific readiness gap when you need action instead of browsing.',
-    tone: 'slate',
-  },
-  needs_attention: {
-    title: 'Attention queue',
-    body: 'This lane combines reorder pressure and setup gaps so operators can work the highest-friction inventory items first.',
-    tone: 'red',
-  },
-  reorder: {
-    title: 'Reorder queue',
-    body: 'These items are below their reorder level. Confirm pack setup, vendor ownership, and order quantity before issuing a PO.',
-    tone: 'amber',
-  },
-  missing_vendor: {
-    title: 'Vendor setup gap',
-    body: 'These items are stocked but not anchored to a purchasing owner yet. Bulk vendor assignment should clear this lane quickly.',
-    tone: 'blue',
-  },
-  missing_venue: {
-    title: 'Venue scope gap',
-    body: 'These items are not attached to an operating venue, so location-specific workflows and reporting remain incomplete.',
-    tone: 'blue',
-  },
-  missing_storage_area: {
-    title: 'Storage mapping gap',
-    body: 'These items do not have a clear storage placement. That weakens count discipline and operational retrieval.',
-    tone: 'blue',
-  },
-  ordering_incomplete: {
-    title: 'Ordering setup gap',
-    body: 'These items are missing reorder or pack/price fields. They are difficult to purchase accurately at scale.',
-    tone: 'amber',
-  },
-};
-
-type QuickEditableNumberField = 'current_qty' | 'reorder_level' | 'reorder_qty' | 'qty_per_unit' | 'order_unit_price';
-type QuickEditableSelectField = 'order_unit' | 'vendor_id';
-
-const SORT_FIELD_OPTIONS: Array<{ value: SortField; label: string }> = [
-  { value: 'name', label: 'Name' },
-  { value: 'category', label: 'Category' },
-  { value: 'vendor_id', label: 'Vendor' },
-  { value: 'venue_id', label: 'Venue' },
-  { value: 'reorder_level', label: 'Reorder level' },
-  { value: 'reorder_qty', label: 'Reorder quantity' },
-  { value: 'storage_area_id', label: 'Storage area' },
-  { value: 'updated_at', label: 'Recently updated' },
-];
-
-function laneCardToneClass(tone: 'slate' | 'amber' | 'red' | 'blue', active: boolean) {
-  if (active) {
-    return {
-      slate: 'border-slate-900 bg-slate-950 text-white shadow-lg shadow-slate-950/10',
-      amber: 'border-amber-400 bg-amber-50 text-amber-950 shadow-lg shadow-amber-950/5',
-      red: 'border-rose-400 bg-rose-50 text-rose-950 shadow-lg shadow-rose-950/5',
-      blue: 'border-sky-400 bg-sky-50 text-sky-950 shadow-lg shadow-sky-950/5',
-    }[tone];
-  }
-
-  return 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50';
-}
-
-function InventoryLaneCard({
-  active,
-  count,
-  focus,
-  onClick,
-}: {
-  active: boolean;
-  count: number;
-  focus: InventoryWorkflowFocus;
-  onClick: () => void;
-}) {
-  const copy = INVENTORY_FOCUS_COPY[focus];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-2xl border px-4 py-4 text-left transition ${laneCardToneClass(copy.tone, active)}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${active ? 'text-current/70' : 'text-slate-500'}`}>
-            {copy.title}
-          </div>
-          <div className="mt-2 text-3xl font-semibold leading-none">{count}</div>
-        </div>
-        <WorkflowStatusPill tone={copy.tone}>
-          {active ? 'Active lane' : 'Open lane'}
-        </WorkflowStatusPill>
-      </div>
-      <p className={`mt-3 text-sm leading-6 ${active ? 'text-current/80' : 'text-slate-600'}`}>
-        {copy.body}
-      </p>
-    </button>
-  );
 }
 
 function inventoryActionHint({
@@ -179,176 +77,6 @@ function getPageNumbers(current: number, total: number): (number | '...')[] {
     pages.push(1, '...', current - 1, current, current + 1, '...', total);
   }
   return pages;
-}
-
-function QuickEditNumberField({
-  itemId,
-  field,
-  value,
-  label,
-  suffix,
-  step = 'any',
-  min = '0',
-}: {
-  itemId: number;
-  field: QuickEditableNumberField;
-  value: number | null;
-  label: string;
-  suffix?: string;
-  step?: string;
-  min?: string;
-}) {
-  const updateItem = useUpdateItem();
-  const [draft, setDraft] = useState(value == null ? '' : String(value));
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-
-  useEffect(() => {
-    setDraft(value == null ? '' : String(value));
-  }, [value]);
-
-  const commit = () => {
-    const next = draft.trim();
-    const parsed = next === '' ? null : Number(next);
-    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
-      setDraft(value == null ? '' : String(value));
-      setStatus('error');
-      window.setTimeout(() => setStatus('idle'), 1500);
-      return;
-    }
-    if ((value == null ? null : value) === parsed) {
-      setStatus('idle');
-      return;
-    }
-    setStatus('saving');
-    updateItem.mutate(
-      { id: itemId, data: { [field]: parsed } },
-      {
-        onSuccess: () => {
-          setStatus('saved');
-          window.setTimeout(() => setStatus('idle'), 1200);
-        },
-        onError: () => {
-          setDraft(value == null ? '' : String(value));
-          setStatus('error');
-          window.setTimeout(() => setStatus('idle'), 1800);
-        },
-      },
-    );
-  };
-
-  return (
-    <label className="space-y-1">
-      <div className="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-        <span>{label}</span>
-        {status !== 'idle' && (
-          <span className={status === 'saving' ? 'text-amber-700' : status === 'saved' ? 'text-emerald-700' : 'text-rose-700'}>
-            {status}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 focus-within:border-slate-400">
-        <input
-          type="number"
-          min={min}
-          step={step}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              (event.currentTarget as HTMLInputElement).blur();
-            }
-            if (event.key === 'Escape') {
-              setDraft(value == null ? '' : String(value));
-              setStatus('idle');
-              (event.currentTarget as HTMLInputElement).blur();
-            }
-          }}
-          className="w-full bg-transparent text-sm font-medium text-slate-900 outline-none"
-          aria-label={label}
-        />
-        {suffix && <span className="text-xs text-slate-500">{suffix}</span>}
-      </div>
-    </label>
-  );
-}
-
-function QuickEditSelectField({
-  itemId,
-  field,
-  value,
-  label,
-  emptyLabel,
-  options,
-}: {
-  itemId: number;
-  field: QuickEditableSelectField;
-  value: number | Unit | null;
-  label: string;
-  emptyLabel: string;
-  options: Array<{ value: string; label: string }>;
-}) {
-  const updateItem = useUpdateItem();
-  const [draft, setDraft] = useState(value == null ? '' : String(value));
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-
-  useEffect(() => {
-    setDraft(value == null ? '' : String(value));
-  }, [value]);
-
-  const commit = (raw: string) => {
-    const parsed: number | string | null = raw === ''
-      ? null
-      : field === 'vendor_id'
-        ? Number(raw)
-        : raw;
-    const current = value == null ? null : value;
-    if (current === parsed) {
-      return;
-    }
-    setStatus('saving');
-    updateItem.mutate(
-      { id: itemId, data: { [field]: parsed } },
-      {
-        onSuccess: () => {
-          setStatus('saved');
-          window.setTimeout(() => setStatus('idle'), 1200);
-        },
-        onError: () => {
-          setDraft(value == null ? '' : String(value));
-          setStatus('error');
-          window.setTimeout(() => setStatus('idle'), 1800);
-        },
-      },
-    );
-  };
-
-  return (
-    <label className="space-y-1">
-      <div className="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-        <span>{label}</span>
-        {status !== 'idle' && (
-          <span className={status === 'saving' ? 'text-amber-700' : status === 'saved' ? 'text-emerald-700' : 'text-rose-700'}>
-            {status}
-          </span>
-        )}
-      </div>
-      <select
-        value={draft}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          commit(event.target.value);
-        }}
-        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-medium text-slate-900 outline-none focus:border-slate-400"
-        aria-label={label}
-      >
-        <option value="">{emptyLabel}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -613,16 +341,6 @@ export function Inventory() {
     { focus: 'ordering_incomplete', count: workflowCounts.cards.orderingIncomplete },
   ];
   const selectedItems = (items ?? []).filter((item) => selectedIds.has(item.id));
-  const laneActionCopy = {
-    missing_vendor: 'Bulk assign vendor ownership to clear purchasing gaps quickly.',
-    missing_venue: 'Use batch venue assignment to restore scope accuracy.',
-    missing_storage_area: 'Map storage areas so counts stop drifting.',
-    ordering_incomplete: 'Open purchasing detail and finish pack setup inline.',
-    reorder: 'Review shortages and convert them into clean vendor orders.',
-    needs_attention: 'Work the highest-friction items first from one combined queue.',
-    all: 'Filter the catalog, then drop into the lane that needs action.',
-  } satisfies Record<InventoryWorkflowFocus, string>;
-
   return (
     <WorkflowPage
       eyebrow="Inventory Control"
@@ -685,198 +403,82 @@ export function Inventory() {
         <WorkflowMetricCard label="Ordering Incomplete" value={workflowCounts.cards.orderingIncomplete} detail="Reorder or pack/price setup missing." tone="amber" />
       </WorkflowMetricGrid>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.9fr)]">
-        <WorkflowPanel
-          title="Control Rail"
-          description="Filter the catalog, choose the lane, then act directly from compact inventory cards instead of a wide table."
-        >
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.8fr))]">
-            <label className="space-y-1.5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Search</span>
-              <input
-                type="text"
-                placeholder="Find an item or operator keyword"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-              />
-            </label>
-            <label className="space-y-1.5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Category</span>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-transparent text-sm text-slate-900 focus:outline-none"
-              >
-                <option value="">All Categories</option>
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1.5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Area</span>
-              <select
-                value={areaFilter}
-                onChange={(e) => setAreaFilter(e.target.value)}
-                className="w-full bg-transparent text-sm text-slate-900 focus:outline-none"
-              >
-                <option value="">All Areas</option>
-                {areas?.map((area) => (
-                  <option key={area.id} value={String(area.id)}>{area.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1.5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Sort</span>
-              <select
-                value={sortField}
-                onChange={(event) => setSortField(event.target.value as SortField)}
-                className="w-full bg-transparent text-sm text-slate-900 focus:outline-none"
-              >
-                {SORT_FIELD_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <button
-                type="button"
-                onClick={() => setSortDir((value) => (value === 'asc' ? 'desc' : 'asc'))}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-              >
-                {sortDir === 'asc' ? 'Ascending' : 'Descending'}
-              </button>
-              <WorkflowChip active={showReorderOnly} onClick={() => setShowReorderOnly((value) => !value)}>
-                Needs Reorder
-              </WorkflowChip>
-              <WorkflowChip active={showOrdering} onClick={() => setShowOrdering((value) => !value)}>
-                {showOrdering ? 'Hide purchasing detail' : 'Show purchasing detail'}
-              </WorkflowChip>
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
+      <InventoryFiltersBar
+        search={search}
+        onSearchChange={setSearch}
+        category={category}
+        onCategoryChange={setCategory}
+        areaFilter={areaFilter}
+        onAreaFilterChange={setAreaFilter}
+        areas={areas ?? []}
+        sortField={sortField}
+        onSortFieldChange={setSortField}
+        sortDir={sortDir}
+        onToggleSortDir={() => setSortDir((value) => (value === 'asc' ? 'desc' : 'asc'))}
+        showReorderOnly={showReorderOnly}
+        onToggleShowReorderOnly={() => setShowReorderOnly((value) => !value)}
+        showOrdering={showOrdering}
+        onToggleShowOrdering={() => setShowOrdering((value) => !value)}
+        onResetFilters={resetFilters}
+        laneCards={laneCards}
+        workflowFocus={workflowFocus}
+        onWorkflowFocusChange={setWorkflowFocus}
+      />
 
-          <div className="mt-5">
-            <WorkflowFocusBar>
-              {laneCards.map(({ focus, count }) => (
-                <WorkflowChip key={focus} active={workflowFocus === focus} onClick={() => setWorkflowFocus(focus)}>
-                  {INVENTORY_FOCUS_COPY[focus].title} ({count})
-                </WorkflowChip>
-              ))}
-            </WorkflowFocusBar>
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {laneCards.map(({ focus, count }) => (
-              <InventoryLaneCard
-                key={focus}
-                active={workflowFocus === focus}
-                count={count}
-                focus={focus}
-                onClick={() => setWorkflowFocus(focus)}
-              />
-            ))}
-          </div>
-        </WorkflowPanel>
-
-        <WorkflowPanel
-          title="Operator Rail"
-          description="Keep the active lane, selection state, and management actions visible while you work the queue."
-          actions={(
-            <>
-              <button
-                type="button"
-                onClick={toggleVisibleSelection}
-                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-              >
-                {allVisibleSelected ? 'Unselect Visible Items' : 'Select Visible Items'}
-              </button>
-              {selectedCount > 0 && (
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-                >
-                  Clear Selection
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowVendorsModal(true)}
-                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-              >
-                Manage Vendors
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowVenuesModal(true)}
-                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-              >
-                Manage Venues
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAreasModal(true)}
-                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-              >
-                Manage Areas
-              </button>
-            </>
-          )}
-        >
-          <div className="space-y-3">
-            <div className="rounded-2xl bg-slate-50 px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Active lane</div>
-              <div className="mt-2">
-                <WorkflowStatusPill tone={currentFocus.tone}>{currentFocus.title}</WorkflowStatusPill>
-              </div>
-              <div className="mt-3 text-sm leading-6 text-slate-600">{laneActionCopy[workflowFocus]}</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Selection rail</div>
-              <div className="mt-2 text-sm text-slate-600">
-                {selectedCount > 0
-                  ? `${selectedCount} item${selectedCount === 1 ? '' : 's'} selected for bulk action. ${visibleSelectionCount} visible in the current page.`
-                  : 'Select items from the catalog to assign ownership, location, or storage in bulk.'}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">
-              Estimated reorder spend for the current view:
-              <div className="mt-2 font-mono text-lg text-slate-950">{formatCurrency(reorderSpend)}</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Batch shortcut</div>
-              <div className="text-sm text-slate-600">
-                {workflowFocus === 'missing_vendor' && 'Select the lane, then bulk-assign a vendor to clear purchasing ownership gaps.'}
-                {workflowFocus === 'missing_venue' && 'Select the lane, then bulk-assign the correct venue to restore scope accuracy.'}
-                {workflowFocus === 'missing_storage_area' && 'Select the lane, then bulk-assign a storage area to improve count discipline.'}
-                {workflowFocus === 'ordering_incomplete' && 'Select the lane, then fill reorder and pack fields directly from the ordering columns.'}
-                {workflowFocus === 'reorder' && 'Select the lane, review vendor ownership, and convert the queue into orders.'}
-                {(workflowFocus === 'all' || workflowFocus === 'needs_attention') && 'Use the lane filters first, then batch-correct the visible queue.'}
-              </div>
-              {workflowFocus === 'ordering_incomplete' && (
-                <button
-                  type="button"
-                  onClick={() => setShowOrdering(true)}
-                  className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
-                >
-                  Open Ordering Columns
-                </button>
-              )}
-            </div>
-          </div>
-        </WorkflowPanel>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        {laneCards.map(({ focus, count }) => (
+          <InventoryLaneCard
+            key={focus}
+            active={workflowFocus === focus}
+            count={count}
+            focus={focus}
+            onClick={() => setWorkflowFocus(focus)}
+          />
+        ))}
       </div>
+
+      {selectedCount > 0 && (
+        <InventoryBatchActions
+          selectedCount={selectedCount}
+          bulkCategory={bulkCategory}
+          onBulkCategoryChange={setBulkCategory}
+          bulkVendorId={bulkVendorId}
+          onBulkVendorIdChange={setBulkVendorId}
+          bulkVenueId={bulkVenueId}
+          onBulkVenueIdChange={setBulkVenueId}
+          bulkStorageAreaId={bulkStorageAreaId}
+          onBulkStorageAreaIdChange={setBulkStorageAreaId}
+          vendors={vendors ?? []}
+          venues={venues ?? []}
+          areas={areas ?? []}
+          onApplyCategory={() => {
+            if (!bulkCategory) return;
+            applyBulkWorkflowUpdate({ category: bulkCategory }, `Updated category to ${bulkCategory}`);
+          }}
+          onApplyVendor={() => {
+            if (!bulkVendorId) return;
+            const vendorName = vendors?.find((vendor) => vendor.id === Number(bulkVendorId))?.name ?? 'vendor';
+            applyBulkWorkflowUpdate({ vendor_id: Number(bulkVendorId) }, `Assigned ${vendorName}`);
+          }}
+          onApplyVenue={() => {
+            if (!bulkVenueId) return;
+            const venueName = venues?.find((venue) => venue.id === Number(bulkVenueId))?.name ?? 'venue';
+            applyBulkWorkflowUpdate({ venue_id: Number(bulkVenueId) }, `Assigned ${venueName}`);
+          }}
+          onApplyArea={() => {
+            if (!bulkStorageAreaId) return;
+            const areaName = areas?.find((area) => area.id === Number(bulkStorageAreaId))?.name ?? 'area';
+            applyBulkWorkflowUpdate({ storage_area_id: Number(bulkStorageAreaId) }, `Assigned ${areaName}`);
+          }}
+          onOpenMerge={() => {
+            setMergeTargetId(null);
+            setShowMergeModal(true);
+          }}
+          onOpenDelete={() => setShowDeleteConfirm(true)}
+          isBulkUpdatePending={bulkUpdate.isPending}
+          isBulkDeletePending={bulkDelete.isPending}
+        />
+      )}
 
       {!!reorderSuggestions?.length && (
         <div className="bg-bg-page border border-border rounded-lg px-4 py-3 flex items-center justify-between text-sm">
@@ -887,129 +489,6 @@ export function Inventory() {
             Estimated spend: <span className="text-accent-amber font-mono">{formatCurrency(reorderSpend)}</span>
           </div>
         </div>
-      )}
-
-      {/* Selection actions bar */}
-      {selectedCount > 0 && (
-        <WorkflowPanel
-          title="Bulk workflow actions"
-          description="Use batch actions to correct ownership and setup gaps directly from the attention queue."
-        >
-        <div className="flex items-center gap-4 flex-wrap">
-          <span className="text-sm font-medium text-text-primary">
-            {selectedCount} item{selectedCount > 1 ? 's' : ''} selected
-          </span>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={bulkCategory}
-              onChange={(e) => setBulkCategory(e.target.value)}
-              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-            >
-              <option value="">Reassign category…</option>
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                if (!bulkCategory) return;
-                applyBulkWorkflowUpdate({ category: bulkCategory }, `Updated category to ${bulkCategory}`);
-              }}
-              disabled={!bulkCategory || bulkUpdate.isPending}
-              className="bg-accent-indigo text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Apply Category
-            </button>
-
-            <select
-              value={bulkVendorId}
-              onChange={(e) => setBulkVendorId(e.target.value)}
-              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-            >
-              <option value="">Assign vendor…</option>
-              {(vendors ?? []).map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                if (!bulkVendorId) return;
-                const vendorName = vendors?.find((vendor) => vendor.id === Number(bulkVendorId))?.name ?? 'vendor';
-                applyBulkWorkflowUpdate({ vendor_id: Number(bulkVendorId) }, `Assigned ${vendorName}`);
-              }}
-              disabled={!bulkVendorId || bulkUpdate.isPending}
-              className="bg-bg-page border border-border-emphasis text-text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Assign Vendor
-            </button>
-
-            <select
-              value={bulkVenueId}
-              onChange={(e) => setBulkVenueId(e.target.value)}
-              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-            >
-              <option value="">Assign venue…</option>
-              {(venues ?? []).map((venue) => (
-                <option key={venue.id} value={venue.id}>{venue.name}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                if (!bulkVenueId) return;
-                const venueName = venues?.find((venue) => venue.id === Number(bulkVenueId))?.name ?? 'venue';
-                applyBulkWorkflowUpdate({ venue_id: Number(bulkVenueId) }, `Assigned ${venueName}`);
-              }}
-              disabled={!bulkVenueId || bulkUpdate.isPending}
-              className="bg-bg-page border border-border-emphasis text-text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Assign Venue
-            </button>
-
-            <select
-              value={bulkStorageAreaId}
-              onChange={(e) => setBulkStorageAreaId(e.target.value)}
-              className="bg-white border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
-            >
-              <option value="">Assign area…</option>
-              {(areas ?? []).map((area) => (
-                <option key={area.id} value={area.id}>{area.name}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => {
-                if (!bulkStorageAreaId) return;
-                const areaName = areas?.find((area) => area.id === Number(bulkStorageAreaId))?.name ?? 'area';
-                applyBulkWorkflowUpdate({ storage_area_id: Number(bulkStorageAreaId) }, `Assigned ${areaName}`);
-              }}
-              disabled={!bulkStorageAreaId || bulkUpdate.isPending}
-              className="bg-bg-page border border-border-emphasis text-text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Assign Area
-            </button>
-          </div>
-
-          <div className="ml-auto flex gap-2">
-            {selectedCount >= 2 && (
-              <button
-                onClick={() => {
-                  setMergeTargetId(null);
-                  setShowMergeModal(true);
-                }}
-                className="bg-accent-indigo/10 text-accent-indigo border border-accent-indigo/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-indigo/20 transition-colors"
-              >
-                Merge Selected
-              </button>
-            )}
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="bg-accent-red/10 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-accent-red/20 transition-colors"
-            >
-              Delete Selected
-            </button>
-          </div>
-        </div>
-        </WorkflowPanel>
       )}
 
       <WorkflowPanel
@@ -1065,7 +544,6 @@ export function Inventory() {
             <div className="space-y-2">
               {paginatedItems.map((item) => {
                 const itemAreas = storageByItem.get(item.id) ?? [];
-                const hasAreas = itemAreas.length > 0;
                 const reorderNeeded = item.reorder_level != null && item.current_qty <= item.reorder_level;
                 const missingVendor = workflowCounts.missingVendor.has(item.id);
                 const missingVenue = workflowCounts.missingVenue.has(item.id);
@@ -1074,19 +552,10 @@ export function Inventory() {
                 const totalValue = item.order_unit_price != null && item.current_qty > 0
                   ? item.order_unit_price * item.current_qty
                   : null;
-                const economics = deriveInventoryUnitEconomics({
-                  baseUnit: item.unit,
-                  orderUnit: item.order_unit,
-                  orderUnitPrice: item.order_unit_price,
-                  qtyPerUnit: item.qty_per_unit,
-                  innerUnit: item.inner_unit,
-                  itemSizeValue: item.item_size_value,
-                  itemSizeUnit: item.item_size_unit,
-                });
                 const venueName = venues?.find((venue) => venue.id === item.venue_id)?.name ?? 'Venue missing';
                 const storageName = item.storage_area_id != null
                   ? areaNameLookup.get(item.storage_area_id) ?? 'Area assigned'
-                  : hasAreas
+                  : itemAreas.length > 0
                     ? `${itemAreas.length} area balance${itemAreas.length === 1 ? '' : 's'}`
                     : 'Storage area missing';
                 const issuePills = [
@@ -1095,8 +564,6 @@ export function Inventory() {
                   missingStorageArea ? { label: 'Missing area', tone: 'blue' as const } : null,
                   orderingIncomplete ? { label: 'Ordering incomplete', tone: 'amber' as const } : null,
                 ].filter((value): value is { label: string; tone: 'blue' | 'amber' } => value !== null);
-                const topIssues = issuePills.slice(0, 2);
-                const overflowIssues = issuePills.length - topIssues.length;
                 const nextAction = inventoryActionHint({
                   reorderNeeded,
                   missingVendor,
@@ -1106,194 +573,24 @@ export function Inventory() {
                 });
 
                 return (
-                  <article
+                  <InventoryQueueCard
                     key={item.id}
-                    className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-                  >
-                    <div className="flex items-start gap-3">
-                      <label className="mt-1 flex min-h-6 min-w-6 items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected(item.id)}
-                          onChange={() => toggleSelectOne(item.id)}
-                          aria-label={`Select ${item.name}`}
-                          className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20"
-                        />
-                      </label>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedItemId(item.id)}
-                                className="truncate text-left text-base font-semibold text-slate-950 transition hover:text-slate-700"
-                              >
-                                {item.name}
-                              </button>
-                              {isSelected(item.id) && (
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                  Selected
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
-                              <span>{item.category}</span>
-                              <span className="text-slate-300">•</span>
-                              <span>{item.unit}</span>
-                              {economics.eachLine && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span className="truncate">{economics.eachLine}</span>
-                                </>
-                              )}
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <WorkflowStatusPill tone={reorderNeeded ? 'amber' : 'green'}>
-                                {reorderNeeded ? 'Needs reorder' : 'In range'}
-                              </WorkflowStatusPill>
-                              {topIssues.map((issue) => (
-                                <WorkflowStatusPill key={issue.label} tone={issue.tone}>
-                                  {issue.label}
-                                </WorkflowStatusPill>
-                              ))}
-                              {overflowIssues > 0 && (
-                                <span className="inline-flex rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                                  +{overflowIssues} more
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            {hasAreas && (
-                              <button
-                                type="button"
-                                onClick={() => toggleExpand(item.id)}
-                                aria-expanded={expandedItems.has(item.id)}
-                                className="inline-flex min-h-9 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
-                              >
-                                {expandedItems.has(item.id) ? 'Hide area balances' : `Area balances (${itemAreas.length})`}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedItemId(item.id)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                            >
-                              Open
-                            </button>
-                          </div>
-                        </div>
-
-                        {expandedItems.has(item.id) && hasAreas && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {itemAreas.map((area) => (
-                              <div key={area.area_id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700">
-                                <span className="font-medium text-slate-900">{area.area_name}</span>
-                                <span className="mx-2 text-slate-300">•</span>
-                                <span>{area.quantity} {item.unit}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(220px,0.9fr)]">
-                          <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stocking</div>
-                            <div className="mt-3 grid gap-2">
-                              <QuickEditNumberField
-                                itemId={item.id}
-                                field="current_qty"
-                                value={item.current_qty}
-                                label="On hand"
-                                suffix={item.unit}
-                              />
-                              <div className="grid grid-cols-2 gap-2">
-                                <QuickEditNumberField
-                                  itemId={item.id}
-                                  field="reorder_level"
-                                  value={item.reorder_level}
-                                  label="Reorder at"
-                                  suffix={item.unit}
-                                />
-                                <QuickEditNumberField
-                                  itemId={item.id}
-                                  field="reorder_qty"
-                                  value={item.reorder_qty}
-                                  label="Target"
-                                  suffix={item.unit}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Purchasing</div>
-                            <div className="mt-3 grid gap-2">
-                              <QuickEditSelectField
-                                itemId={item.id}
-                                field="order_unit"
-                                value={item.order_unit}
-                                label="Purchase unit"
-                                emptyLabel="Missing"
-                                options={UNITS.map((unitOption) => ({ value: unitOption, label: unitOption }))}
-                              />
-                              <div className="grid grid-cols-2 gap-2">
-                                <QuickEditNumberField
-                                  itemId={item.id}
-                                  field="qty_per_unit"
-                                  value={item.qty_per_unit}
-                                  label="Units / pack"
-                                />
-                                <QuickEditNumberField
-                                  itemId={item.id}
-                                  field="order_unit_price"
-                                  value={item.order_unit_price}
-                                  label="Case price"
-                                />
-                              </div>
-                              <div className="text-xs text-slate-600">{economics.packLine ?? 'Purchase pack incomplete'}</div>
-                              <div className="text-xs text-slate-500">{economics.costLine ?? 'Add case price and pack quantity'}</div>
-                              {showOrdering && economics.purchaseMeasureLine && (
-                                <div className="text-xs text-slate-500">{economics.purchaseMeasureLine}</div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Ownership</div>
-                            <div className="mt-3">
-                              <QuickEditSelectField
-                                itemId={item.id}
-                                field="vendor_id"
-                                value={item.vendor_id}
-                                label="Vendor"
-                                emptyLabel="Vendor missing"
-                                options={(vendors ?? []).map((vendor) => ({ value: String(vendor.id), label: vendor.name }))}
-                              />
-                            </div>
-                            <div className="mt-3 text-sm font-medium text-slate-900">{venueName}</div>
-                            <div className="mt-1 text-xs text-slate-500">{storageName}</div>
-                          </div>
-
-                          <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Next action</div>
-                            <div className="mt-3 text-sm font-medium leading-6 text-slate-900">
-                              {nextAction}
-                            </div>
-                            <div className="mt-3 text-xs text-slate-500">
-                              {totalValue != null ? `${formatCurrency(totalValue)} estimated value` : 'Inventory value needs cost setup'}
-                            </div>
-                            {topIssues.length === 0 && !reorderNeeded && (
-                              <div className="mt-3 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
-                                Setup is currently clean.
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
+                    item={item}
+                    itemAreas={itemAreas}
+                    expanded={expandedItems.has(item.id)}
+                    onToggleExpanded={() => toggleExpand(item.id)}
+                    isSelected={isSelected(item.id)}
+                    onToggleSelect={() => toggleSelectOne(item.id)}
+                    onOpen={() => setSelectedItemId(item.id)}
+                    showOrdering={showOrdering}
+                    venueName={venueName}
+                    storageName={storageName}
+                    nextAction={nextAction}
+                    totalValue={totalValue}
+                    reorderNeeded={reorderNeeded}
+                    issuePills={issuePills}
+                    vendors={vendors ?? []}
+                  />
                 );
               })}
             </div>
