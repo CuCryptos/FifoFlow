@@ -209,14 +209,8 @@ describe('Allergy assistant routes', () => {
         item_id: 1,
         match_status: 'suggested',
       }),
-      expect.objectContaining({
-        document_product_id: 2,
-        item_id: 2,
-        match_status: 'suggested',
-      }),
     ]);
     expect(matches[0].match_score).toBeGreaterThan(0.9);
-    expect(matches[1].match_score).toBeGreaterThan(0.9);
   });
 
   it('reprocesses stored products and writes suggestion rows for useful overlaps', async () => {

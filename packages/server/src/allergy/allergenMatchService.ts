@@ -67,9 +67,13 @@ const NOISE_TOKENS = new Set([
   'or',
   'seasonal',
   'served',
+  'salad',
+  'sauce',
   'special',
   'style',
   'the',
+  'platter',
+  'white',
   'with',
 ]);
 
@@ -515,11 +519,11 @@ function normalizeSearchText(input: string): string {
 function tokenizeSearchText(input: string): string[] {
   return normalizeSearchText(input)
     .split(/\s+/)
-    .filter((token) => token.length >= 2)
+    .filter((token) => token.length >= 3)
     .filter((token) => !/^\d+$/.test(token))
     .map(normalizeConfusableToken)
     .map(singularizeToken)
-    .filter((token) => token.length >= 2)
+    .filter((token) => token.length >= 3)
     .filter((token) => !NOISE_TOKENS.has(token));
 }
 
