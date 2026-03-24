@@ -193,9 +193,6 @@ export function initializeAllergyAssistantDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_allergy_document_product_matches_item_id
       ON allergy_document_product_matches(item_id, match_status);
 
-    CREATE INDEX IF NOT EXISTS idx_allergy_document_product_matches_signal
-      ON allergy_document_product_matches(match_signal_tier, match_score DESC);
-
     CREATE INDEX IF NOT EXISTS idx_allergen_match_aliases_item_id
       ON allergen_match_aliases(item_id, active DESC, alias COLLATE NOCASE ASC);
 
@@ -269,6 +266,10 @@ export function initializeAllergyAssistantDb(db: Database.Database): void {
   ensureColumn(db, 'allergy_documents', 'product_count', "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, 'allergy_document_product_matches', 'match_basis', "TEXT NOT NULL DEFAULT 'item_name'");
   ensureColumn(db, 'allergy_document_product_matches', 'match_signal_tier', "TEXT NOT NULL DEFAULT 'fallback'");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_allergy_document_product_matches_signal
+      ON allergy_document_product_matches(match_signal_tier, match_score DESC);
+  `);
   seedAllergens(db);
 }
 
