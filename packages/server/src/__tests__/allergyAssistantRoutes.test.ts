@@ -219,7 +219,7 @@ describe('Allergy assistant routes', () => {
     expect(matches[1].match_score).toBeGreaterThan(0.9);
   });
 
-  it('reprocesses stored products and writes no-match rows for weak overlaps', async () => {
+  it('reprocesses stored products and writes suggestion rows for useful overlaps', async () => {
     initializeAllergenMatchTables(db);
     seedItems(db, [
       { name: 'Chicken Breast', venueId: 2 },
@@ -264,7 +264,7 @@ describe('Allergy assistant routes', () => {
       processed_product_count: 2,
       locked_product_count: 0,
       inserted_match_count: 1,
-      no_match_count: 1,
+      no_match_count: 0,
     });
 
     const matches = db.prepare(
@@ -284,11 +284,10 @@ describe('Allergy assistant routes', () => {
       expect.objectContaining({
         document_product_id: 1,
         item_id: 1,
-        match_status: 'no_match',
+        match_status: 'suggested',
       }),
     ]);
-    expect(matches[0].match_score).toBeGreaterThan(0);
-    expect(matches[0].match_score).toBeLessThan(0.45);
+    expect(matches[0].match_score).toBeGreaterThanOrEqual(0.28);
   });
 });
 

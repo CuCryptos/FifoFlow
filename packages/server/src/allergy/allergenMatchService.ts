@@ -47,18 +47,81 @@ export interface AllergyMatchRefreshSummary {
   skipped_reason: string | null;
 }
 
-const STRONG_MATCH_THRESHOLD = 0.45;
+const STRONG_MATCH_THRESHOLD = 0.28;
+const WEAK_MATCH_THRESHOLD = 0.14;
+const NOISE_TOKENS = new Set([
+  'a',
+  'an',
+  'and',
+  'composed',
+  'daily',
+  'fresh',
+  'freshly',
+  'homemade',
+  'house',
+  'housemade',
+  'local',
+  'locally',
+  'made',
+  'of',
+  'or',
+  'seasonal',
+  'served',
+  'special',
+  'style',
+  'the',
+  'with',
+]);
+
+const OCR_CONFUSABLE_CHAR_MAP: Record<string, string> = {
+  '0': 'o',
+  '1': 'i',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '6': 'g',
+  '8': 'b',
+};
+
+const KNOWN_NON_LATIN_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/プライム/g, ' prime '],
+  [/ローストビーフ/g, ' roast beef '],
+  [/テンダーロイン/g, ' tenderloin '],
+  [/ロブスター/g, ' lobster '],
+  [/チキン/g, ' chicken '],
+  [/サーモン/g, ' salmon '],
+  [/バター/g, ' butter '],
+  [/ケーキ/g, ' cake '],
+  [/ソルベ/g, ' sorbet '],
+  [/ジェラート/g, ' gelato '],
+  [/ライス/g, ' rice '],
+  [/ポテト/g, ' potato '],
+  [/マッシュ/g, ' mashed '],
+  [/ビーフ/g, ' beef '],
+  [/シュリンプ/g, ' shrimp '],
+];
+
+interface MatchingProfile {
+  normalized: string;
+  tokens: string[];
+}
 
 export function buildDocumentProductMatchPlans(input: {
   products: AllergyDocumentProductRecord[];
   items: InventoryItemRecord[];
 }): AllergyDocumentMatchPlan[] {
+  const itemProfiles = input.items.map((item) => ({
+    item,
+    profile: buildMatchingProfile(item.name),
+  }));
+  const tokenDocumentFrequency = buildTokenDocumentFrequency(itemProfiles.map((entry) => entry.profile.tokens));
+
   return input.products.map((product) => {
-    const scoredCandidates = input.items
-      .map((item) => ({
+    const scoredCandidates = itemProfiles
+      .map(({ item, profile }) => ({
         item_id: item.id,
         item_name: item.name,
-        score: Number(scoreProductToItem(product, item).toFixed(4)),
+        score: Number(scoreProductToItem(product, profile, tokenDocumentFrequency).toFixed(4)),
       }))
       .filter((candidate) => candidate.score > 0)
       .sort((left, right) => right.score - left.score || left.item_name.localeCompare(right.item_name, undefined, { sensitivity: 'base' }));
@@ -84,7 +147,7 @@ export function buildDocumentProductMatchPlans(input: {
     }
 
     const weakCandidate = scoredCandidates[0];
-    if (weakCandidate) {
+    if (weakCandidate && weakCandidate.score >= WEAK_MATCH_THRESHOLD) {
       return {
         document_product_id: product.id,
         product_name: product.product_name,
@@ -431,51 +494,202 @@ function parseChunkIdList(value: string): number[] {
 }
 
 function normalizeSearchText(input: string): string {
-  return input.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let normalized = input;
+  for (const [pattern, replacement] of KNOWN_NON_LATIN_REPLACEMENTS) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+  normalized = normalized.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  for (const [pattern, replacement] of KNOWN_NON_LATIN_REPLACEMENTS) {
+    normalized = normalized.replace(pattern, replacement);
+  }
+
+  return normalized
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/['"`]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function tokenizeSearchText(input: string): string[] {
   return normalizeSearchText(input)
     .split(/\s+/)
-    .filter((token) => token.length >= 2);
+    .filter((token) => token.length >= 2)
+    .filter((token) => !/^\d+$/.test(token))
+    .map(normalizeConfusableToken)
+    .map(singularizeToken)
+    .filter((token) => token.length >= 2)
+    .filter((token) => !NOISE_TOKENS.has(token));
 }
 
-function scoreProductToItem(product: AllergyDocumentProductRecord, item: InventoryItemRecord): number {
-  return Math.max(
-    scoreTextOverlap(product.product_name, item.name),
-    scoreTextOverlap(product.normalized_product_name, item.name),
-    scoreTextOverlap(product.source_row_text, item.name),
-    scoreTextOverlap(product.allergen_summary ?? '', item.name),
-    scoreTextOverlap(product.dietary_notes ?? '', item.name),
-  );
+function singularizeToken(token: string): string {
+  if (token.endsWith('ies') && token.length > 4) {
+    return `${token.slice(0, -3)}y`;
+  }
+  if (token.endsWith('oes') && token.length > 4) {
+    return token.slice(0, -2);
+  }
+  if (token.endsWith('es') && token.length > 4) {
+    return token.slice(0, -2);
+  }
+  if (token.endsWith('s') && token.length > 3) {
+    return token.slice(0, -1);
+  }
+  return token;
 }
 
-function scoreTextOverlap(left: string, right: string): number {
-  const normalizedLeft = normalizeSearchText(left);
-  const normalizedRight = normalizeSearchText(right);
-  if (!normalizedLeft || !normalizedRight) {
+function normalizeConfusableToken(token: string): string {
+  if (!/[a-z]/.test(token) || !/\d/.test(token)) {
+    return token;
+  }
+
+  return token.replace(/[0134568]/g, (char) => OCR_CONFUSABLE_CHAR_MAP[char] ?? char);
+}
+
+function buildMatchingProfile(input: string): MatchingProfile {
+  const tokens = tokenizeSearchText(input);
+  return {
+    normalized: tokens.join(' '),
+    tokens,
+  };
+}
+
+function buildTokenDocumentFrequency(tokenLists: string[][]): Map<string, number> {
+  const frequency = new Map<string, number>();
+
+  for (const tokenList of tokenLists) {
+    for (const token of new Set(tokenList)) {
+      frequency.set(token, (frequency.get(token) ?? 0) + 1);
+    }
+  }
+
+  return frequency;
+}
+
+function tokenWeight(token: string, frequency: Map<string, number>): number {
+  const documentFrequency = frequency.get(token) ?? 1;
+  return 1 / Math.sqrt(documentFrequency);
+}
+
+function diceCoefficient(left: string, right: string): number {
+  if (!left || !right) {
+    return 0;
+  }
+  if (left === right) {
+    return 1;
+  }
+  if (left.length < 2 || right.length < 2) {
     return 0;
   }
 
-  if (normalizedLeft === normalizedRight) {
+  const leftBigrams = new Map<string, number>();
+  for (let index = 0; index < left.length - 1; index += 1) {
+    const bigram = left.slice(index, index + 2);
+    leftBigrams.set(bigram, (leftBigrams.get(bigram) ?? 0) + 1);
+  }
+
+  let overlap = 0;
+  for (let index = 0; index < right.length - 1; index += 1) {
+    const bigram = right.slice(index, index + 2);
+    const count = leftBigrams.get(bigram) ?? 0;
+    if (count > 0) {
+      overlap += 1;
+      leftBigrams.set(bigram, count - 1);
+    }
+  }
+
+  return (2 * overlap) / ((left.length - 1) + (right.length - 1));
+}
+
+function maxTokenSimilarity(leftTokens: string[], rightTokens: string[]): number {
+  let max = 0;
+  for (const left of leftTokens) {
+    for (const right of rightTokens) {
+      max = Math.max(max, diceCoefficient(left, right));
+    }
+  }
+  return max;
+}
+
+function scoreProductToItem(
+  product: AllergyDocumentProductRecord,
+  itemProfile: MatchingProfile,
+  tokenDocumentFrequency: Map<string, number>,
+): number {
+  const primaryScore = Math.max(
+    scoreTextOverlap(buildMatchingProfile(product.product_name), itemProfile, tokenDocumentFrequency),
+    scoreTextOverlap(buildMatchingProfile(product.normalized_product_name), itemProfile, tokenDocumentFrequency),
+  );
+  if (primaryScore <= 0) {
+    return 0;
+  }
+
+  const corroborationScore = Math.max(
+    scoreTextOverlap(buildMatchingProfile(product.source_row_text), itemProfile, tokenDocumentFrequency),
+    scoreTextOverlap(buildMatchingProfile(product.allergen_summary ?? ''), itemProfile, tokenDocumentFrequency),
+    scoreTextOverlap(buildMatchingProfile(product.dietary_notes ?? ''), itemProfile, tokenDocumentFrequency),
+  );
+
+  return Math.min(1, primaryScore + (corroborationScore * 0.08));
+}
+
+function scoreTextOverlap(
+  leftProfile: MatchingProfile,
+  rightProfile: MatchingProfile,
+  tokenDocumentFrequency: Map<string, number>,
+): number {
+  if (!leftProfile.normalized || !rightProfile.normalized) {
+    return 0;
+  }
+
+  if (leftProfile.normalized === rightProfile.normalized) {
     return 1;
   }
 
-  const leftTokens = new Set(tokenizeSearchText(normalizedLeft));
-  const rightTokens = new Set(tokenizeSearchText(normalizedRight));
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
+  const leftSet = new Set(leftProfile.tokens);
+  const rightSet = new Set(rightProfile.tokens);
+  if (leftSet.size === 0 || rightSet.size === 0) {
     return 0;
   }
 
-  const sharedTokens = Array.from(leftTokens).filter((token) => rightTokens.has(token));
+  const sharedTokens = Array.from(leftSet).filter((token) => rightSet.has(token));
+  const fuzzyTokenScore = maxTokenSimilarity(leftProfile.tokens, rightProfile.tokens);
+  if (sharedTokens.length === 0 && fuzzyTokenScore < 0.88) {
+    return 0;
+  }
+
+  const weightedShared = sharedTokens.reduce((total, token) => total + tokenWeight(token, tokenDocumentFrequency), 0);
+  const weightedLeft = Array.from(leftSet).reduce((total, token) => total + tokenWeight(token, tokenDocumentFrequency), 0);
+  const weightedRight = Array.from(rightSet).reduce((total, token) => total + tokenWeight(token, tokenDocumentFrequency), 0);
+  const leftCoverage = weightedLeft > 0 ? weightedShared / weightedLeft : 0;
+  const rightCoverage = weightedRight > 0 ? weightedShared / weightedRight : 0;
+  const phraseBoost = leftProfile.normalized.includes(rightProfile.normalized) || rightProfile.normalized.includes(leftProfile.normalized) ? 0.16 : 0;
+  const firstTokenBoost = leftProfile.tokens[0] === rightProfile.tokens[0] ? 0.08 : 0;
+  const anchorBoost = sharedTokens.some((token) => token.length >= 6 || tokenWeight(token, tokenDocumentFrequency) >= 0.75) ? 0.08 : 0;
+  const fuzzyBoost = fuzzyTokenScore >= 0.9 ? 0.1 : fuzzyTokenScore >= 0.82 ? 0.05 : 0;
+  const dice = diceCoefficient(leftProfile.normalized, rightProfile.normalized);
+
+  let score = (leftCoverage * 0.4)
+    + (rightCoverage * 0.22)
+    + (dice * 0.16)
+    + phraseBoost
+    + firstTokenBoost
+    + anchorBoost
+    + fuzzyBoost;
+
+  const unmatchedLeftTokens = leftProfile.tokens.filter((token) => !rightSet.has(token));
+  const unmatchedRightTokens = rightProfile.tokens.filter((token) => !leftSet.has(token));
+  const unmatchedSimilarity = maxTokenSimilarity(unmatchedLeftTokens, unmatchedRightTokens);
+  if (sharedTokens.length === 1 && phraseBoost === 0 && unmatchedSimilarity < 0.75 && leftSet.size > 1 && rightSet.size > 1) {
+    score = Math.min(score, 0.31);
+  }
+
   if (sharedTokens.length === 0) {
-    return 0;
+    score = Math.min(score, 0.2);
   }
 
-  const unionSize = new Set([...leftTokens, ...rightTokens]).size;
-  const jaccard = sharedTokens.length / unionSize;
-  const phraseBoost = normalizedRight.includes(normalizedLeft) || normalizedLeft.includes(normalizedRight) ? 0.25 : 0;
-  return Math.min(1, jaccard + phraseBoost);
+  return Math.min(1, score);
 }
 
 function buildSuggestedMatchNote(

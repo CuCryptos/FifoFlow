@@ -3,23 +3,24 @@ import { useSearchParams } from 'react-router-dom';
 import { useItems, useItem, useReorderSuggestions, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
 import {
   useInventoryWorkflow,
-  type InventoryExportGroupBy,
   type InventoryWorkflowFocus,
 } from '../hooks/useInventoryWorkflow';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useToast } from '../contexts/ToastContext';
 import { useStorageAreas, useAllItemStorage } from '../hooks/useStorageAreas';
-import type { GroupBy } from '../utils/exportInventory';
 import type { ItemStorage } from '@fifoflow/shared';
 import { SlideOver } from '../components/intelligence/SlideOver';
 import { useVendors } from '../hooks/useVendors';
 import { useVenues } from '../hooks/useVenues';
 import { useVenueContext } from '../contexts/VenueContext';
 import { InventoryBatchActions } from '../components/inventory/InventoryBatchActions';
+import { InventoryDeleteDialog } from '../components/inventory/InventoryDeleteDialog';
 import { InventoryFiltersBar } from '../components/inventory/InventoryFiltersBar';
 import { INVENTORY_FOCUS_COPY, InventoryLaneCard } from '../components/inventory/InventoryLaneCard';
 import { InventoryItemSidePanel } from '../components/inventory/InventoryItemSidePanel';
+import { InventoryMergeDialog } from '../components/inventory/InventoryMergeDialog';
 import { InventoryPagination } from '../components/inventory/InventoryPagination';
+import { InventoryPageActions } from '../components/inventory/InventoryPageActions';
 import { InventoryQueueCard } from '../components/inventory/InventoryQueueCard';
 import { InventoryQueueHeader } from '../components/inventory/InventoryQueueHeader';
 import {
@@ -335,53 +336,16 @@ export function Inventory() {
       title="Run inventory as an operating workflow, not a spreadsheet."
       description="This surface is now oriented around reorder pressure, setup gaps, and bulk correction lanes. The inventory data remains intact, but the workflow is moving toward the same explicit, explainable model as the backend."
       actions={(
-        <>
-          <select
-            value={exportGroupBy}
-            onChange={(e) => setExportGroupBy(e.target.value as InventoryExportGroupBy)}
-            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-          >
-            <option value="storage_area">Group by Area</option>
-            <option value="venue">Group by Venue</option>
-            <option value="vendor">Group by Vendor</option>
-          </select>
-          <button
-            onClick={async () => {
-              const aLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
-              const venueLookup = new Map((venues ?? []).map((v) => [v.id, v.name]));
-              const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
-              const { exportToPdf } = await import('../utils/exportInventory');
-              exportToPdf({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy as GroupBy, format: 'pdf' });
-            }}
-            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-          >
-            Export PDF
-          </button>
-          <button
-            onClick={async () => {
-              const aLookup = new Map((areas ?? []).map((a) => [a.id, a.name]));
-              const venueLookup = new Map((venues ?? []).map((v) => [v.id, v.name]));
-              const vendorLookup = new Map((vendors ?? []).map((v) => [v.id, v.name]));
-              const { exportToExcel } = await import('../utils/exportInventory');
-              exportToExcel({ items: sortedItems, areas: areas ?? [], areaLookup: aLookup, venueLookup, vendorLookup, groupBy: exportGroupBy as GroupBy, format: 'xlsx' });
-            }}
-            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-          >
-            Export Excel
-          </button>
-          <button
-            onClick={() => setShowInvoiceUpload(true)}
-            className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-          >
-            Upload Invoice
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Add Item
-          </button>
-        </>
+        <InventoryPageActions
+          exportGroupBy={exportGroupBy}
+          onExportGroupByChange={setExportGroupBy}
+          areas={areas ?? []}
+          vendors={vendors ?? []}
+          venues={venues ?? []}
+          sortedItems={sortedItems}
+          onOpenInvoiceUpload={() => setShowInvoiceUpload(true)}
+          onOpenAddItem={() => setShowAddModal(true)}
+        />
       )}
     >
       <WorkflowMetricGrid>
@@ -575,48 +539,31 @@ export function Inventory() {
       </WorkflowPanel>
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div className="bg-bg-card rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold text-text-primary mb-2">Confirm Delete</h3>
-            <p className="text-sm text-text-secondary mb-4">
-              Delete {selectedCount} selected item{selectedCount > 1 ? 's' : ''}? Items with transaction history will be skipped.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 rounded-lg text-sm border border-border text-text-secondary hover:bg-bg-hover transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                        onClick={() => {
-                          bulkDelete.mutate(
-                            { ids: Array.from(selectedIds) },
-                    {
-                      onSuccess: (data) => {
-                        let msg = `Deleted ${data.deleted} item${data.deleted !== 1 ? 's' : ''}`;
-                        if (data.skipped > 0) {
-                          msg += `, ${data.skipped} skipped (have transaction history)`;
-                        }
-                        toast(msg, data.skipped > 0 ? 'info' : 'success');
-                        clearSelection();
-                        setShowDeleteConfirm(false);
-                      },
-                      onError: (err) => {
-                        toast(`Failed to delete: ${err.message}`, 'error');
-                        setShowDeleteConfirm(false);
-                      },
-                    },
-                  );
-                }}
-                disabled={bulkDelete.isPending}
-                className="bg-accent-red text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-red/90 disabled:opacity-40 transition-colors"
-              >
-                {bulkDelete.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <InventoryDeleteDialog
+          selectedCount={selectedCount}
+          isPending={bulkDelete.isPending}
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={() => {
+            bulkDelete.mutate(
+              { ids: Array.from(selectedIds) },
+              {
+                onSuccess: (data) => {
+                  let msg = `Deleted ${data.deleted} item${data.deleted !== 1 ? 's' : ''}`;
+                  if (data.skipped > 0) {
+                    msg += `, ${data.skipped} skipped (have transaction history)`;
+                  }
+                  toast(msg, data.skipped > 0 ? 'info' : 'success');
+                  clearSelection();
+                  setShowDeleteConfirm(false);
+                },
+                onError: (err) => {
+                  toast(`Failed to delete: ${err.message}`, 'error');
+                  setShowDeleteConfirm(false);
+                },
+              },
+            );
+          }}
+        />
       )}
 
       {selectedItemId != null && (
@@ -657,82 +604,35 @@ export function Inventory() {
         )}
       </Suspense>
 
-      {/* Merge Modal */}
-      {showMergeModal && (() => {
-        return (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-            <div className="bg-bg-card rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-semibold text-text-primary mb-2">Merge Items</h3>
-              <p className="text-sm text-text-secondary mb-4">
-                Select the target (canonical) item. All other items will be merged into it.
-              </p>
-              <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-                {selectedItems.map((item) => (
-                  <label
-                    key={item.id}
-                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
-                      mergeTargetId === item.id ? 'bg-accent-indigo/10 border border-accent-indigo/30' : 'hover:bg-bg-hover border border-transparent'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="merge-target"
-                      checked={mergeTargetId === item.id}
-                      onChange={() => setMergeTargetId(item.id)}
-                      className="text-accent-indigo focus:ring-accent-indigo/20"
-                    />
-                    <div>
-                      <div className="text-sm font-medium text-text-primary">{item.name}</div>
-                      <div className="text-xs text-text-muted">{item.category} · {item.current_qty} {item.unit}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-              {mergeTargetId && (
-                <p className="text-xs text-text-muted mb-4 bg-bg-page p-2 rounded">
-                  Merge {selectedItems.length - 1} item{selectedItems.length - 1 !== 1 ? 's' : ''} into{' '}
-                  <strong>{selectedItems.find((i) => i.id === mergeTargetId)?.name}</strong>.
-                  Transaction history, vendor prices, and storage quantities will be consolidated.
-                </p>
-              )}
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setShowMergeModal(false)}
-                  className="px-4 py-2 rounded-lg text-sm border border-border text-text-secondary hover:bg-bg-hover transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (!mergeTargetId) return;
-                    const sourceIds = Array.from(selectedIds).filter((id) => id !== mergeTargetId);
-                    mergeItems.mutate(
-                      { target_id: mergeTargetId, source_ids: sourceIds },
-                      {
-                        onSuccess: (data) => {
-                          const parts = [`Merged ${data.merged_count} items`];
-                          if (data.transactions_moved > 0) parts.push(`${data.transactions_moved} transactions moved`);
-                          if (data.vendor_prices_created > 0) parts.push(`${data.vendor_prices_created} vendor prices created`);
-                          toast(parts.join(', '), 'success');
-                          clearSelection();
-                          setShowMergeModal(false);
-                        },
-                        onError: (err) => {
-                          toast(`Merge failed: ${err.message}`, 'error');
-                        },
-                      },
-                    );
-                  }}
-                  disabled={!mergeTargetId || mergeItems.isPending}
-                  className="bg-accent-indigo text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent-indigo-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {mergeItems.isPending ? 'Merging...' : 'Merge'}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {showMergeModal && (
+        <InventoryMergeDialog
+          items={selectedItems}
+          mergeTargetId={mergeTargetId}
+          onMergeTargetChange={setMergeTargetId}
+          onCancel={() => setShowMergeModal(false)}
+          onConfirm={() => {
+            if (!mergeTargetId) return;
+            const sourceIds = Array.from(selectedIds).filter((id) => id !== mergeTargetId);
+            mergeItems.mutate(
+              { target_id: mergeTargetId, source_ids: sourceIds },
+              {
+                onSuccess: (data) => {
+                  const parts = [`Merged ${data.merged_count} items`];
+                  if (data.transactions_moved > 0) parts.push(`${data.transactions_moved} transactions moved`);
+                  if (data.vendor_prices_created > 0) parts.push(`${data.vendor_prices_created} vendor prices created`);
+                  toast(parts.join(', '), 'success');
+                  clearSelection();
+                  setShowMergeModal(false);
+                },
+                onError: (err) => {
+                  toast(`Merge failed: ${err.message}`, 'error');
+                },
+              },
+            );
+          }}
+          isPending={mergeItems.isPending}
+        />
+      )}
     </WorkflowPage>
   );
 }
