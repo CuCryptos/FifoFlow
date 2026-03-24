@@ -29,7 +29,7 @@ describe('Items API', () => {
   });
 
   describe('POST /api/items', () => {
-    it('creates an item', async () => {
+    it('creates an item with overview fields', async () => {
       const res = await request(app)
         .post('/api/items')
         .send({ name: 'Ahi Tuna', category: 'Seafood', unit: 'lb' });
@@ -39,6 +39,24 @@ describe('Items API', () => {
         category: 'Seafood',
         unit: 'lb',
         current_qty: 0,
+        vendor_name: null,
+        venue_name: null,
+        storage_area_name: null,
+        storage_location_count: 0,
+        storage_total_qty: 0,
+        storage_qty_delta: 0,
+        pack_summary: null,
+        unit_cost: null,
+        inventory_value: null,
+        ordering_missing_fields: ['reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'order_unit_price'],
+        workflow_flags: {
+          missing_vendor: true,
+          missing_venue: true,
+          missing_storage_area: true,
+          ordering_incomplete: true,
+          needs_reorder: false,
+          needs_attention: true,
+        },
       });
       expect(res.body.id).toBeDefined();
     });
@@ -60,15 +78,44 @@ describe('Items API', () => {
 
   describe('GET /api/items', () => {
     beforeEach(() => {
-      db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Ahi Tuna', 'Seafood', 'lb');
+      const vendorId = Number(db.prepare("INSERT INTO vendors (name, notes) VALUES (?, ?)" ).run('Fresh Fish', null).lastInsertRowid);
+      const venueId = Number(db.prepare("INSERT INTO venues (name) VALUES (?)").run('Main Venue').lastInsertRowid);
+      const areaId = Number(db.prepare("INSERT INTO storage_areas (name) VALUES (?)").run('Walk-in').lastInsertRowid);
+      const ahiResult = db.prepare(`
+        INSERT INTO items (
+          name, category, unit, order_unit, order_unit_price, qty_per_unit,
+          reorder_level, reorder_qty, vendor_id, venue_id, storage_area_id, current_qty
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('Ahi Tuna', 'Seafood', 'each', 'case', 48, 12, 10, 12, vendorId, venueId, areaId, 24);
+      db.prepare("INSERT INTO item_storage (item_id, area_id, quantity) VALUES (?, ?, ?)").run(Number(ahiResult.lastInsertRowid), areaId, 24);
       db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Jasmine Rice', 'Dry Goods', 'bag');
       db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Maui Onion', 'Produce', 'each');
     });
 
-    it('lists all items', async () => {
+    it('lists all items with overview fields', async () => {
       const res = await request(app).get('/api/items');
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(3);
+      const ahi = res.body.find((item: any) => item.name === 'Ahi Tuna');
+      expect(ahi).toMatchObject({
+        vendor_name: 'Fresh Fish',
+        venue_name: 'Main Venue',
+        storage_area_name: 'Walk-in',
+        storage_location_count: 1,
+        storage_total_qty: 24,
+        storage_qty_delta: 0,
+        pack_summary: '12 each per case',
+        unit_cost: 4,
+        inventory_value: 96,
+        workflow_flags: {
+          missing_vendor: false,
+          missing_venue: false,
+          missing_storage_area: false,
+          ordering_incomplete: false,
+          needs_reorder: false,
+          needs_attention: false,
+        },
+      });
     });
 
     it('filters by category', async () => {
@@ -87,14 +134,42 @@ describe('Items API', () => {
   });
 
   describe('GET /api/items/:id', () => {
-    it('returns item with recent transactions', async () => {
-      const result = db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Ahi Tuna', 'Seafood', 'lb');
-      const itemId = result.lastInsertRowid;
+    it('returns item with recent transactions and overview fields', async () => {
+      const vendorId = Number(db.prepare("INSERT INTO vendors (name, notes) VALUES (?, ?)" ).run('Fresh Fish', null).lastInsertRowid);
+      const venueId = Number(db.prepare("INSERT INTO venues (name) VALUES (?)").run('Main Venue').lastInsertRowid);
+      const areaId = Number(db.prepare("INSERT INTO storage_areas (name) VALUES (?)").run('Walk-in').lastInsertRowid);
+      const result = db.prepare(`
+        INSERT INTO items (
+          name, category, unit, order_unit, order_unit_price, qty_per_unit,
+          reorder_level, reorder_qty, vendor_id, venue_id, storage_area_id, current_qty
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('Ahi Tuna', 'Seafood', 'each', 'case', 48, 12, 10, 12, vendorId, venueId, areaId, 24);
+      const itemId = Number(result.lastInsertRowid);
+      db.prepare("INSERT INTO item_storage (item_id, area_id, quantity) VALUES (?, ?, ?)").run(itemId, areaId, 24);
       db.prepare("INSERT INTO transactions (item_id, type, quantity, reason) VALUES (?, ?, ?, ?)").run(itemId, 'in', 20, 'Received');
 
       const res = await request(app).get(`/api/items/${itemId}`);
       expect(res.status).toBe(200);
-      expect(res.body.item.name).toBe('Ahi Tuna');
+      expect(res.body.item).toMatchObject({
+        name: 'Ahi Tuna',
+        vendor_name: 'Fresh Fish',
+        venue_name: 'Main Venue',
+        storage_area_name: 'Walk-in',
+        storage_location_count: 1,
+        storage_total_qty: 24,
+        storage_qty_delta: 0,
+        pack_summary: '12 each per case',
+        unit_cost: 4,
+        inventory_value: 96,
+      });
+      expect(res.body.item.workflow_flags).toMatchObject({
+        missing_vendor: false,
+        missing_venue: false,
+        missing_storage_area: false,
+        ordering_incomplete: false,
+        needs_reorder: false,
+        needs_attention: false,
+      });
       expect(res.body.transactions).toHaveLength(1);
     });
 
@@ -105,13 +180,60 @@ describe('Items API', () => {
   });
 
   describe('PUT /api/items/:id', () => {
-    it('updates item fields', async () => {
+    it('updates item fields and preserves overview fields', async () => {
       const result = db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Ahi Tuna', 'Seafood', 'lb');
       const res = await request(app)
         .put(`/api/items/${result.lastInsertRowid}`)
         .send({ name: 'Yellowfin Tuna' });
       expect(res.status).toBe(200);
-      expect(res.body.name).toBe('Yellowfin Tuna');
+      expect(res.body).toMatchObject({
+        name: 'Yellowfin Tuna',
+        vendor_name: null,
+        venue_name: null,
+        storage_area_name: null,
+        storage_location_count: 0,
+        storage_total_qty: 0,
+        storage_qty_delta: 0,
+        pack_summary: null,
+      });
+      expect(res.body.workflow_flags).toMatchObject({
+        missing_vendor: true,
+        missing_venue: true,
+        missing_storage_area: true,
+        ordering_incomplete: true,
+        needs_reorder: false,
+        needs_attention: true,
+      });
+    });
+  });
+
+  describe('POST /api/items/:id/count', () => {
+    it('returns an enriched item in the adjustment payload', async () => {
+      const vendorId = Number(db.prepare("INSERT INTO vendors (name, notes) VALUES (?, ?)" ).run('Fresh Fish', null).lastInsertRowid);
+      const venueId = Number(db.prepare("INSERT INTO venues (name) VALUES (?)").run('Main Venue').lastInsertRowid);
+      const areaId = Number(db.prepare("INSERT INTO storage_areas (name) VALUES (?)").run('Walk-in').lastInsertRowid);
+      const result = db.prepare(`
+        INSERT INTO items (
+          name, category, unit, order_unit, order_unit_price, qty_per_unit,
+          reorder_level, reorder_qty, vendor_id, venue_id, storage_area_id, current_qty
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('Ahi Tuna', 'Seafood', 'each', 'case', 48, 12, 10, 12, vendorId, venueId, areaId, 24);
+      const itemId = Number(result.lastInsertRowid);
+      db.prepare("INSERT INTO item_storage (item_id, area_id, quantity) VALUES (?, ?, ?)").run(itemId, areaId, 24);
+
+      const res = await request(app)
+        .post(`/api/items/${itemId}/count`)
+        .send({ counted_qty: 30, notes: 'Counted on receiving' });
+      expect(res.status).toBe(201);
+      expect(res.body.item).toMatchObject({
+        name: 'Ahi Tuna',
+        vendor_name: 'Fresh Fish',
+        venue_name: 'Main Venue',
+        storage_area_name: 'Walk-in',
+        storage_location_count: 1,
+        storage_total_qty: 24,
+        storage_qty_delta: 6,
+      });
     });
   });
 

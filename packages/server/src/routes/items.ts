@@ -1,9 +1,147 @@
 import { Router } from 'express';
 import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, mergeItemsSchema, tryConvertQuantity } from '@fifoflow/shared';
-import type { Item, ItemCountAdjustmentResult, MergeItemsResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
+import type { Item, ItemCountAdjustmentResult, ItemStorage, MergeItemsResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
 import { createTransactionHandler } from './transactions.js';
 import { createVendorPriceRoutes } from './vendorPrices.js';
 import type { InventoryStore } from '../store/types.js';
+
+const ORDERING_MISSING_FIELDS = ['reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'order_unit_price'] as const;
+type OrderingMissingField = (typeof ORDERING_MISSING_FIELDS)[number];
+
+type ItemWorkflowFlags = {
+  missing_vendor: boolean;
+  missing_venue: boolean;
+  missing_storage_area: boolean;
+  ordering_incomplete: boolean;
+  needs_reorder: boolean;
+  needs_attention: boolean;
+};
+
+type ItemReadModel = Item & {
+  vendor_name: string | null;
+  venue_name: string | null;
+  storage_area_name: string | null;
+  storage_location_count: number;
+  storage_total_qty: number;
+  storage_qty_delta: number;
+  pack_summary: string | null;
+  unit_cost: number | null;
+  inventory_value: number | null;
+  ordering_missing_fields: OrderingMissingField[];
+  workflow_flags: ItemWorkflowFlags;
+};
+
+interface ItemReadModelContext {
+  vendorNameById: Map<number, string>;
+  venueNameById: Map<number, string>;
+  storageAreaNameById: Map<number, string>;
+  storageRowsByItem: Map<number, ItemStorage[]>;
+}
+
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function buildPackSummary(item: Item): string | null {
+  const parts: string[] = [];
+
+  if (item.item_size) {
+    parts.push(item.item_size);
+  } else if (item.item_size_value != null && item.item_size_unit) {
+    parts.push(`${item.item_size_value} ${item.item_size_unit}`);
+  }
+
+  if (item.order_unit && item.qty_per_unit != null) {
+    parts.push(`${item.qty_per_unit} ${item.unit} per ${item.order_unit}`);
+  } else if (item.order_unit) {
+    parts.push(`Order unit: ${item.order_unit}`);
+  }
+
+  return parts.length > 0 ? parts.join(' / ') : null;
+}
+
+function getOrderingMissingFields(item: Item): OrderingMissingField[] {
+  const missing: OrderingMissingField[] = [];
+  if (item.reorder_level == null) missing.push('reorder_level');
+  if (item.reorder_qty == null) missing.push('reorder_qty');
+  if (item.order_unit == null) missing.push('order_unit');
+  if (item.qty_per_unit == null) missing.push('qty_per_unit');
+  if (item.order_unit_price == null) missing.push('order_unit_price');
+  return missing;
+}
+
+function buildItemReadModel(item: Item, context: ItemReadModelContext): ItemReadModel {
+  const storageRows = context.storageRowsByItem.get(item.id) ?? [];
+  const activeStorageRows = storageRows.filter((row) => row.quantity > 0);
+  const storageTotalQty = activeStorageRows.reduce((sum, row) => sum + row.quantity, 0);
+  const unitCost = item.order_unit_price != null && item.qty_per_unit != null && item.qty_per_unit > 0
+    ? roundTo(item.order_unit_price / item.qty_per_unit, 4)
+    : null;
+  const orderingMissingFields = getOrderingMissingFields(item);
+  const missingStorageArea = item.storage_area_id == null && activeStorageRows.length === 0;
+  const workflowFlags: ItemWorkflowFlags = {
+    missing_vendor: item.vendor_id == null,
+    missing_venue: item.venue_id == null,
+    missing_storage_area: missingStorageArea,
+    ordering_incomplete: orderingMissingFields.length > 0,
+    needs_reorder: item.reorder_level != null && item.current_qty <= item.reorder_level,
+    needs_attention:
+      item.vendor_id == null
+      || item.venue_id == null
+      || missingStorageArea
+      || orderingMissingFields.length > 0
+      || (item.reorder_level != null && item.current_qty <= item.reorder_level),
+  };
+
+  return {
+    ...item,
+    vendor_name: item.vendor_id == null ? null : context.vendorNameById.get(item.vendor_id) ?? null,
+    venue_name: item.venue_id == null ? null : context.venueNameById.get(item.venue_id) ?? null,
+    storage_area_name: item.storage_area_id == null ? null : context.storageAreaNameById.get(item.storage_area_id) ?? null,
+    storage_location_count: activeStorageRows.length,
+    storage_total_qty: roundTo(storageTotalQty, 3),
+    storage_qty_delta: roundTo(item.current_qty - storageTotalQty, 3),
+    pack_summary: buildPackSummary(item),
+    unit_cost: unitCost,
+    inventory_value: unitCost == null ? null : roundTo(item.current_qty * unitCost, 2),
+    ordering_missing_fields: orderingMissingFields,
+    workflow_flags: workflowFlags,
+  };
+}
+
+async function buildItemReadModelContext(store: InventoryStore, storageRows?: ItemStorage[]): Promise<ItemReadModelContext> {
+  const [vendors, venues, storageAreas] = await Promise.all([
+    store.listVendors(),
+    store.listVenues(),
+    store.listStorageAreas(),
+  ]);
+
+  const rows = storageRows ?? await store.listAllItemStorage();
+  const storageRowsByItem = new Map<number, ItemStorage[]>();
+  for (const row of rows) {
+    const bucket = storageRowsByItem.get(row.item_id) ?? [];
+    bucket.push(row);
+    storageRowsByItem.set(row.item_id, bucket);
+  }
+
+  return {
+    vendorNameById: new Map(vendors.map((vendor) => [vendor.id, vendor.name])),
+    venueNameById: new Map(venues.map((venue) => [venue.id, venue.name])),
+    storageAreaNameById: new Map(storageAreas.map((area) => [area.id, area.name])),
+    storageRowsByItem,
+  };
+}
+
+async function enrichItems(store: InventoryStore, items: Item[]): Promise<ItemReadModel[]> {
+  const context = await buildItemReadModelContext(store);
+  return items.map((item) => buildItemReadModel(item, context));
+}
+
+async function enrichItem(store: InventoryStore, item: Item): Promise<ItemReadModel> {
+  const context = await buildItemReadModelContext(store, await store.listItemStorage(item.id));
+  return buildItemReadModel(item, context);
+}
 
 export function createItemRoutes(store: InventoryStore): Router {
   const router = Router();
@@ -17,6 +155,9 @@ export function createItemRoutes(store: InventoryStore): Router {
     }
     try {
       const result = await store.mergeItems(parsed.data.target_id, parsed.data.source_ids);
+      if (result.target_item) {
+        result.target_item = await enrichItem(store, result.target_item);
+      }
       res.json(result);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -120,7 +261,7 @@ export function createItemRoutes(store: InventoryStore): Router {
       category: typeof category === 'string' ? category : undefined,
       venueId: typeof venue_id === 'string' ? Number(venue_id) : undefined,
     });
-    res.json(items);
+    res.json(await enrichItems(store, items));
   });
 
   // GET /api/items/:id
@@ -133,7 +274,7 @@ export function createItemRoutes(store: InventoryStore): Router {
 
     const transactions = await store.listTransactionsForItem(Number(req.params.id), 50) as Transaction[];
 
-    res.json({ item, transactions });
+    res.json({ item: await enrichItem(store, item), transactions });
   });
 
   // POST /api/items
@@ -145,7 +286,7 @@ export function createItemRoutes(store: InventoryStore): Router {
     }
 
     const item = await store.createItem(parsed.data);
-    res.status(201).json(item);
+    res.status(201).json(await enrichItem(store, item));
   });
 
   // PUT /api/items/:id
@@ -165,12 +306,12 @@ export function createItemRoutes(store: InventoryStore): Router {
     const updates = parsed.data;
     const fields = Object.entries(updates).filter(([, v]) => v !== undefined);
     if (fields.length === 0) {
-      res.json(existing);
+      res.json(await enrichItem(store, existing));
       return;
     }
 
     const updated = await store.updateItem(Number(req.params.id), updates);
-    res.json(updated);
+    res.json(await enrichItem(store, updated));
   });
 
   // DELETE /api/items/:id
@@ -224,7 +365,10 @@ export function createItemRoutes(store: InventoryStore): Router {
       notes: parsed.data.notes ?? null,
     }) as ItemCountAdjustmentResult;
 
-    res.status(201).json(result);
+    res.status(201).json({
+      ...result,
+      item: await enrichItem(store, result.item),
+    });
   });
 
   // POST /api/items/:id/transactions

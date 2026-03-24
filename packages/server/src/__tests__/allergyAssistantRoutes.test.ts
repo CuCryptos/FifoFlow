@@ -171,6 +171,125 @@ describe('Allergy assistant routes', () => {
     ]);
     expect(response.body.cited_chunks).toHaveLength(2);
   });
+
+  it('persists candidate item matches on upload when the match table is present', async () => {
+    initializeAllergenMatchTables(db);
+    seedItems(db, [
+      { name: 'Guava Glazed Salmon', venueId: 2 },
+      { name: 'House Salad', venueId: 2 },
+    ]);
+
+    const response = await request(app)
+      .post('/api/allergy-assistant/documents/upload')
+      .field('venue_id', '2')
+      .attach('files', Buffer.from('fake-image-bytes'), {
+        filename: 'allergy-chart.png',
+        contentType: 'image/png',
+      });
+
+    expect(response.status).toBe(201);
+
+    const matches = db.prepare(
+      `
+        SELECT document_product_id, item_id, match_status, match_score, notes
+        FROM allergy_document_product_matches
+        ORDER BY id ASC
+      `,
+    ).all() as Array<{
+      document_product_id: number;
+      item_id: number;
+      match_status: string;
+      match_score: number | null;
+      notes: string | null;
+    }>;
+
+    expect(matches).toEqual([
+      expect.objectContaining({
+        document_product_id: 1,
+        item_id: 1,
+        match_status: 'suggested',
+      }),
+      expect.objectContaining({
+        document_product_id: 2,
+        item_id: 2,
+        match_status: 'suggested',
+      }),
+    ]);
+    expect(matches[0].match_score).toBeGreaterThan(0.9);
+    expect(matches[1].match_score).toBeGreaterThan(0.9);
+  });
+
+  it('reprocesses stored products and writes no-match rows for weak overlaps', async () => {
+    initializeAllergenMatchTables(db);
+    seedItems(db, [
+      { name: 'Chicken Breast', venueId: 2 },
+      { name: 'House Salad', venueId: 2 },
+    ]);
+    seedAllergyDocument(db, {
+      id: 10,
+      venueId: 2,
+      filename: 'hawaii-menu-allergens.pdf',
+      chunks: [
+        'Chicken Citrus Bowl | may contain sesame',
+        'Mystery Side | unknown',
+      ],
+      products: [
+        {
+          id: 1,
+          pageNumber: 1,
+          productName: 'Chicken Citrus Bowl',
+          sourceRowText: 'Chicken Citrus Bowl | may contain sesame',
+          allergenSummary: 'may contain sesame',
+          sourceChunkIds: [1],
+        },
+        {
+          id: 2,
+          pageNumber: 1,
+          productName: 'Mystery Side',
+          sourceRowText: 'Mystery Side | unknown',
+          allergenSummary: 'unknown',
+          sourceChunkIds: [2],
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .post('/api/allergy-assistant/documents/10/reprocess');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      document_id: 10,
+      match_table_available: true,
+      product_count: 2,
+      processed_product_count: 2,
+      locked_product_count: 0,
+      inserted_match_count: 1,
+      no_match_count: 1,
+    });
+
+    const matches = db.prepare(
+      `
+        SELECT document_product_id, item_id, match_status, match_score
+        FROM allergy_document_product_matches
+        ORDER BY id ASC
+      `,
+    ).all() as Array<{
+      document_product_id: number;
+      item_id: number;
+      match_status: string;
+      match_score: number | null;
+    }>;
+
+    expect(matches).toEqual([
+      expect.objectContaining({
+        document_product_id: 1,
+        item_id: 1,
+        match_status: 'no_match',
+      }),
+    ]);
+    expect(matches[0].match_score).toBeGreaterThan(0);
+    expect(matches[0].match_score).toBeLessThan(0.45);
+  });
 });
 
 function seedAllergyDocument(
@@ -250,4 +369,38 @@ function seedAllergyDocument(
       JSON.stringify(actualChunkIds),
     );
   });
+}
+
+function seedItems(
+  db: Database.Database,
+  items: Array<{ name: string; venueId: number | null }>,
+): void {
+  const insertItem = db.prepare(
+    `
+      INSERT INTO items (name, category, unit, current_qty, venue_id)
+      VALUES (?, 'Protein', 'each', 0, ?)
+    `,
+  );
+
+  items.forEach((item) => {
+    insertItem.run(item.name, item.venueId);
+  });
+}
+
+function initializeAllergenMatchTables(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS allergy_document_product_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_product_id INTEGER NOT NULL REFERENCES allergy_document_products(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      match_status TEXT NOT NULL CHECK(match_status IN ('suggested', 'confirmed', 'rejected', 'no_match')),
+      match_score REAL,
+      notes TEXT,
+      matched_by TEXT NOT NULL DEFAULT 'system',
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(document_product_id, item_id)
+    );
+  `);
 }

@@ -161,6 +161,100 @@ export interface Vendor {
   updated_at: string;
 }
 
+export type AllergenCategory = 'fda_major_9' | 'extended' | 'custom';
+export type AllergenStatus = 'contains' | 'may_contain' | 'free_of' | 'unknown';
+export type AllergenConfidence = 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+export type AllergenSourceType = 'manufacturer_spec' | 'vendor_declaration' | 'staff_verified' | 'label_scan' | 'uploaded_chart' | 'inferred';
+export type AllergyMatchStatus = 'suggested' | 'confirmed' | 'rejected' | 'no_match';
+
+export interface Allergen {
+  id: number;
+  code: string;
+  name: string;
+  category: AllergenCategory;
+  icon: string | null;
+  sort_order: number;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItemAllergen {
+  id: number;
+  item_id: number;
+  allergen_id: number;
+  status: AllergenStatus;
+  confidence: AllergenConfidence;
+  notes: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  last_reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AllergenEvidence {
+  id: number;
+  item_allergen_id: number;
+  source_type: AllergenSourceType;
+  source_document_id: number | null;
+  source_product_id: number | null;
+  source_label: string | null;
+  source_excerpt: string | null;
+  status_claimed: AllergenStatus;
+  confidence_claimed: AllergenConfidence | null;
+  captured_by: string | null;
+  captured_at: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface AllergyDocumentProductMatch {
+  id: number;
+  document_product_id: number;
+  item_id: number;
+  match_status: AllergyMatchStatus;
+  match_score: number | null;
+  matched_by: 'system' | 'operator';
+  notes: string | null;
+  active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecipeAllergenOverride {
+  id: number;
+  recipe_version_id: number;
+  allergen_id: number;
+  status: AllergenStatus;
+  reason: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecipeAllergenRollup {
+  id: number;
+  recipe_version_id: number;
+  allergen_id: number;
+  worst_status: AllergenStatus;
+  min_confidence: AllergenConfidence;
+  source_item_ids: number[];
+  source_paths: string[];
+  needs_review: number;
+  computed_at: string;
+}
+
+export interface AllergenQueryAudit {
+  id: number;
+  venue_id: number | null;
+  query_text: string;
+  allergen_codes: string[];
+  response_summary: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 // VendorPrice is supplier-side purchasable pricing attached to an inventory item path.
 // It must not be treated as recipe semantics or canonical ingredient identity.
 export interface VendorPrice {

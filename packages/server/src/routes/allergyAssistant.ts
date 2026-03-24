@@ -3,6 +3,7 @@ import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import type Database from 'better-sqlite3';
 import { initializeAllergyAssistantDb } from '../allergy/persistence/sqliteSchema.js';
+import { refreshAllergyDocumentProductMatches } from '../allergy/allergenMatchService.js';
 import { extractPdfEvidence, type InvoiceDocumentPageEvidence } from './invoiceDocumentExtraction.js';
 
 const upload = multer({
@@ -882,6 +883,11 @@ export function createAllergyAssistantRoutes(
         const pages = await buildDocumentPages(ai, file);
         const productsByPage = await extractDocumentProducts(ai, file, pages);
         const persisted = persistAllergyDocument(db, { venueId, file, pages, productsByPage });
+        try {
+          refreshAllergyDocumentProductMatches(db, persisted.id);
+        } catch {
+          // Match persistence is best-effort groundwork until the review surface lands.
+        }
         documents.push(persisted);
       }
 
@@ -906,6 +912,29 @@ export function createAllergyAssistantRoutes(
 
     db.prepare('DELETE FROM allergy_documents WHERE id = ?').run(documentId);
     res.status(204).send();
+  });
+
+  router.post('/documents/:id/reprocess', (req, res) => {
+    const documentId = Number(req.params.id);
+    if (!Number.isFinite(documentId) || documentId <= 0) {
+      res.status(400).json({ error: 'Invalid document id' });
+      return;
+    }
+
+    const exists = db.prepare('SELECT id FROM allergy_documents WHERE id = ? LIMIT 1').get(documentId) as { id: number } | undefined;
+    if (!exists) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    try {
+      const summary = refreshAllergyDocumentProductMatches(db, documentId);
+      res.json({
+        ...summary,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message ?? 'Failed to reprocess allergy document matches' });
+    }
   });
 
   router.post('/chat', async (req, res) => {

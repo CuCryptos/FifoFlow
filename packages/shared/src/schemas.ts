@@ -202,6 +202,160 @@ export const mergeItemsSchema = z.object({
 
 export type MergeItemsInput = z.infer<typeof mergeItemsSchema>;
 
+const ALLERGEN_CATEGORIES = ['fda_major_9', 'extended', 'custom'] as const;
+const ALLERGEN_STATUSES = ['contains', 'may_contain', 'free_of', 'unknown'] as const;
+const ALLERGEN_CONFIDENCES = ['verified', 'high', 'moderate', 'low', 'unverified', 'unknown'] as const;
+const ALLERGEN_SOURCE_TYPES = ['manufacturer_spec', 'vendor_declaration', 'staff_verified', 'label_scan', 'uploaded_chart', 'inferred'] as const;
+const ALLERGY_MATCH_STATUSES = ['suggested', 'confirmed', 'rejected', 'no_match'] as const;
+
+export const allergenCategorySchema = z.enum(ALLERGEN_CATEGORIES);
+export const allergenStatusSchema = z.enum(ALLERGEN_STATUSES);
+export const allergenConfidenceSchema = z.enum(ALLERGEN_CONFIDENCES);
+export const allergenSourceTypeSchema = z.enum(ALLERGEN_SOURCE_TYPES);
+export const allergyMatchStatusSchema = z.enum(ALLERGY_MATCH_STATUSES);
+
+export const allergenSchema = z.object({
+  id: z.number().int().positive(),
+  code: z.string().min(1).max(100),
+  name: z.string().min(1).max(200),
+  category: allergenCategorySchema,
+  icon: z.string().max(32).nullable(),
+  sort_order: z.number().int(),
+  is_active: z.number().int().min(0).max(1),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const itemAllergenSchema = z.object({
+  id: z.number().int().positive(),
+  item_id: z.number().int().positive(),
+  allergen_id: z.number().int().positive(),
+  status: allergenStatusSchema,
+  confidence: allergenConfidenceSchema,
+  notes: z.string().nullable(),
+  verified_by: z.string().nullable(),
+  verified_at: z.string().nullable(),
+  last_reviewed_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const allergenEvidenceSchema = z.object({
+  id: z.number().int().positive(),
+  item_allergen_id: z.number().int().positive(),
+  source_type: allergenSourceTypeSchema,
+  source_document_id: z.number().int().positive().nullable(),
+  source_product_id: z.number().int().positive().nullable(),
+  source_label: z.string().nullable(),
+  source_excerpt: z.string().nullable(),
+  status_claimed: allergenStatusSchema,
+  confidence_claimed: allergenConfidenceSchema.nullable(),
+  captured_by: z.string().nullable(),
+  captured_at: z.string(),
+  expires_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const allergyDocumentProductMatchSchema = z.object({
+  id: z.number().int().positive(),
+  document_product_id: z.number().int().positive(),
+  item_id: z.number().int().positive(),
+  match_status: allergyMatchStatusSchema,
+  match_score: z.number().nullable(),
+  matched_by: z.enum(['system', 'operator'] as const),
+  notes: z.string().nullable(),
+  active: z.number().int().min(0).max(1),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const recipeAllergenOverrideSchema = z.object({
+  id: z.number().int().positive(),
+  recipe_version_id: z.number().int().positive(),
+  allergen_id: z.number().int().positive(),
+  status: allergenStatusSchema,
+  reason: z.string().min(1).max(2000),
+  created_by: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const recipeAllergenRollupSchema = z.object({
+  id: z.number().int().positive(),
+  recipe_version_id: z.number().int().positive(),
+  allergen_id: z.number().int().positive(),
+  worst_status: allergenStatusSchema,
+  min_confidence: allergenConfidenceSchema,
+  source_item_ids: z.array(z.number().int().positive()),
+  source_paths: z.array(z.string().min(1)),
+  needs_review: z.number().int().min(0).max(1),
+  computed_at: z.string(),
+});
+
+export const allergenQueryAuditSchema = z.object({
+  id: z.number().int().positive(),
+  venue_id: z.number().int().positive().nullable(),
+  query_text: z.string().min(1).max(4000),
+  allergen_codes: z.array(z.string().min(1)),
+  response_summary: z.string().nullable(),
+  created_by: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const upsertItemAllergenProfileSchema = z.object({
+  item_id: z.number().int().positive(),
+  allergens: z.array(z.object({
+    allergen_id: z.number().int().positive(),
+    status: allergenStatusSchema,
+    confidence: allergenConfidenceSchema.optional(),
+    notes: z.string().max(2000).nullable().optional(),
+    verified_by: z.string().max(200).nullable().optional(),
+    verified_at: z.string().nullable().optional(),
+    last_reviewed_at: z.string().nullable().optional(),
+  })).min(1),
+});
+
+export const createAllergenEvidenceSchema = z.object({
+  item_allergen_id: z.number().int().positive(),
+  source_type: allergenSourceTypeSchema,
+  source_document_id: z.number().int().positive().nullable().optional(),
+  source_product_id: z.number().int().positive().nullable().optional(),
+  source_label: z.string().max(500).nullable().optional(),
+  source_excerpt: z.string().max(4000).nullable().optional(),
+  status_claimed: allergenStatusSchema,
+  confidence_claimed: allergenConfidenceSchema.nullable().optional(),
+  captured_by: z.string().max(200).nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+});
+
+export const upsertAllergyDocumentProductMatchSchema = z.object({
+  document_product_id: z.number().int().positive(),
+  item_id: z.number().int().positive(),
+  match_status: allergyMatchStatusSchema,
+  match_score: z.number().min(0).max(1).nullable().optional(),
+  matched_by: z.enum(['system', 'operator'] as const).optional().default('operator'),
+  notes: z.string().max(2000).nullable().optional(),
+  active: z.number().int().min(0).max(1).optional().default(1),
+});
+
+export const upsertRecipeAllergenOverrideSchema = z.object({
+  recipe_version_id: z.number().int().positive(),
+  allergen_id: z.number().int().positive(),
+  status: allergenStatusSchema,
+  reason: z.string().min(1).max(2000),
+  created_by: z.string().max(200).nullable().optional(),
+});
+
+export const rebuildRecipeAllergenRollupSchema = z.object({
+  recipe_version_id: z.number().int().positive(),
+});
+
+export const allergenQuerySchema = z.object({
+  venue_id: z.number().int().positive().nullable().optional(),
+  question: z.string().min(1).max(4000),
+  allergen_codes: z.array(z.string().min(1).max(100)).default([]),
+});
+
 export const recipeDraftIngredientSchema = z.object({
   item_id: z.number().int().positive().nullable(),
   quantity: z.number().positive().nullable(),
@@ -265,6 +419,12 @@ export type UpdateVendorPriceInput = z.infer<typeof updateVendorPriceSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+export type UpsertItemAllergenProfileInput = z.infer<typeof upsertItemAllergenProfileSchema>;
+export type CreateAllergenEvidenceInput = z.infer<typeof createAllergenEvidenceSchema>;
+export type UpsertAllergyDocumentProductMatchInput = z.infer<typeof upsertAllergyDocumentProductMatchSchema>;
+export type UpsertRecipeAllergenOverrideInput = z.infer<typeof upsertRecipeAllergenOverrideSchema>;
+export type RebuildRecipeAllergenRollupInput = z.infer<typeof rebuildRecipeAllergenRollupSchema>;
+export type AllergenQueryInput = z.infer<typeof allergenQuerySchema>;
 
 export const saveForecastSchema = z.object({
   filename: z.string().min(1),

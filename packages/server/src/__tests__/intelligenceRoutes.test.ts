@@ -8,6 +8,10 @@ import { SQLiteIntelligenceRepository } from '../intelligence/persistence/sqlite
 import { SQLiteRecipeCostRepository } from '../intelligence/recipeCost/persistence/sqliteRecipeCostRepository.js';
 import { createIntelligenceRoutes } from '../routes/intelligence.js';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const FIXTURE_BASE_AT = new Date(Date.now() - (2 * DAY_MS));
+const FIXTURE_WINDOW_START_AT = new Date(FIXTURE_BASE_AT.getTime() - (9 * DAY_MS));
+
 function createTestApp() {
   const db = new Database(':memory:');
   initializeDb(db);
@@ -31,9 +35,9 @@ function createSignal(overrides?: Partial<DerivedSignal>): DerivedSignal {
     confidence_label: overrides?.confidence_label ?? 'Stable pattern',
     confidence_score: overrides?.confidence_score ?? 0.82,
     rule_version: overrides?.rule_version ?? 'price-intelligence/v1',
-    window_start: overrides?.window_start ?? '2026-03-01T00:00:00.000Z',
-    window_end: overrides?.window_end ?? '2026-03-10T00:00:00.000Z',
-    observed_at: overrides?.observed_at ?? '2026-03-10T00:00:00.000Z',
+    window_start: overrides?.window_start ?? FIXTURE_WINDOW_START_AT.toISOString(),
+    window_end: overrides?.window_end ?? FIXTURE_BASE_AT.toISOString(),
+    observed_at: overrides?.observed_at ?? FIXTURE_BASE_AT.toISOString(),
     organization_id: overrides?.organization_id ?? 1,
     location_id: overrides?.location_id ?? 2,
     operation_unit_id: overrides?.operation_unit_id ?? null,
@@ -52,9 +56,9 @@ function createSignal(overrides?: Partial<DerivedSignal>): DerivedSignal {
       threshold_explainability: { fallback_used: false },
     },
     evidence: overrides?.evidence ?? [],
-    last_confirmed_at: overrides?.last_confirmed_at ?? '2026-03-10T00:00:00.000Z',
-    created_at: overrides?.created_at ?? '2026-03-10T00:00:00.000Z',
-    updated_at: overrides?.updated_at ?? '2026-03-10T00:00:00.000Z',
+    last_confirmed_at: overrides?.last_confirmed_at ?? FIXTURE_BASE_AT.toISOString(),
+    created_at: overrides?.created_at ?? FIXTURE_BASE_AT.toISOString(),
+    updated_at: overrides?.updated_at ?? FIXTURE_BASE_AT.toISOString(),
   };
 }
 
@@ -89,12 +93,12 @@ function createRecommendation(overrides?: Partial<Recommendation>): Recommendati
       suggested_steps: ['Review the vendor path.'],
     },
     evidence: overrides?.evidence ?? [],
-    opened_at: overrides?.opened_at ?? '2026-03-10T00:00:00.000Z',
+    opened_at: overrides?.opened_at ?? FIXTURE_BASE_AT.toISOString(),
     due_at: overrides?.due_at ?? null,
     closed_at: overrides?.closed_at ?? null,
-    last_confirmed_at: overrides?.last_confirmed_at ?? '2026-03-10T00:00:00.000Z',
-    created_at: overrides?.created_at ?? '2026-03-10T00:00:00.000Z',
-    updated_at: overrides?.updated_at ?? '2026-03-10T00:00:00.000Z',
+    last_confirmed_at: overrides?.last_confirmed_at ?? FIXTURE_BASE_AT.toISOString(),
+    created_at: overrides?.created_at ?? FIXTURE_BASE_AT.toISOString(),
+    updated_at: overrides?.updated_at ?? FIXTURE_BASE_AT.toISOString(),
   };
 }
 
@@ -126,7 +130,7 @@ describe('Intelligence routes', () => {
         evidence_ref_id: '1',
         explanation_text: 'Qualifying price signal.',
         evidence_weight: 1,
-        created_at: '2026-03-10T00:00:00.000Z',
+        created_at: FIXTURE_BASE_AT.toISOString(),
       },
     ]);
 
@@ -164,7 +168,7 @@ describe('Intelligence routes', () => {
         evidence_ref_id: String(signalResult.record.id),
         explanation_text: 'Signal supports recommendation.',
         evidence_weight: 1,
-        created_at: '2026-03-10T00:00:00.000Z',
+        created_at: FIXTURE_BASE_AT.toISOString(),
       },
     ]);
 
@@ -192,7 +196,7 @@ describe('Intelligence routes', () => {
   });
 
   it('returns freshness data across intelligence packs and recipe cost runs', async () => {
-    const priceRun = await repository.startRun('price-intelligence-job', '2026-03-10T00:00:00.000Z');
+    const priceRun = await repository.startRun('price-intelligence-job', FIXTURE_BASE_AT.toISOString());
     await repository.completeRun(priceRun.id, 'completed', {
       signals_created: 2,
       signals_updated: 1,
@@ -201,9 +205,9 @@ describe('Intelligence routes', () => {
       recommendations_created: 0,
       recommendations_updated: 0,
       recommendations_superseded: 0,
-    }, '2026-03-10T00:10:00.000Z');
+    }, new Date(FIXTURE_BASE_AT.getTime() + (10 * 60 * 1000)).toISOString());
 
-    const recipeRun = await recipeCostRepository.startRun('2026-03-10T01:00:00.000Z');
+    const recipeRun = await recipeCostRepository.startRun(new Date(FIXTURE_BASE_AT.getTime() + (60 * 60 * 1000)).toISOString());
     await recipeCostRepository.completeRun(recipeRun.id, 'completed', {
       recipe_count: 2,
       snapshots_created: 2,
@@ -215,7 +219,7 @@ describe('Intelligence routes', () => {
       stale_cost_resolutions: 0,
       ambiguous_cost_resolutions: 0,
       unit_mismatch_resolutions: 0,
-    }, '2026-03-10T01:05:00.000Z');
+    }, new Date(FIXTURE_BASE_AT.getTime() + (65 * 60 * 1000)).toISOString());
 
     const res = await request(app).get('/api/intelligence/freshness');
 

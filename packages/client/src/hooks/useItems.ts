@@ -2,6 +2,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { CreateItemInput, Item, MergeItemsInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
 
+export type InventoryItemsQueryParams = {
+  search?: string;
+  category?: string;
+  venue_id?: number;
+};
+
+type ItemDetailCache = { item: Item; transactions: any[] };
+
+const ITEMS_QUERY_KEY = ['items'] as const;
+const TRANSACTIONS_QUERY_KEY = ['transactions'] as const;
+const DASHBOARD_QUERY_KEY = ['dashboard'] as const;
+
 function applyItemPatch(item: Item, patch: UpdateItemInput): Item {
   return {
     ...item,
@@ -10,16 +22,31 @@ function applyItemPatch(item: Item, patch: UpdateItemInput): Item {
   };
 }
 
-export function useItems(params?: { search?: string; category?: string; venue_id?: number }) {
+function patchItemListsInCache(queryClient: ReturnType<typeof useQueryClient>, itemId: number, patch: UpdateItemInput) {
+  const previousLists = queryClient.getQueriesData<Item[]>({ queryKey: ITEMS_QUERY_KEY });
+
+  for (const [queryKey, items] of previousLists) {
+    if (!Array.isArray(items)) {
+      continue;
+    }
+    queryClient.setQueryData<Item[]>(queryKey, items.map((item) => (
+      item.id === itemId ? applyItemPatch(item, patch) : item
+    )));
+  }
+
+  return previousLists;
+}
+
+export function useItems(params?: InventoryItemsQueryParams) {
   return useQuery({
-    queryKey: ['items', params],
+    queryKey: [...ITEMS_QUERY_KEY, params] as const,
     queryFn: () => api.items.list(params),
   });
 }
 
 export function useItem(id: number) {
   return useQuery({
-    queryKey: ['items', id],
+    queryKey: [...ITEMS_QUERY_KEY, id] as const,
     queryFn: () => api.items.get(id),
     enabled: id > 0,
   });
@@ -27,7 +54,7 @@ export function useItem(id: number) {
 
 export function useReorderSuggestions(venueId?: number) {
   return useQuery({
-    queryKey: ['items', 'reorder-suggestions', venueId],
+    queryKey: [...ITEMS_QUERY_KEY, 'reorder-suggestions', venueId] as const,
     queryFn: () => api.items.reorderSuggestions(venueId),
   });
 }
@@ -36,7 +63,7 @@ export function useCreateItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateItemInput) => api.items.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
   });
 }
 
@@ -45,21 +72,12 @@ export function useUpdateItem() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: UpdateItemInput }) => api.items.update(id, data),
     onMutate: async ({ id, data }) => {
-      await qc.cancelQueries({ queryKey: ['items'] });
-      const previousLists = qc.getQueriesData<Item[]>({ queryKey: ['items'] });
-      const previousDetail = qc.getQueryData<{ item: Item; transactions: any[] }>(['items', id]);
-
-      for (const [queryKey, items] of previousLists) {
-        if (!Array.isArray(items)) {
-          continue;
-        }
-        qc.setQueryData<Item[]>(queryKey, items.map((item) => (
-          item.id === id ? applyItemPatch(item, data) : item
-        )));
-      }
+      await qc.cancelQueries({ queryKey: ITEMS_QUERY_KEY });
+      const previousLists = patchItemListsInCache(qc, id, data);
+      const previousDetail = qc.getQueryData<ItemDetailCache>([...ITEMS_QUERY_KEY, id] as const);
 
       if (previousDetail?.item) {
-        qc.setQueryData(['items', id], {
+        qc.setQueryData<ItemDetailCache>([...ITEMS_QUERY_KEY, id] as const, {
           ...previousDetail,
           item: applyItemPatch(previousDetail.item, data),
         });
@@ -72,17 +90,17 @@ export function useUpdateItem() {
         qc.setQueryData(queryKey, data);
       });
       if (context?.previousDetail) {
-        qc.setQueryData(['items', variables.id], context.previousDetail);
+        qc.setQueryData([...ITEMS_QUERY_KEY, variables.id] as const, context.previousDetail);
       }
     },
     onSuccess: (updated) => {
-      qc.setQueryData(['items', updated.id], (current: { item: Item; transactions: any[] } | undefined) => (
+      qc.setQueryData<ItemDetailCache | undefined>([...ITEMS_QUERY_KEY, updated.id] as const, (current) => (
         current ? { ...current, item: updated } : current
       ));
     },
     onSettled: (_data, _error, variables) => {
-      qc.invalidateQueries({ queryKey: ['items'] });
-      qc.invalidateQueries({ queryKey: ['items', variables.id] });
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: [...ITEMS_QUERY_KEY, variables.id] as const });
     },
   });
 }
@@ -91,7 +109,7 @@ export function useDeleteItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.items.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
   });
 }
 
@@ -100,9 +118,9 @@ export function useSetItemCount() {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: SetItemCountInput }) => api.items.setCount(id, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['items'] });
-      qc.invalidateQueries({ queryKey: ['transactions'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
     },
   });
 }
@@ -119,7 +137,7 @@ export function useBulkUpdateItems() {
         storage_area_id?: number | null;
       };
     }) => api.items.bulkUpdate(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['items'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
   });
 }
 
@@ -128,8 +146,8 @@ export function useBulkDeleteItems() {
   return useMutation({
     mutationFn: (data: { ids: number[] }) => api.items.bulkDelete(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['items'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
     },
   });
 }
@@ -139,9 +157,9 @@ export function useMergeItems() {
   return useMutation({
     mutationFn: (data: MergeItemsInput) => api.items.merge(data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['items'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
-      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY });
     },
   });
 }
