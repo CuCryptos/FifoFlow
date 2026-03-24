@@ -41,8 +41,8 @@ export function Allergens() {
     <WorkflowPage
       eyebrow="Allergen workspace"
       title="Allergen review console"
-      description="Review structured item profiles, parsed chart products, and operator queries from one place. This slice is read-only until write routes land."
-      actions={<WorkflowStatusPill tone="slate">Read only</WorkflowStatusPill>}
+      description="Review structured item profiles, resolve chart-product matches, and run operator queries from one place."
+      actions={<WorkflowStatusPill tone="blue">Editable slice</WorkflowStatusPill>}
     >
       <WorkflowMetricGrid>
         <WorkflowMetricCard

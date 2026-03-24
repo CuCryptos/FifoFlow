@@ -21,7 +21,7 @@ export function AllergenItemDetail() {
       <WorkflowPage
         eyebrow="Item detail"
         title={detail ? detail.item.name : 'Loading item...'}
-        description="Review the current allergen profile, provenance, and linked chart products for a single inventory item."
+        description="Review and update the allergen profile, evidence, and linked chart products for a single inventory item."
         actions={detail ? <WorkflowStatusPill tone="slate">{detail.item.category}</WorkflowStatusPill> : undefined}
       >
         {itemQuery.isLoading ? (
@@ -42,7 +42,11 @@ export function AllergenItemDetail() {
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <ItemAllergenEditor detail={detail} />
               <div className="space-y-6">
-                <AllergenEvidenceTimeline evidence={detail.evidence} />
+                <AllergenEvidenceTimeline
+                  itemId={detail.item.id}
+                  evidence={detail.evidence}
+                  allergenProfile={detail.allergen_profile}
+                />
                 <WorkflowPanel
                   title="Linked chart products"
                   description="Parsed allergy-chart products already matched to this item."

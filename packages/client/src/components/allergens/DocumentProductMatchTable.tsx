@@ -1,12 +1,26 @@
 import { Link } from 'react-router-dom';
 import { WorkflowEmptyState, WorkflowPanel, WorkflowStatusPill } from '../workflow/WorkflowPrimitives';
 import type { AllergenDocumentProductPayload } from '../../api';
+import { useUpdateAllergenDocumentProductMatch } from '../../hooks/useAllergens';
 
 export function DocumentProductMatchTable({ products }: { products: AllergenDocumentProductPayload[] | undefined }) {
+  const updateMatch = useUpdateAllergenDocumentProductMatch();
+
+  const changeMatchStatus = (productId: number, itemId: number, matchStatus: 'confirmed' | 'rejected') => {
+    updateMatch.mutate({
+      productId,
+      match: {
+        item_id: itemId,
+        match_status: matchStatus,
+        matched_by: 'operator',
+      },
+    });
+  };
+
   return (
     <WorkflowPanel
       title="Parsed products and match states"
-      description="The backend exposes parsed chart products and the item matches already attached to them."
+      description="Confirm or reject parsed product matches so uploaded charts feed the structured allergen model."
     >
       {!products ? (
         <div className="text-sm text-slate-600">Loading document products...</div>
@@ -67,6 +81,24 @@ export function DocumentProductMatchTable({ products }: { products: AllergenDocu
                               {match.matched_by ? ` • ${match.matched_by}` : ''}
                             </div>
                             {match.notes ? <div className="mt-2 text-sm leading-6 text-slate-600">{match.notes}</div> : null}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => changeMatchStatus(product.id, match.item_id, 'confirmed')}
+                                disabled={updateMatch.isPending || match.match_status === 'confirmed'}
+                                className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => changeMatchStatus(product.id, match.item_id, 'rejected')}
+                                disabled={updateMatch.isPending || match.match_status === 'rejected'}
+                                className="rounded-full border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-900 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Reject
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
