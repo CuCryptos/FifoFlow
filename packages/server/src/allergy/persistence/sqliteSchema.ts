@@ -51,12 +51,25 @@ export function initializeAllergyAssistantDb(db: Database.Database): void {
       item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
       match_status TEXT NOT NULL CHECK(match_status IN ('suggested', 'confirmed', 'rejected', 'no_match')) DEFAULT 'suggested',
       match_score REAL,
+      match_basis TEXT NOT NULL DEFAULT 'item_name' CHECK(match_basis IN ('item_name', 'explicit_alias', 'operator')),
+      match_signal_tier TEXT NOT NULL DEFAULT 'fallback' CHECK(match_signal_tier IN ('high', 'medium', 'fallback', 'operator')),
       matched_by TEXT NOT NULL CHECK(matched_by IN ('system', 'operator')) DEFAULT 'system',
       notes TEXT,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(document_product_id, item_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS allergen_match_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      alias TEXT NOT NULL,
+      normalized_alias TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(item_id, alias)
     );
 
     CREATE TABLE IF NOT EXISTS recipe_allergen_overrides (
@@ -180,6 +193,15 @@ export function initializeAllergyAssistantDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_allergy_document_product_matches_item_id
       ON allergy_document_product_matches(item_id, match_status);
 
+    CREATE INDEX IF NOT EXISTS idx_allergy_document_product_matches_signal
+      ON allergy_document_product_matches(match_signal_tier, match_score DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_allergen_match_aliases_item_id
+      ON allergen_match_aliases(item_id, active DESC, alias COLLATE NOCASE ASC);
+
+    CREATE INDEX IF NOT EXISTS idx_allergen_match_aliases_normalized_alias
+      ON allergen_match_aliases(normalized_alias, active DESC);
+
     CREATE INDEX IF NOT EXISTS idx_recipe_allergen_overrides_recipe_version_id
       ON recipe_allergen_overrides(recipe_version_id, allergen_id);
 
@@ -227,6 +249,14 @@ export function initializeAllergyAssistantDb(db: Database.Database): void {
       WHERE id = NEW.id;
     END;
 
+    CREATE TRIGGER IF NOT EXISTS update_allergen_match_aliases_timestamp
+    AFTER UPDATE ON allergen_match_aliases
+    BEGIN
+      UPDATE allergen_match_aliases
+      SET updated_at = datetime('now')
+      WHERE id = NEW.id;
+    END;
+
     CREATE TRIGGER IF NOT EXISTS update_recipe_allergen_overrides_timestamp
     AFTER UPDATE ON recipe_allergen_overrides
     BEGIN
@@ -237,6 +267,8 @@ export function initializeAllergyAssistantDb(db: Database.Database): void {
   `);
 
   ensureColumn(db, 'allergy_documents', 'product_count', "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, 'allergy_document_product_matches', 'match_basis', "TEXT NOT NULL DEFAULT 'item_name'");
+  ensureColumn(db, 'allergy_document_product_matches', 'match_signal_tier', "TEXT NOT NULL DEFAULT 'fallback'");
   seedAllergens(db);
 }
 

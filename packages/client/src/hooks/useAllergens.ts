@@ -94,6 +94,38 @@ export function useAddAllergenEvidence() {
   });
 }
 
+export function useAddAllergenMatchAlias() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itemId: number; alias: string }) =>
+      api.allergens.addItemMatchAlias(input.itemId, { alias: input.alias }),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items', variables.itemId] }),
+      ]);
+    },
+  });
+}
+
+export function useRemoveAllergenMatchAlias() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itemId: number; aliasId: number }) =>
+      api.allergens.removeItemMatchAlias(input.itemId, input.aliasId),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items', variables.itemId] }),
+      ]);
+    },
+  });
+}
+
 export function useUpdateAllergenDocumentProductMatch() {
   const queryClient = useQueryClient();
   return useMutation({

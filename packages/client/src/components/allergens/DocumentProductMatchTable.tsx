@@ -67,18 +67,21 @@ export function DocumentProductMatchTable({ products }: { products: AllergenDocu
                       <WorkflowStatusPill tone="slate">No active matches</WorkflowStatusPill>
                     ) : (
                       <div className="space-y-2">
-                        {product.matches.map((match) => (
+                        {sortMatches(product.matches).map((match) => (
                           <div key={match.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <Link to={`/allergens/items/${match.item_id}`} className="text-sm font-semibold text-slate-950 transition hover:text-slate-700">
                                 {match.item_name}
                               </Link>
                               <WorkflowStatusPill tone={matchTone(match.match_status)}>{match.match_status}</WorkflowStatusPill>
+                              <WorkflowStatusPill tone={signalTierTone(match.match_signal_tier)}>{formatSignalTier(match.match_signal_tier)}</WorkflowStatusPill>
+                              <WorkflowStatusPill tone="blue">{formatMatchBasis(match.match_basis)}</WorkflowStatusPill>
                               <WorkflowStatusPill tone={match.active ? 'green' : 'slate'}>{match.active ? 'active' : 'inactive'}</WorkflowStatusPill>
                             </div>
                             <div className="mt-2 text-xs text-slate-500">
                               {match.match_score != null ? `score ${match.match_score.toFixed(2)}` : 'no score'}
                               {match.matched_by ? ` • ${match.matched_by}` : ''}
+                              {match.match_basis === 'explicit_alias' && match.match_signal_tier !== 'fallback' ? ' • explicit alias resolved this row' : ''}
                             </div>
                             {match.notes ? <div className="mt-2 text-sm leading-6 text-slate-600">{match.notes}</div> : null}
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -119,4 +122,57 @@ function matchTone(status: 'suggested' | 'confirmed' | 'rejected' | 'no_match'):
   if (status === 'suggested') return 'amber';
   if (status === 'rejected' || status === 'no_match') return 'red';
   return 'slate';
+}
+
+function signalTierTone(tier: 'high' | 'medium' | 'fallback' | 'operator'): 'green' | 'blue' | 'amber' | 'slate' {
+  if (tier === 'operator') return 'green';
+  if (tier === 'high') return 'green';
+  if (tier === 'medium') return 'blue';
+  if (tier === 'fallback') return 'amber';
+  return 'slate';
+}
+
+function sortMatches(matches: AllergenDocumentProductPayload['matches']) {
+  return [...matches].sort((left, right) => {
+    const statusDelta = matchStatusRank(left.match_status) - matchStatusRank(right.match_status);
+    if (statusDelta !== 0) {
+      return statusDelta;
+    }
+    const signalDelta = matchSignalRank(left.match_signal_tier) - matchSignalRank(right.match_signal_tier);
+    if (signalDelta !== 0) {
+      return signalDelta;
+    }
+    const scoreDelta = (right.match_score ?? -1) - (left.match_score ?? -1);
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+    return left.item_name.localeCompare(right.item_name);
+  });
+}
+
+function matchStatusRank(status: 'suggested' | 'confirmed' | 'rejected' | 'no_match'): number {
+  if (status === 'confirmed') return 0;
+  if (status === 'suggested') return 1;
+  if (status === 'rejected') return 2;
+  return 3;
+}
+
+function matchSignalRank(tier: 'high' | 'medium' | 'fallback' | 'operator'): number {
+  if (tier === 'operator') return 0;
+  if (tier === 'high') return 1;
+  if (tier === 'medium') return 2;
+  return 3;
+}
+
+function formatSignalTier(tier: 'high' | 'medium' | 'fallback' | 'operator'): string {
+  if (tier === 'operator') return 'operator';
+  if (tier === 'high') return 'high signal';
+  if (tier === 'medium') return 'medium signal';
+  return 'fallback';
+}
+
+function formatMatchBasis(basis: 'item_name' | 'explicit_alias' | 'operator'): string {
+  if (basis === 'operator') return 'operator set';
+  if (basis === 'explicit_alias') return 'via alias';
+  return 'via item name';
 }

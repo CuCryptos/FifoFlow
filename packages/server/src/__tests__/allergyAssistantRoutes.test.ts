@@ -388,12 +388,24 @@ function initializeAllergenMatchTables(db: Database.Database): void {
       item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
       match_status TEXT NOT NULL CHECK(match_status IN ('suggested', 'confirmed', 'rejected', 'no_match')),
       match_score REAL,
+      match_basis TEXT NOT NULL DEFAULT 'item_name',
+      match_signal_tier TEXT NOT NULL DEFAULT 'fallback',
       notes TEXT,
       matched_by TEXT NOT NULL DEFAULT 'system',
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(document_product_id, item_id)
+    );
+    CREATE TABLE IF NOT EXISTS allergen_match_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      alias TEXT NOT NULL,
+      normalized_alias TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(item_id, alias)
     );
   `);
 }

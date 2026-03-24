@@ -1,8 +1,11 @@
 import type Database from 'better-sqlite3';
 import { initializeAllergyAssistantDb } from './persistence/sqliteSchema.js';
+import { normalizeAllergenMatchText } from './allergenMatchService.js';
 
 export type AllergenStatus = 'contains' | 'may_contain' | 'free_of' | 'unknown';
 export type AllergenConfidence = 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+export type DocumentMatchBasis = 'item_name' | 'explicit_alias' | 'operator';
+export type DocumentMatchSignalTier = 'high' | 'medium' | 'fallback' | 'operator';
 
 export interface AllergenReference {
   id: number;
@@ -70,8 +73,18 @@ export interface LinkedDocumentProductRecord {
   source_row_text: string;
   match_status: string;
   match_score: number | null;
+  match_basis: DocumentMatchBasis;
+  match_signal_tier: DocumentMatchSignalTier;
   matched_by: string | null;
   notes: string | null;
+}
+
+export interface ItemMatchAliasRecord {
+  id: number;
+  alias: string;
+  normalized_alias: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ItemProfileDetail {
@@ -86,6 +99,7 @@ export interface ItemProfileDetail {
   };
   allergen_profile: ItemAllergenProfileRow[];
   evidence: ItemEvidenceRecord[];
+  match_aliases: ItemMatchAliasRecord[];
   linked_document_products: LinkedDocumentProductRecord[];
 }
 
@@ -95,6 +109,8 @@ export interface DocumentMatchRecord {
   item_name: string;
   match_status: string;
   match_score: number | null;
+  match_basis: DocumentMatchBasis;
+  match_signal_tier: DocumentMatchSignalTier;
   matched_by: string;
   notes: string | null;
   active: boolean;
@@ -107,6 +123,8 @@ interface DocumentMatchRow {
   item_name: string;
   match_status: string;
   match_score: number | null;
+  match_basis: DocumentMatchBasis;
+  match_signal_tier: DocumentMatchSignalTier;
   matched_by: string;
   notes: string | null;
   active: number;
@@ -183,6 +201,8 @@ export interface StructuredQueryProductRecord {
     item_name: string;
     match_status: string;
     match_score: number | null;
+    match_basis: DocumentMatchBasis;
+    match_signal_tier: DocumentMatchSignalTier;
   }>;
 }
 
@@ -299,6 +319,8 @@ export interface DocumentProductMatchInput {
   item_id: number;
   match_status: 'suggested' | 'confirmed' | 'rejected' | 'no_match';
   match_score?: number | null;
+  match_basis?: DocumentMatchBasis;
+  match_signal_tier?: DocumentMatchSignalTier;
   matched_by?: 'system' | 'operator';
   notes?: string | null;
   active?: boolean;
@@ -514,6 +536,16 @@ export class SQLiteAllergenRepository {
       `,
     ).all(itemId) as ItemEvidenceRecord[];
 
+    const matchAliases = this.db.prepare(
+      `
+        SELECT id, alias, normalized_alias, created_at, updated_at
+        FROM allergen_match_aliases
+        WHERE item_id = ?
+          AND active = 1
+        ORDER BY alias COLLATE NOCASE ASC, id ASC
+      `,
+    ).all(itemId) as ItemMatchAliasRecord[];
+
     const linkedDocumentProducts = this.db.prepare(
       `
         SELECT
@@ -525,6 +557,8 @@ export class SQLiteAllergenRepository {
           p.source_row_text,
           m.match_status,
           m.match_score,
+          COALESCE(m.match_basis, 'item_name') AS match_basis,
+          COALESCE(m.match_signal_tier, 'fallback') AS match_signal_tier,
           m.matched_by,
           m.notes
         FROM allergy_document_product_matches m
@@ -540,6 +574,7 @@ export class SQLiteAllergenRepository {
       item,
       allergen_profile: allergenProfile,
       evidence,
+      match_aliases: matchAliases,
       linked_document_products: linkedDocumentProducts,
     };
   }
@@ -587,6 +622,49 @@ export class SQLiteAllergenRepository {
       }
     });
     transaction();
+
+    return this.getItemProfile(itemId);
+  }
+
+  addMatchAlias(itemId: number, alias: string): ItemProfileDetail | null {
+    const itemExists = this.db.prepare('SELECT id FROM items WHERE id = ? LIMIT 1').get(itemId) as { id: number } | undefined;
+    if (!itemExists) {
+      return null;
+    }
+
+    const trimmedAlias = alias.trim();
+    const normalizedAlias = normalizeAllergenMatchText(trimmedAlias);
+    if (!trimmedAlias || !normalizedAlias) {
+      throw new Error('Alias must contain searchable text');
+    }
+
+    this.db.prepare(
+      `
+        INSERT INTO allergen_match_aliases (item_id, alias, normalized_alias, active)
+        VALUES (?, ?, ?, 1)
+        ON CONFLICT(item_id, alias) DO UPDATE SET
+          normalized_alias = excluded.normalized_alias,
+          active = 1
+      `,
+    ).run(itemId, trimmedAlias, normalizedAlias);
+
+    return this.getItemProfile(itemId);
+  }
+
+  removeMatchAlias(itemId: number, aliasId: number): ItemProfileDetail | null {
+    const itemExists = this.db.prepare('SELECT id FROM items WHERE id = ? LIMIT 1').get(itemId) as { id: number } | undefined;
+    if (!itemExists) {
+      return null;
+    }
+
+    this.db.prepare(
+      `
+        UPDATE allergen_match_aliases
+        SET active = 0
+        WHERE id = ?
+          AND item_id = ?
+      `,
+    ).run(aliasId, itemId);
 
     return this.getItemProfile(itemId);
   }
@@ -685,6 +763,22 @@ export class SQLiteAllergenRepository {
       throw new Error(`Unknown inventory item: ${input.item_id}`);
     }
 
+    const existingMatch = this.db.prepare(
+      `
+        SELECT match_score, match_basis, match_signal_tier, notes, active
+        FROM allergy_document_product_matches
+        WHERE document_product_id = ?
+          AND item_id = ?
+        LIMIT 1
+      `,
+    ).get(documentProductId, input.item_id) as {
+      match_score: number | null;
+      match_basis: DocumentMatchBasis | null;
+      match_signal_tier: DocumentMatchSignalTier | null;
+      notes: string | null;
+      active: number;
+    } | undefined;
+
     const upsertMatch = this.db.prepare(
       `
         INSERT INTO allergy_document_product_matches (
@@ -692,13 +786,17 @@ export class SQLiteAllergenRepository {
           item_id,
           match_status,
           match_score,
+          match_basis,
+          match_signal_tier,
           matched_by,
           notes,
           active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(document_product_id, item_id) DO UPDATE SET
           match_status = excluded.match_status,
           match_score = excluded.match_score,
+          match_basis = excluded.match_basis,
+          match_signal_tier = excluded.match_signal_tier,
           matched_by = excluded.matched_by,
           notes = excluded.notes,
           active = excluded.active
@@ -710,10 +808,12 @@ export class SQLiteAllergenRepository {
         documentProductId,
         input.item_id,
         input.match_status,
-        input.match_score ?? null,
+        input.match_score ?? existingMatch?.match_score ?? null,
+        input.match_basis ?? existingMatch?.match_basis ?? (input.matched_by === 'operator' ? 'operator' : 'item_name'),
+        input.match_signal_tier ?? existingMatch?.match_signal_tier ?? (input.matched_by === 'operator' ? 'operator' : 'fallback'),
         input.matched_by ?? 'operator',
-        input.notes ?? null,
-        input.active == null ? 1 : (input.active ? 1 : 0),
+        input.notes ?? existingMatch?.notes ?? null,
+        input.active == null ? (existingMatch?.active ?? 1) : (input.active ? 1 : 0),
       );
     })();
 
@@ -793,6 +893,8 @@ export class SQLiteAllergenRepository {
           i.name AS item_name,
           m.match_status,
           m.match_score,
+          COALESCE(m.match_basis, 'item_name') AS match_basis,
+          COALESCE(m.match_signal_tier, 'fallback') AS match_signal_tier,
           m.matched_by,
           m.notes,
           m.active
@@ -812,6 +914,8 @@ export class SQLiteAllergenRepository {
         item_name: row.item_name,
         match_status: row.match_status,
         match_score: row.match_score,
+        match_basis: row.match_basis,
+        match_signal_tier: row.match_signal_tier,
         matched_by: row.matched_by,
         notes: row.notes,
         active: Boolean(row.active),
@@ -889,7 +993,9 @@ export class SQLiteAllergenRepository {
             m.item_id,
             i.name AS item_name,
             m.match_status,
-            m.match_score
+            m.match_score,
+            COALESCE(m.match_basis, 'item_name') AS match_basis,
+            COALESCE(m.match_signal_tier, 'fallback') AS match_signal_tier
           FROM allergy_document_product_matches m
           INNER JOIN items i ON i.id = m.item_id
           WHERE m.active = 1
@@ -910,6 +1016,8 @@ export class SQLiteAllergenRepository {
         item_name: string;
         match_status: string;
         match_score: number | null;
+        match_basis: DocumentMatchBasis;
+        match_signal_tier: DocumentMatchSignalTier;
       }>;
 
       for (const row of matchRows) {
@@ -919,6 +1027,8 @@ export class SQLiteAllergenRepository {
           item_name: row.item_name,
           match_status: row.match_status,
           match_score: row.match_score,
+          match_basis: row.match_basis,
+          match_signal_tier: row.match_signal_tier,
         });
         matchesByProductId.set(row.document_product_id, bucket);
       }

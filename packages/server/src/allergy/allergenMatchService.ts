@@ -17,15 +17,20 @@ export interface InventoryItemRecord {
   id: number;
   name: string;
   venue_id: number | null;
+  aliases: string[];
 }
 
 export type AllergyDocumentMatchStatus = 'suggested' | 'confirmed' | 'rejected' | 'no_match';
+export type AllergyDocumentMatchBasis = 'item_name' | 'explicit_alias' | 'operator';
+export type AllergyDocumentMatchSignalTier = 'high' | 'medium' | 'fallback' | 'operator';
 
 export interface AllergyDocumentMatchCandidate {
   item_id: number;
   item_name: string;
   match_status: AllergyDocumentMatchStatus;
   match_score: number;
+  match_basis: AllergyDocumentMatchBasis;
+  match_signal_tier: AllergyDocumentMatchSignalTier;
   notes: string;
 }
 
@@ -110,25 +115,60 @@ interface MatchingProfile {
   tokens: string[];
 }
 
+interface ScoredMatchCandidate {
+  item_id: number;
+  item_name: string;
+  score: number;
+  match_basis: Exclude<AllergyDocumentMatchBasis, 'operator'>;
+  match_signal_tier: Exclude<AllergyDocumentMatchSignalTier, 'operator'>;
+  matched_text: string;
+}
+
+interface InventoryItemMatchProfile {
+  item: InventoryItemRecord;
+  profiles: Array<{
+    profile: MatchingProfile;
+    match_basis: Exclude<AllergyDocumentMatchBasis, 'operator'>;
+    matched_text: string;
+  }>;
+}
+
 export function buildDocumentProductMatchPlans(input: {
   products: AllergyDocumentProductRecord[];
   items: InventoryItemRecord[];
 }): AllergyDocumentMatchPlan[] {
   const itemProfiles = input.items.map((item) => ({
     item,
-    profile: buildMatchingProfile(item.name),
+    profiles: [
+      {
+        profile: buildMatchingProfile(item.name),
+        match_basis: 'item_name' as const,
+        matched_text: item.name,
+      },
+      ...item.aliases.map((alias) => ({
+        profile: buildMatchingProfile(alias),
+        match_basis: 'explicit_alias' as const,
+        matched_text: alias,
+      })),
+    ].filter((entry) => entry.profile.tokens.length > 0),
   }));
-  const tokenDocumentFrequency = buildTokenDocumentFrequency(itemProfiles.map((entry) => entry.profile.tokens));
+  const tokenDocumentFrequency = buildTokenDocumentFrequency(
+    itemProfiles.flatMap((entry) => entry.profiles.map((profile) => profile.profile.tokens)),
+  );
 
   return input.products.map((product) => {
     const scoredCandidates = itemProfiles
-      .map(({ item, profile }) => ({
-        item_id: item.id,
-        item_name: item.name,
-        score: Number(scoreProductToItem(product, profile, tokenDocumentFrequency).toFixed(4)),
+      .map(({ item, profiles }) => scoreProductToItem(product, { item, profiles }, tokenDocumentFrequency))
+      .filter((candidate): candidate is ScoredMatchCandidate => candidate != null)
+      .map((candidate) => ({
+        ...candidate,
+        score: Number(candidate.score.toFixed(4)),
       }))
       .filter((candidate) => candidate.score > 0)
-      .sort((left, right) => right.score - left.score || left.item_name.localeCompare(right.item_name, undefined, { sensitivity: 'base' }));
+      .sort((left, right) =>
+        signalTierRank(left.match_signal_tier) - signalTierRank(right.match_signal_tier)
+        || right.score - left.score
+        || left.item_name.localeCompare(right.item_name, undefined, { sensitivity: 'base' }));
 
     const strongCandidates = scoredCandidates
       .filter((candidate) => candidate.score >= STRONG_MATCH_THRESHOLD)
@@ -138,7 +178,9 @@ export function buildDocumentProductMatchPlans(input: {
         item_name: candidate.item_name,
         match_status: 'suggested' as const,
         match_score: candidate.score,
-        notes: buildSuggestedMatchNote(product, candidate.item_name, candidate.score),
+        match_basis: candidate.match_basis,
+        match_signal_tier: candidate.match_signal_tier,
+        notes: buildSuggestedMatchNote(product, candidate.item_name, candidate.score, candidate.match_basis, candidate.matched_text),
       }));
 
     if (strongCandidates.length > 0) {
@@ -160,6 +202,8 @@ export function buildDocumentProductMatchPlans(input: {
           item_name: weakCandidate.item_name,
           match_status: 'no_match',
           match_score: weakCandidate.score,
+          match_basis: weakCandidate.match_basis,
+          match_signal_tier: 'fallback',
           notes: 'Automated scoring found only a weak overlap. Manual review is needed.',
         }],
         locked: false,
@@ -279,6 +323,8 @@ export function refreshAllergyDocumentProductMatches(
           itemId: candidate.item_id,
           matchStatus: candidate.match_status,
           matchScore: candidate.match_score,
+          matchBasis: candidate.match_basis,
+          matchSignalTier: candidate.match_signal_tier,
           notes: candidate.notes,
         });
         insertedMatchCount += 1;
@@ -340,9 +386,33 @@ function loadInventoryItemsForMatching(db: Database.Database, venueId: number | 
       WHERE (? IS NULL OR venue_id = ? OR venue_id IS NULL)
       ORDER BY name COLLATE NOCASE ASC, id ASC
     `,
-  ).all(venueId ?? null, venueId ?? null) as InventoryItemRecord[];
+  ).all(venueId ?? null, venueId ?? null) as Array<Omit<InventoryItemRecord, 'aliases'>>;
 
-  return rows;
+  const aliasesByItemId = new Map<number, string[]>();
+  const itemIds = rows.map((row) => row.id);
+  if (itemIds.length > 0 && tableExists(db, 'allergen_match_aliases')) {
+    const placeholders = itemIds.map(() => '?').join(', ');
+    const aliasRows = db.prepare(
+      `
+        SELECT item_id, alias
+        FROM allergen_match_aliases
+        WHERE active = 1
+          AND item_id IN (${placeholders})
+        ORDER BY alias COLLATE NOCASE ASC, id ASC
+      `,
+    ).all(...itemIds) as Array<{ item_id: number; alias: string }>;
+
+    for (const row of aliasRows) {
+      const existing = aliasesByItemId.get(row.item_id) ?? [];
+      existing.push(row.alias);
+      aliasesByItemId.set(row.item_id, existing);
+    }
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    aliases: aliasesByItemId.get(row.id) ?? [],
+  }));
 }
 
 function loadLockedDocumentProductIds(
@@ -394,6 +464,8 @@ function insertDocumentProductMatch(
     itemId: number;
     matchStatus: AllergyDocumentMatchStatus;
     matchScore: number;
+    matchBasis: AllergyDocumentMatchBasis;
+    matchSignalTier: AllergyDocumentMatchSignalTier;
     notes: string;
   },
 ): void {
@@ -404,6 +476,12 @@ function insertDocumentProductMatch(
 
   if (matchTable.scoreColumn) {
     values[matchTable.scoreColumn] = input.matchScore;
+  }
+  if (matchTable.basisColumn) {
+    values[matchTable.basisColumn] = input.matchBasis;
+  }
+  if (matchTable.signalTierColumn) {
+    values[matchTable.signalTierColumn] = input.matchSignalTier;
   }
   if (matchTable.notesColumn) {
     values[matchTable.notesColumn] = input.notes;
@@ -428,6 +506,8 @@ interface MatchTableDefinition {
   itemIdColumn: string;
   statusColumn: string;
   scoreColumn: string | null;
+  basisColumn: string | null;
+  signalTierColumn: string | null;
   notesColumn: string | null;
   matchedByColumn: string | null;
   activeColumn: string | null;
@@ -453,6 +533,8 @@ function getAllergyDocumentProductMatchTable(db: Database.Database): MatchTableD
     itemIdColumn,
     statusColumn,
     scoreColumn: pickFirstExistingColumn(columns, ['match_score', 'score', 'confidence_score']),
+    basisColumn: pickFirstExistingColumn(columns, ['match_basis']),
+    signalTierColumn: pickFirstExistingColumn(columns, ['match_signal_tier']),
     notesColumn: pickFirstExistingColumn(columns, ['notes', 'reason', 'match_reason']),
     matchedByColumn: pickFirstExistingColumn(columns, ['matched_by']),
     activeColumn: pickFirstExistingColumn(columns, ['active']),
@@ -497,7 +579,7 @@ function parseChunkIdList(value: string): number[] {
   }
 }
 
-function normalizeSearchText(input: string): string {
+export function normalizeAllergenMatchText(input: string): string {
   let normalized = input;
   for (const [pattern, replacement] of KNOWN_NON_LATIN_REPLACEMENTS) {
     normalized = normalized.replace(pattern, replacement);
@@ -517,7 +599,7 @@ function normalizeSearchText(input: string): string {
 }
 
 function tokenizeSearchText(input: string): string[] {
-  return normalizeSearchText(input)
+  return normalizeAllergenMatchText(input)
     .split(/\s+/)
     .filter((token) => token.length >= 3)
     .filter((token) => !/^\d+$/.test(token))
@@ -618,24 +700,77 @@ function maxTokenSimilarity(leftTokens: string[], rightTokens: string[]): number
 
 function scoreProductToItem(
   product: AllergyDocumentProductRecord,
-  itemProfile: MatchingProfile,
+  itemProfile: InventoryItemMatchProfile,
   tokenDocumentFrequency: Map<string, number>,
-): number {
-  const primaryScore = Math.max(
-    scoreTextOverlap(buildMatchingProfile(product.product_name), itemProfile, tokenDocumentFrequency),
-    scoreTextOverlap(buildMatchingProfile(product.normalized_product_name), itemProfile, tokenDocumentFrequency),
-  );
-  if (primaryScore <= 0) {
-    return 0;
+): ScoredMatchCandidate | null {
+  const productNameProfile = buildMatchingProfile(product.product_name);
+  const normalizedProductProfile = buildMatchingProfile(product.normalized_product_name);
+  let bestCandidate: ScoredMatchCandidate | null = null;
+
+  for (const target of itemProfile.profiles) {
+    const primaryScore = Math.max(
+      scoreTextOverlap(productNameProfile, target.profile, tokenDocumentFrequency),
+      scoreTextOverlap(normalizedProductProfile, target.profile, tokenDocumentFrequency),
+    );
+    if (primaryScore <= 0) {
+      continue;
+    }
+
+    const corroborationScore = Math.max(
+      scoreTextOverlap(buildMatchingProfile(product.source_row_text), target.profile, tokenDocumentFrequency),
+      scoreTextOverlap(buildMatchingProfile(product.allergen_summary ?? ''), target.profile, tokenDocumentFrequency),
+      scoreTextOverlap(buildMatchingProfile(product.dietary_notes ?? ''), target.profile, tokenDocumentFrequency),
+    );
+
+    const boostedScore = Math.min(
+      1,
+      primaryScore + (corroborationScore * 0.08) + (target.match_basis === 'explicit_alias' ? 0.08 : 0),
+    );
+    const candidate: ScoredMatchCandidate = {
+      item_id: itemProfile.item.id,
+      item_name: itemProfile.item.name,
+      score: boostedScore,
+      match_basis: target.match_basis,
+      match_signal_tier: deriveSignalTier(boostedScore, target.match_basis),
+      matched_text: target.matched_text,
+    };
+
+    if (!bestCandidate
+      || signalTierRank(candidate.match_signal_tier) < signalTierRank(bestCandidate.match_signal_tier)
+      || (candidate.match_signal_tier === bestCandidate.match_signal_tier && candidate.score > bestCandidate.score)) {
+      bestCandidate = candidate;
+    }
   }
 
-  const corroborationScore = Math.max(
-    scoreTextOverlap(buildMatchingProfile(product.source_row_text), itemProfile, tokenDocumentFrequency),
-    scoreTextOverlap(buildMatchingProfile(product.allergen_summary ?? ''), itemProfile, tokenDocumentFrequency),
-    scoreTextOverlap(buildMatchingProfile(product.dietary_notes ?? ''), itemProfile, tokenDocumentFrequency),
-  );
+  return bestCandidate;
+}
 
-  return Math.min(1, primaryScore + (corroborationScore * 0.08));
+function deriveSignalTier(
+  score: number,
+  matchBasis: Exclude<AllergyDocumentMatchBasis, 'operator'>,
+): Exclude<AllergyDocumentMatchSignalTier, 'operator'> {
+  if ((matchBasis === 'explicit_alias' && score >= 0.52) || score >= 0.62) {
+    return 'high';
+  }
+  if ((matchBasis === 'explicit_alias' && score >= STRONG_MATCH_THRESHOLD) || score >= 0.36) {
+    return 'medium';
+  }
+  return 'fallback';
+}
+
+function signalTierRank(signalTier: AllergyDocumentMatchSignalTier): number {
+  switch (signalTier) {
+    case 'high':
+      return 0;
+    case 'medium':
+      return 1;
+    case 'fallback':
+      return 2;
+    case 'operator':
+      return 3;
+    default:
+      return 4;
+  }
 }
 
 function scoreTextOverlap(
@@ -698,23 +833,26 @@ function scoreTextOverlap(
 
 function buildSuggestedMatchNote(
   product: AllergyDocumentProductRecord,
-  itemName: string,
+  _itemName: string,
   score: number,
+  matchBasis: AllergyDocumentMatchBasis,
+  matchedText: string,
 ): string {
-  const sharedTokens = findSharedTokens(product, itemName);
+  const sharedTokens = findSharedTokens(product, matchedText);
+  const basisLabel = matchBasis === 'explicit_alias' ? 'alias' : 'name';
   if (sharedTokens.length > 0) {
-    return `Automated match on ${sharedTokens.join(', ')} (${Math.round(score * 100)}% confidence).`;
+    return `Automated ${basisLabel} match on ${sharedTokens.join(', ')} (${Math.round(score * 100)}% confidence).`;
   }
 
-  return `Automated name overlap suggests a likely match (${Math.round(score * 100)}% confidence).`;
+  return `Automated ${basisLabel} overlap suggests a likely match (${Math.round(score * 100)}% confidence).`;
 }
 
-function findSharedTokens(product: AllergyDocumentProductRecord, itemName: string): string[] {
+function findSharedTokens(product: AllergyDocumentProductRecord, candidateText: string): string[] {
   const productTokens = new Set([
     ...tokenizeSearchText(product.product_name),
     ...tokenizeSearchText(product.normalized_product_name),
     ...tokenizeSearchText(product.source_row_text),
   ]);
-  const itemTokens = new Set(tokenizeSearchText(itemName));
-  return Array.from(productTokens).filter((token) => itemTokens.has(token));
+  const candidateTokens = new Set(tokenizeSearchText(candidateText));
+  return Array.from(productTokens).filter((token) => candidateTokens.has(token));
 }

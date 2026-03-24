@@ -79,11 +79,11 @@ describe('allergen match service', () => {
         },
       ],
       items: [
-        { id: 1, name: 'Guava Glazed Salmon', venue_id: 2 },
-        { id: 2, name: 'Chicken - Sterling Pacific Airline Single Boneless Skinless Chicken Breast', venue_id: 2 },
-        { id: 3, name: 'Lobster 16/18 oz', venue_id: 2 },
-        { id: 4, name: 'Beef - Inside Top Round Prime XT Iowa Premium', venue_id: 2 },
-        { id: 5, name: 'Beef - Prime Sup Beef Tenderloin PSMO', venue_id: 2 },
+        { id: 1, name: 'Guava Glazed Salmon', venue_id: 2, aliases: [] },
+        { id: 2, name: 'Chicken - Sterling Pacific Airline Single Boneless Skinless Chicken Breast', venue_id: 2, aliases: [] },
+        { id: 3, name: 'Lobster 16/18 oz', venue_id: 2, aliases: [] },
+        { id: 4, name: 'Beef - Inside Top Round Prime XT Iowa Premium', venue_id: 2, aliases: [] },
+        { id: 5, name: 'Beef - Prime Sup Beef Tenderloin PSMO', venue_id: 2, aliases: [] },
       ],
     });
 
@@ -93,6 +93,8 @@ describe('allergen match service', () => {
         expect.objectContaining({
           item_id: 1,
           match_status: 'suggested',
+          match_basis: 'item_name',
+          match_signal_tier: 'high',
         }),
       ],
     });
@@ -104,6 +106,7 @@ describe('allergen match service', () => {
         expect.objectContaining({
           item_id: 2,
           match_status: 'suggested',
+          match_signal_tier: 'fallback',
         }),
       ],
     });
@@ -160,14 +163,45 @@ describe('allergen match service', () => {
         },
       ],
       items: [
-        { id: 1, name: 'Salmon, Guava Glazed', venue_id: 2 },
-        { id: 2, name: 'Salmon - Salmon 10lb/6oz', venue_id: 2 },
+        { id: 1, name: 'Salmon, Guava Glazed', venue_id: 2, aliases: [] },
+        { id: 2, name: 'Salmon - Salmon 10lb/6oz', venue_id: 2, aliases: [] },
       ],
     });
 
     expect(plan.candidates[0]).toMatchObject({
       item_id: 1,
       match_status: 'suggested',
+    });
+    expect(plan.candidates[0].match_score).toBeGreaterThan(plan.candidates[1]?.match_score ?? 0);
+  });
+
+  it('prefers explicit aliases over fallback item-name candidates for component rows', () => {
+    const [plan] = buildDocumentProductMatchPlans({
+      products: [
+        {
+          id: 1,
+          document_id: 10,
+          page_id: 1,
+          page_number: 1,
+          product_name: 'Beurre Blanc',
+          normalized_product_name: 'beurre blanc',
+          source_row_text: 'Beurre Blanc | contains milk',
+          allergen_summary: 'contains milk',
+          dietary_notes: null,
+          source_chunk_ids: [1],
+        },
+      ],
+      items: [
+        { id: 1, name: 'Butter Wine Sauce', venue_id: 2, aliases: ['Beurre Blanc', 'White Butter Sauce'] },
+        { id: 2, name: 'White Sauce Base', venue_id: 2, aliases: [] },
+      ],
+    });
+
+    expect(plan.candidates[0]).toMatchObject({
+      item_id: 1,
+      match_status: 'suggested',
+      match_basis: 'explicit_alias',
+      match_signal_tier: 'high',
     });
     expect(plan.candidates[0].match_score).toBeGreaterThan(plan.candidates[1]?.match_score ?? 0);
   });

@@ -3,6 +3,7 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { useAllergenItem } from '../hooks/useAllergens';
 import { ItemAllergenEditor } from '../components/allergens/ItemAllergenEditor';
 import { AllergenEvidenceTimeline } from '../components/allergens/AllergenEvidenceTimeline';
+import { ItemMatchAliasEditor } from '../components/allergens/ItemMatchAliasEditor';
 import { WorkflowMetricCard, WorkflowMetricGrid, WorkflowPage, WorkflowPanel, WorkflowStatusPill } from '../components/workflow/WorkflowPrimitives';
 
 export function AllergenItemDetail() {
@@ -47,6 +48,7 @@ export function AllergenItemDetail() {
                   evidence={detail.evidence}
                   allergenProfile={detail.allergen_profile}
                 />
+                <ItemMatchAliasEditor detail={detail} />
                 <WorkflowPanel
                   title="Linked chart products"
                   description="Parsed allergy-chart products already matched to this item."

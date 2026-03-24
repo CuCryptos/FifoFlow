@@ -422,8 +422,18 @@ export interface AllergenItemLinkedDocumentProductPayload {
   source_row_text: string;
   match_status: string;
   match_score: number | null;
+  match_basis: 'item_name' | 'explicit_alias' | 'operator';
+  match_signal_tier: 'high' | 'medium' | 'fallback' | 'operator';
   matched_by: string | null;
   notes: string | null;
+}
+
+export interface AllergenItemMatchAliasPayload {
+  id: number;
+  alias: string;
+  normalized_alias: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AllergenItemDetailPayload {
@@ -438,6 +448,7 @@ export interface AllergenItemDetailPayload {
   };
   allergen_profile: AllergenItemProfilePayload[];
   evidence: AllergenItemEvidencePayload[];
+  match_aliases: AllergenItemMatchAliasPayload[];
   linked_document_products: AllergenItemLinkedDocumentProductPayload[];
 }
 
@@ -468,6 +479,8 @@ export interface AllergenDocumentProductMatchUpdateInput {
   item_id: number;
   match_status: 'suggested' | 'confirmed' | 'rejected' | 'no_match';
   match_score?: number | null;
+  match_basis?: 'item_name' | 'explicit_alias' | 'operator';
+  match_signal_tier?: 'high' | 'medium' | 'fallback' | 'operator';
   matched_by?: 'system' | 'operator';
   notes?: string | null;
   active?: boolean;
@@ -479,9 +492,15 @@ export interface AllergenDocumentProductMatchPayload {
   item_name: string;
   match_status: 'suggested' | 'confirmed' | 'rejected' | 'no_match';
   match_score: number | null;
+  match_basis: 'item_name' | 'explicit_alias' | 'operator';
+  match_signal_tier: 'high' | 'medium' | 'fallback' | 'operator';
   matched_by: 'system' | 'operator';
   notes: string | null;
   active: boolean;
+}
+
+export interface AllergenItemMatchAliasInput {
+  alias: string;
 }
 
 export interface AllergenDocumentProductPayload {
@@ -1065,6 +1084,15 @@ export const api = {
       fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}/evidence`, {
         method: 'POST',
         body: JSON.stringify(evidence),
+      }),
+    addItemMatchAlias: (itemId: number, input: AllergenItemMatchAliasInput) =>
+      fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}/match-aliases`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    removeItemMatchAlias: (itemId: number, aliasId: number) =>
+      fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}/match-aliases/${aliasId}`, {
+        method: 'DELETE',
       }),
     updateDocumentProductMatch: (productId: number, input: AllergenDocumentProductMatchUpdateInput) =>
       fetchJson<AllergenDocumentDetailPayload>(`/allergens/document-products/${productId}/match`, {

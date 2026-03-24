@@ -64,8 +64,11 @@ describe('Allergen routes', () => {
       expect.objectContaining({
         product_name: 'Seared Salmon',
         match_status: 'confirmed',
+        match_basis: 'item_name',
+        match_signal_tier: 'fallback',
       }),
     ]);
+    expect(itemDetailResponse.body.match_aliases).toEqual([]);
   });
 
   it('returns document detail and review queue data', async () => {
@@ -83,6 +86,8 @@ describe('Allergen routes', () => {
             expect.objectContaining({
               item_name: 'Salmon Portion',
               match_status: 'confirmed',
+              match_basis: 'item_name',
+              match_signal_tier: 'fallback',
             }),
           ],
         }),
@@ -202,6 +207,8 @@ describe('Allergen routes', () => {
         item_id: 3,
         match_status: 'confirmed',
         match_score: 0.96,
+        match_basis: 'operator',
+        match_signal_tier: 'operator',
         matched_by: 'operator',
         notes: 'Confirmed from chef review',
         active: true,
@@ -218,6 +225,8 @@ describe('Allergen routes', () => {
               item_id: 3,
               item_name: 'Undeclared Sauce',
               match_status: 'confirmed',
+              match_basis: 'operator',
+              match_signal_tier: 'operator',
               matched_by: 'operator',
               notes: 'Confirmed from chef review',
               active: true,
@@ -226,6 +235,28 @@ describe('Allergen routes', () => {
         }),
       ]),
     );
+  });
+
+  it('adds and removes explicit match aliases for an item', async () => {
+    const addResponse = await request(app)
+      .post('/api/allergens/items/3/match-aliases')
+      .send({ alias: 'Au Jus' });
+
+    expect(addResponse.status).toBe(201);
+    expect(addResponse.body.match_aliases).toEqual([
+      expect.objectContaining({
+        alias: 'Au Jus',
+        normalized_alias: 'au jus',
+      }),
+    ]);
+
+    const aliasId = addResponse.body.match_aliases[0].id;
+
+    const removeResponse = await request(app)
+      .delete(`/api/allergens/items/3/match-aliases/${aliasId}`);
+
+    expect(removeResponse.status).toBe(200);
+    expect(removeResponse.body.match_aliases).toEqual([]);
   });
 });
 

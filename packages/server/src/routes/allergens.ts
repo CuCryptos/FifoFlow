@@ -3,18 +3,23 @@ import type Database from 'better-sqlite3';
 import {
   type AllergenConfidence,
   type AllergenStatus,
+  type DocumentMatchBasis,
   type DocumentProductMatchInput,
+  type DocumentMatchSignalTier,
   type ItemEvidenceInput,
   type ItemProfileUpdateInput,
   SQLiteAllergenRepository,
 } from '../allergy/allergenRepositories.js';
 import { AllergenQueryService } from '../allergy/allergenQueryService.js';
+import { refreshAllergyDocumentProductMatches } from '../allergy/allergenMatchService.js';
 
 const ALLERGEN_STATUSES = new Set<AllergenStatus>(['contains', 'may_contain', 'free_of', 'unknown']);
 const ALLERGEN_CONFIDENCES = new Set<AllergenConfidence>(['verified', 'high', 'moderate', 'low', 'unverified', 'unknown']);
 const ALLERGEN_EVIDENCE_SOURCE_TYPES: ItemEvidenceInput['source_type'][] = ['manufacturer_spec', 'vendor_declaration', 'staff_verified', 'label_scan', 'uploaded_chart', 'inferred'];
 const DOCUMENT_MATCH_STATUSES: DocumentProductMatchInput['match_status'][] = ['suggested', 'confirmed', 'rejected', 'no_match'];
 const DOCUMENT_MATCH_ROLES = new Set<DocumentProductMatchInput['matched_by']>(['system', 'operator']);
+const DOCUMENT_MATCH_BASES = new Set<DocumentMatchBasis>(['item_name', 'explicit_alias', 'operator']);
+const DOCUMENT_MATCH_SIGNAL_TIERS = new Set<DocumentMatchSignalTier>(['high', 'medium', 'fallback', 'operator']);
 
 export function createAllergenRoutes(db: Database.Database): Router {
   const repository = new SQLiteAllergenRepository(db);
@@ -108,6 +113,53 @@ export function createAllergenRoutes(db: Database.Database): Router {
       res.json(detail);
     } catch (error: any) {
       res.status(400).json({ error: error.message ?? 'Failed to add allergen evidence' });
+    }
+  });
+
+  router.post('/items/:itemId/match-aliases', (req, res) => {
+    const itemId = parseRequiredNumber(req.params.itemId);
+    if (itemId == null) {
+      res.status(400).json({ error: 'Invalid item id' });
+      return;
+    }
+
+    const alias = typeof req.body?.alias === 'string' ? req.body.alias.trim() : '';
+    if (!alias) {
+      res.status(400).json({ error: 'alias is required' });
+      return;
+    }
+
+    try {
+      const detail = repository.addMatchAlias(itemId, alias);
+      if (!detail) {
+        res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+      refreshDocumentsForVenueScope(db, detail.item.venue_id);
+      res.status(201).json(detail);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message ?? 'Failed to add match alias' });
+    }
+  });
+
+  router.delete('/items/:itemId/match-aliases/:aliasId', (req, res) => {
+    const itemId = parseRequiredNumber(req.params.itemId);
+    const aliasId = parseRequiredNumber(req.params.aliasId);
+    if (itemId == null || aliasId == null) {
+      res.status(400).json({ error: 'Invalid alias route parameters' });
+      return;
+    }
+
+    try {
+      const detail = repository.removeMatchAlias(itemId, aliasId);
+      if (!detail) {
+        res.status(404).json({ error: 'Item not found' });
+        return;
+      }
+      refreshDocumentsForVenueScope(db, detail.item.venue_id);
+      res.json(detail);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message ?? 'Failed to remove match alias' });
     }
   });
 
@@ -330,15 +382,45 @@ function parseDocumentProductMatchInput(value: unknown): DocumentProductMatchInp
   const matched_by = matched_by_raw && DOCUMENT_MATCH_ROLES.has(matched_by_raw)
     ? matched_by_raw
     : undefined;
+  const match_basis_raw = typeof (value as { match_basis?: unknown }).match_basis === 'string'
+    ? (value as { match_basis: DocumentMatchBasis }).match_basis
+    : null;
+  const match_basis = match_basis_raw && DOCUMENT_MATCH_BASES.has(match_basis_raw)
+    ? match_basis_raw
+    : undefined;
+  const match_signal_tier_raw = typeof (value as { match_signal_tier?: unknown }).match_signal_tier === 'string'
+    ? (value as { match_signal_tier: DocumentMatchSignalTier }).match_signal_tier
+    : null;
+  const match_signal_tier = match_signal_tier_raw && DOCUMENT_MATCH_SIGNAL_TIERS.has(match_signal_tier_raw)
+    ? match_signal_tier_raw
+    : undefined;
 
   return {
     item_id,
     match_status,
     match_score: parseOptionalFiniteNumber((value as { match_score?: unknown }).match_score),
+    match_basis,
+    match_signal_tier,
     matched_by,
     notes: typeof (value as { notes?: unknown }).notes === 'string' ? (value as { notes: string }).notes : null,
     active: typeof (value as { active?: unknown }).active === 'boolean' ? (value as { active: boolean }).active : undefined,
   };
+}
+
+function refreshDocumentsForVenueScope(db: Database.Database, venueId: number | null): void {
+  const rows = db.prepare(
+    `
+      SELECT id
+      FROM allergy_documents
+      WHERE (? IS NULL AND venue_id IS NULL)
+         OR (? IS NOT NULL AND (venue_id = ? OR venue_id IS NULL))
+      ORDER BY id ASC
+    `,
+  ).all(venueId ?? null, venueId ?? null, venueId ?? null) as Array<{ id: number }>;
+
+  for (const row of rows) {
+    refreshAllergyDocumentProductMatches(db, row.id);
+  }
 }
 
 function parseOptionalPositiveNumber(value: unknown): number | undefined {
