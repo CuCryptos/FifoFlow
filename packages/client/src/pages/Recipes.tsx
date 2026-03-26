@@ -441,6 +441,14 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   const inferredRelationships = extractPrepSheetInferredRelationships(source.source_context);
   const likelyUsedIn = extractStringList(source.source_context.likely_used_in);
   const isPrepCapture = source.origin === 'prep_sheet' || sourceQuery.data.draft.source_recipe_type === 'prep';
+  const itemSuggestions = useMemo(
+    () => buildDefaultItemAliasSuggestions(items, draftAliasSeed, inferredRelationships),
+    [draftAliasSeed, inferredRelationships, items],
+  );
+  const recipeSuggestions = useMemo(
+    () => buildDefaultRecipeAliasSuggestions(recipeOptions, draftAliasSeed, likelyUsedIn, inferredRelationships),
+    [draftAliasSeed, inferredRelationships, likelyUsedIn, recipeOptions],
+  );
 
   return (
     <WorkflowPanel
@@ -513,6 +521,17 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
             <div className="rounded-3xl border border-slate-200 bg-white p-5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Inventory Item Alias</div>
               <div className="mt-4 space-y-3">
+                <AliasSuggestionStrip<Item>
+                  title="Default suggestions"
+                  suggestions={itemSuggestions}
+                  selectedId={selectedItemId}
+                  getId={(item) => Number(item.id)}
+                  getLabel={(item) => item.name}
+                  onSelect={(item) => {
+                    setSelectedItemId(Number(item.id));
+                    setItemSearch(item.name);
+                  }}
+                />
                 <input
                   value={itemSearch}
                   onChange={(event) => setItemSearch(event.target.value)}
@@ -577,6 +596,17 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
             <div className="rounded-3xl border border-slate-200 bg-white p-5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe Alias</div>
               <div className="mt-4 space-y-3">
+                <AliasSuggestionStrip<{ id: number | string; name: string; type?: string | null }>
+                  title="Default suggestions"
+                  suggestions={recipeSuggestions}
+                  selectedId={selectedRecipeId}
+                  getId={(recipe) => Number(recipe.id)}
+                  getLabel={(recipe) => recipe.name}
+                  onSelect={(recipe) => {
+                    setSelectedRecipeId(Number(recipe.id));
+                    setRecipeSearch(recipe.name);
+                  }}
+                />
                 <input
                   value={recipeSearch}
                   onChange={(event) => setRecipeSearch(event.target.value)}
@@ -695,6 +725,122 @@ function AliasTargetSearchList<T>(props: {
       })}
     </div>
   );
+}
+
+function AliasSuggestionStrip<T>(props: {
+  title: string;
+  suggestions: T[];
+  selectedId: number;
+  getId: (item: T) => number;
+  getLabel: (item: T) => string;
+  onSelect: (item: T) => void;
+}) {
+  if (props.suggestions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{props.title}</div>
+      <div className="flex flex-wrap gap-2">
+        {props.suggestions.map((item) => {
+          const id = props.getId(item);
+          const isSelected = id === props.selectedId;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => props.onSelect(item)}
+              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                isSelected
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100'
+              }`}
+            >
+              {props.getLabel(item)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function buildDefaultItemAliasSuggestions(
+  items: Item[],
+  draftAliasSeed: string,
+  inferredRelationships: Array<{ prep_item: string; likely_used_in: string[]; confidence: number }>,
+): Item[] {
+  const queries = [
+    draftAliasSeed,
+    ...inferredRelationships.map((entry) => entry.prep_item),
+  ];
+  return rankAliasTargets(items, queries, (item) => item.name, 5);
+}
+
+function buildDefaultRecipeAliasSuggestions<T extends { id: number | string; name: string }>(
+  recipes: T[],
+  draftAliasSeed: string,
+  likelyUsedIn: string[],
+  inferredRelationships: Array<{ prep_item: string; likely_used_in: string[]; confidence: number }>,
+): T[] {
+  const queries = [
+    ...likelyUsedIn,
+    ...inferredRelationships.flatMap((entry) => entry.likely_used_in),
+    draftAliasSeed,
+  ];
+  return rankAliasTargets(recipes, queries, (recipe) => recipe.name, 5);
+}
+
+function rankAliasTargets<T>(
+  items: T[],
+  queries: string[],
+  getLabel: (item: T) => string,
+  limit: number,
+): T[] {
+  const normalizedQueries = queries
+    .map(normalizeAliasSearchValue)
+    .filter((query, index, list) => query.length > 0 && list.indexOf(query) === index);
+  if (normalizedQueries.length === 0) {
+    return [];
+  }
+
+  return items
+    .map((item) => ({
+      item,
+      score: normalizedQueries.reduce((best, query) => Math.max(best, scoreAliasTarget(query, normalizeAliasSearchValue(getLabel(item)))), 0),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || getLabel(left.item).localeCompare(getLabel(right.item)))
+    .slice(0, limit)
+    .map((entry) => entry.item);
+}
+
+function scoreAliasTarget(query: string, target: string): number {
+  if (!query || !target) {
+    return 0;
+  }
+  if (query === target) {
+    return 100;
+  }
+  if (target.startsWith(query) || query.startsWith(target)) {
+    return 85;
+  }
+  if (target.includes(query) || query.includes(target)) {
+    return 70;
+  }
+
+  const queryTokens = query.split(' ').filter(Boolean);
+  const targetTokens = new Set(target.split(' ').filter(Boolean));
+  const overlap = queryTokens.filter((token) => targetTokens.has(token)).length;
+  if (overlap === 0) {
+    return 0;
+  }
+  return 40 + overlap * 10;
+}
+
+function normalizeAliasSearchValue(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function formatYield(summary: OperationalRecipeWorkflowSummaryPayload): string {
