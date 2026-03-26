@@ -41,10 +41,10 @@ export function useCreateRecipeBlitzSession() {
   });
 }
 
-export function useRecipeDraftSourceIntelligence(draftId: number) {
+export function useRecipeDraftSourceIntelligence(draftId: number, venueId?: number | null) {
   return useQuery({
-    queryKey: ['recipe-intelligence', 'draft-source', draftId],
-    queryFn: () => api.recipeIntelligence.getDraftSource(draftId),
+    queryKey: ['recipe-intelligence', 'draft-source', draftId, venueId ?? null],
+    queryFn: () => api.recipeIntelligence.getDraftSource(draftId, { venue_id: venueId ?? null }),
     enabled: draftId > 0,
   });
 }

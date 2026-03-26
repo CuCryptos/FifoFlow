@@ -628,6 +628,20 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return rows.map(mapPrepSheetCaptureRow);
   }
 
+  async listPrepSheetCapturesByVenue(venueId: number | string, limit = 40): Promise<PrepSheetCapture[]> {
+    const rows = this.db.prepare(
+      `
+        SELECT *
+        FROM prep_sheet_captures
+        WHERE venue_id = ?
+        ORDER BY capture_date DESC, created_at DESC, id DESC
+        LIMIT ?
+      `,
+    ).all(venueId, limit) as PrepSheetCaptureRow[];
+
+    return rows.map(mapPrepSheetCaptureRow);
+  }
+
   async listItemAliases(itemId: number | string): Promise<ItemAlias[]> {
     const rows = this.db.prepare(
       `

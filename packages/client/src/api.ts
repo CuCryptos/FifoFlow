@@ -816,6 +816,22 @@ export interface RecipeDraftSourcePayload {
   recipe_builder_job_id: number | string;
   draft: RecipeBuilderDraftRecipe;
   source_intelligence: RecipeBuilderSourceIntelligence;
+  alias_seed_context: RecipeDraftAliasSeedContextPayload | null;
+}
+
+export interface RecipeDraftAliasSeedContextPayload {
+  venue_id: number;
+  matched_prep_items: Array<{
+    prep_item: string;
+    confidence: number;
+    capture_date: string;
+  }>;
+  related_recipe_names: Array<{
+    name: string;
+    confidence: number;
+    source_prep_item: string;
+    capture_date: string;
+  }>;
 }
 
 export interface RecipeDraftConfidenceRecalculationPayload {
@@ -1237,8 +1253,14 @@ export const api = {
       }),
     getSession: (sessionId: number) =>
       fetchJson<RecipeIntelligenceSessionDetailPayload>(`/recipe-intelligence/sessions/${sessionId}`),
-    getDraftSource: (draftId: number) =>
-      fetchJson<RecipeDraftSourcePayload>(`/recipe-intelligence/drafts/${draftId}/source`),
+    getDraftSource: (draftId: number, params?: { venue_id?: number | null }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id != null && params.venue_id > 0) {
+        qs.set('venue_id', String(params.venue_id));
+      }
+      const query = qs.toString();
+      return fetchJson<RecipeDraftSourcePayload>(`/recipe-intelligence/drafts/${draftId}/source${query ? `?${query}` : ''}`);
+    },
     recalculateDraftConfidence: (draftId: number, data: RecalculateRecipeDraftConfidenceInput) =>
       fetchJson<RecipeDraftConfidenceRecalculationPayload>(`/recipe-intelligence/drafts/${draftId}/recalculate-confidence`, {
         method: 'POST',

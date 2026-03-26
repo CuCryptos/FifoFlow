@@ -454,4 +454,41 @@ describe('Recipe intelligence routes', () => {
       });
     expect(inferenceResponse.status).toBe(501);
   });
+
+  it('returns venue-scoped prep alias seed context on draft source detail', async () => {
+    const prepResponse = await request(app)
+      .post('/api/recipe-intelligence/prep-sheet-captures')
+      .field('venue_id', '1')
+      .field('capture_date', '2026-03-26')
+      .field('session_name', 'Daily Prep Sheet')
+      .field('created_by', 'chef')
+      .attach('file', Buffer.from('fake prep image bytes'), {
+        filename: 'prep-sheet.png',
+        contentType: 'image/png',
+      });
+
+    expect(prepResponse.status).toBe(201);
+    expect(prepResponse.body.drafts).toHaveLength(1);
+
+    const sourceResponse = await request(app)
+      .get(`/api/recipe-intelligence/drafts/${prepResponse.body.drafts[0].draft_id}/source?venue_id=1`);
+
+    expect(sourceResponse.status).toBe(200);
+    expect(sourceResponse.body.alias_seed_context).toMatchObject({
+      venue_id: 1,
+      matched_prep_items: [
+        expect.objectContaining({
+          prep_item: 'Beurre Blanc',
+          capture_date: '2026-03-26',
+        }),
+      ],
+      related_recipe_names: [
+        expect.objectContaining({
+          name: 'Fish of the Day',
+          source_prep_item: 'Beurre Blanc',
+          capture_date: '2026-03-26',
+        }),
+      ],
+    });
+  });
 });

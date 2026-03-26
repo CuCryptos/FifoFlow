@@ -39,6 +39,7 @@ import { UNITS, tryConvertQuantity } from '@fifoflow/shared';
 import type { Item, Unit } from '@fifoflow/shared';
 import type {
   OperationalRecipeIngredientRowPayload,
+  RecipeDraftAliasSeedContextPayload,
   OperationalRecipeWorkflowSummaryPayload,
   RecipeDraftPromotionResultPayload,
   RecipeDraftSummaryPayload,
@@ -361,7 +362,7 @@ export function DraftRecipeDetailPage() {
 function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   const { selectedVenueId } = useVenueContext();
   const { toast } = useToast();
-  const sourceQuery = useRecipeDraftSourceIntelligence(draftId);
+  const sourceQuery = useRecipeDraftSourceIntelligence(draftId, selectedVenueId ?? null);
   const recalculateConfidence = useRecalculateRecipeDraftConfidence();
   const { data: items = [] } = useItems({ venue_id: selectedVenueId ?? undefined });
   const recipesQuery = useQuery({
@@ -385,6 +386,7 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   const recipeOptions = recipesQuery.data ?? [];
   const selectedRecipe = recipeOptions.find((recipe) => Number(recipe.id) === selectedRecipeId) ?? null;
   const source = sourceQuery.data?.source_intelligence ?? null;
+  const aliasSeedContext = sourceQuery.data?.alias_seed_context ?? null;
   const likelyUsedIn = source ? extractStringList(source.source_context.likely_used_in) : [];
   const inferredRelationships = source ? extractPrepSheetInferredRelationships(source.source_context) : [];
   const isPrepCapture = source != null && (
@@ -418,12 +420,12 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   }, [draftAliasSeed]);
 
   const itemSuggestions = useMemo(
-    () => buildDefaultItemAliasSuggestions(items, draftAliasSeed, inferredRelationships),
-    [draftAliasSeed, inferredRelationships, items],
+    () => buildDefaultItemAliasSuggestions(items, draftAliasSeed, inferredRelationships, aliasSeedContext),
+    [aliasSeedContext, draftAliasSeed, inferredRelationships, items],
   );
   const recipeSuggestions = useMemo(
-    () => buildDefaultRecipeAliasSuggestions(recipeOptions, draftAliasSeed, likelyUsedIn, inferredRelationships),
-    [draftAliasSeed, inferredRelationships, likelyUsedIn, recipeOptions],
+    () => buildDefaultRecipeAliasSuggestions(recipeOptions, draftAliasSeed, likelyUsedIn, inferredRelationships, aliasSeedContext),
+    [aliasSeedContext, draftAliasSeed, inferredRelationships, likelyUsedIn, recipeOptions],
   );
 
   if (sourceQuery.isLoading) {
@@ -529,11 +531,12 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
                   title="Default suggestions"
                   suggestions={itemSuggestions}
                   selectedId={selectedItemId}
-                  getId={(item) => Number(item.id)}
-                  getLabel={(item) => item.name}
-                  onSelect={(item) => {
-                    setSelectedItemId(Number(item.id));
-                    setItemSearch(item.name);
+                  getId={(suggestion) => Number(suggestion.target.id)}
+                  getLabel={(suggestion) => suggestion.target.name}
+                  getConfidenceLabel={(suggestion) => suggestion.confidenceLabel}
+                  onSelect={(suggestion) => {
+                    setSelectedItemId(Number(suggestion.target.id));
+                    setItemSearch(suggestion.target.name);
                   }}
                 />
                 <input
@@ -604,11 +607,12 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
                   title="Default suggestions"
                   suggestions={recipeSuggestions}
                   selectedId={selectedRecipeId}
-                  getId={(recipe) => Number(recipe.id)}
-                  getLabel={(recipe) => recipe.name}
-                  onSelect={(recipe) => {
-                    setSelectedRecipeId(Number(recipe.id));
-                    setRecipeSearch(recipe.name);
+                  getId={(suggestion) => Number(suggestion.target.id)}
+                  getLabel={(suggestion) => suggestion.target.name}
+                  getConfidenceLabel={(suggestion) => suggestion.confidenceLabel}
+                  onSelect={(suggestion) => {
+                    setSelectedRecipeId(Number(suggestion.target.id));
+                    setRecipeSearch(suggestion.target.name);
                   }}
                 />
                 <input
@@ -731,13 +735,28 @@ function AliasTargetSearchList<T>(props: {
   );
 }
 
+type AliasSuggestionConfidenceLabel = 'likely' | 'related recipe' | 'inventory fallback';
+
+interface AliasSuggestion<T> {
+  target: T;
+  confidenceLabel: AliasSuggestionConfidenceLabel;
+  score: number;
+}
+
+interface AliasSuggestionSignal {
+  query: string;
+  confidenceLabel: AliasSuggestionConfidenceLabel;
+  baseScore: number;
+}
+
 function AliasSuggestionStrip<T>(props: {
   title: string;
-  suggestions: T[];
+  suggestions: AliasSuggestion<T>[];
   selectedId: number;
-  getId: (item: T) => number;
-  getLabel: (item: T) => string;
-  onSelect: (item: T) => void;
+  getId: (item: AliasSuggestion<T>) => number;
+  getLabel: (item: AliasSuggestion<T>) => string;
+  getConfidenceLabel: (item: AliasSuggestion<T>) => AliasSuggestionConfidenceLabel;
+  onSelect: (item: AliasSuggestion<T>) => void;
 }) {
   if (props.suggestions.length === 0) {
     return null;
@@ -761,7 +780,10 @@ function AliasSuggestionStrip<T>(props: {
                   : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-slate-100'
               }`}
             >
-              {props.getLabel(item)}
+              <span>{props.getLabel(item)}</span>
+              <span className="ml-2 rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]">
+                {props.getConfidenceLabel(item)}
+              </span>
             </button>
           );
         })}
@@ -774,12 +796,33 @@ function buildDefaultItemAliasSuggestions(
   items: Item[],
   draftAliasSeed: string,
   inferredRelationships: Array<{ prep_item: string; likely_used_in: string[]; confidence: number }>,
-): Item[] {
-  const queries = [
-    draftAliasSeed,
-    ...inferredRelationships.map((entry) => entry.prep_item),
+  aliasSeedContext: RecipeDraftAliasSeedContextPayload | null,
+): AliasSuggestion<Item>[] {
+  const signals: AliasSuggestionSignal[] = [
+    ...buildUniqueAliasSignals(
+      aliasSeedContext?.matched_prep_items.map((entry) => ({
+        query: entry.prep_item,
+        confidenceLabel: 'likely' as const,
+        baseScore: 145 + Math.round(entry.confidence * 12),
+      })) ?? [],
+    ),
+    ...buildUniqueAliasSignals(
+      inferredRelationships.map((entry) => ({
+        query: entry.prep_item,
+        confidenceLabel: 'likely' as const,
+        baseScore: 136 + Math.round(entry.confidence * 12),
+      })),
+    ),
+    ...buildUniqueAliasSignals([
+      {
+        query: draftAliasSeed,
+        confidenceLabel: 'inventory fallback' as const,
+        baseScore: 96,
+      },
+    ]),
   ];
-  return rankAliasTargets(items, queries, (item) => item.name, 5);
+
+  return rankAliasTargets(items, signals, (item) => item.name, 5);
 }
 
 function buildDefaultRecipeAliasSuggestions<T extends { id: number | string; name: string }>(
@@ -787,37 +830,106 @@ function buildDefaultRecipeAliasSuggestions<T extends { id: number | string; nam
   draftAliasSeed: string,
   likelyUsedIn: string[],
   inferredRelationships: Array<{ prep_item: string; likely_used_in: string[]; confidence: number }>,
-): T[] {
-  const queries = [
-    ...likelyUsedIn,
-    ...inferredRelationships.flatMap((entry) => entry.likely_used_in),
-    draftAliasSeed,
+  aliasSeedContext: RecipeDraftAliasSeedContextPayload | null,
+): AliasSuggestion<T>[] {
+  const signals: AliasSuggestionSignal[] = [
+    ...buildUniqueAliasSignals(
+      (aliasSeedContext?.related_recipe_names ?? []).map((entry) => ({
+        query: entry.name,
+        confidenceLabel: 'related recipe' as const,
+        baseScore: 148 + Math.round(entry.confidence * 12),
+      })),
+    ),
+    ...buildUniqueAliasSignals(
+      likelyUsedIn.map((entry) => ({
+        query: entry,
+        confidenceLabel: 'related recipe' as const,
+        baseScore: 140,
+      })),
+    ),
+    ...buildUniqueAliasSignals(
+      inferredRelationships.flatMap((entry) => entry.likely_used_in.map((recipeName) => ({
+        query: recipeName,
+        confidenceLabel: 'related recipe' as const,
+        baseScore: 136 + Math.round(entry.confidence * 12),
+      }))),
+    ),
+    ...buildUniqueAliasSignals([
+      {
+        query: draftAliasSeed,
+        confidenceLabel: 'likely' as const,
+        baseScore: 102,
+      },
+    ]),
   ];
-  return rankAliasTargets(recipes, queries, (recipe) => recipe.name, 5);
+
+  return rankAliasTargets(recipes, signals, (recipe) => recipe.name, 5);
 }
 
 function rankAliasTargets<T>(
   items: T[],
-  queries: string[],
+  signals: AliasSuggestionSignal[],
   getLabel: (item: T) => string,
   limit: number,
-): T[] {
-  const normalizedQueries = queries
-    .map(normalizeAliasSearchValue)
-    .filter((query, index, list) => query.length > 0 && list.indexOf(query) === index);
-  if (normalizedQueries.length === 0) {
+): AliasSuggestion<T>[] {
+  if (signals.length === 0) {
     return [];
   }
 
   return items
     .map((item) => ({
-      item,
-      score: normalizedQueries.reduce((best, query) => Math.max(best, scoreAliasTarget(query, normalizeAliasSearchValue(getLabel(item)))), 0),
+      target: item,
+      bestMatch: selectBestAliasSignal(signals, normalizeAliasSearchValue(getLabel(item))),
     }))
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => right.score - left.score || getLabel(left.item).localeCompare(getLabel(right.item)))
+    .filter((entry) => entry.bestMatch != null)
+    .map((entry) => ({
+      target: entry.target,
+      confidenceLabel: entry.bestMatch!.confidenceLabel,
+      score: entry.bestMatch!.score,
+    }))
+    .sort((left, right) => right.score - left.score || getLabel(left.target).localeCompare(getLabel(right.target)))
     .slice(0, limit)
-    .map((entry) => entry.item);
+    .map((entry) => entry);
+}
+
+function buildUniqueAliasSignals(signals: AliasSuggestionSignal[]): AliasSuggestionSignal[] {
+  const deduped = new Map<string, AliasSuggestionSignal>();
+  for (const signal of signals) {
+    const normalizedQuery = normalizeAliasSearchValue(signal.query);
+    if (normalizedQuery.length === 0) {
+      continue;
+    }
+    const key = `${signal.confidenceLabel}:${normalizedQuery}`;
+    const normalizedSignal = { ...signal, query: normalizedQuery };
+    const current = deduped.get(key);
+    if (!current || normalizedSignal.baseScore > current.baseScore) {
+      deduped.set(key, normalizedSignal);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
+function selectBestAliasSignal(
+  signals: AliasSuggestionSignal[],
+  target: string,
+): { confidenceLabel: AliasSuggestionConfidenceLabel; score: number } | null {
+  let best: { confidenceLabel: AliasSuggestionConfidenceLabel; score: number } | null = null;
+
+  for (const signal of signals) {
+    const matchScore = scoreAliasTarget(signal.query, target);
+    if (matchScore <= 0) {
+      continue;
+    }
+    const score = signal.baseScore + matchScore;
+    if (!best || score > best.score) {
+      best = {
+        confidenceLabel: signal.confidenceLabel,
+        score,
+      };
+    }
+  }
+
+  return best;
 }
 
 function scoreAliasTarget(query: string, target: string): number {

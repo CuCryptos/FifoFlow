@@ -74,6 +74,25 @@ interface RecipeIntelligencePrepSheetCaptureResult {
   inferred_relationships: RecipeIntelligencePrepSheetRelationship[];
 }
 
+interface RecipeAliasSeedPrepMatch {
+  prep_item: string;
+  confidence: number;
+  capture_date: string;
+}
+
+interface RecipeAliasSeedRelatedRecipe {
+  name: string;
+  confidence: number;
+  source_prep_item: string;
+  capture_date: string;
+}
+
+interface RecipeAliasSeedContext {
+  venue_id: number;
+  matched_prep_items: RecipeAliasSeedPrepMatch[];
+  related_recipe_names: RecipeAliasSeedRelatedRecipe[];
+}
+
 interface RecipeIntelligenceAiClient {
   createConversationDraftSeeds(input: {
     entries: Array<{ name: string; description: string }>;
@@ -411,11 +430,17 @@ export function createRecipeIntelligenceRoutes(
       return;
     }
 
+    const venueId = parseOptionalPositiveInteger(req.query.venue_id);
+    const aliasSeedContext = venueId != null
+      ? await buildVenueAliasSeedContext(repository, venueId, detail)
+      : null;
+
     res.json({
       draft_id: draftId,
       recipe_builder_job_id: detail.recipe_builder_job_id,
       draft: detail.draft,
       source_intelligence: detail.source_intelligence,
+      alias_seed_context: aliasSeedContext,
     });
   });
 
@@ -1040,6 +1065,165 @@ function normalizePrepSheetCapture(input: {
       })
       .filter((relationship) => relationship.prep_item.length > 0),
   };
+}
+
+async function buildVenueAliasSeedContext(
+  repository: SQLiteRecipeBuilderRepository,
+  venueId: number,
+  detail: {
+    draft: RecipeBuilderDraftRecipe;
+    source_intelligence: RecipeBuilderSourceIntelligence;
+  },
+): Promise<RecipeAliasSeedContext | null> {
+  const prepDraftName = detail.draft.draft_name.trim();
+  if (prepDraftName.length === 0) {
+    return null;
+  }
+
+  const captures = await repository.listPrepSheetCapturesByVenue(venueId, 60);
+  if (captures.length === 0) {
+    return null;
+  }
+
+  const matchedPrepItems = new Map<string, RecipeAliasSeedPrepMatch>();
+  const relatedRecipes = new Map<string, RecipeAliasSeedRelatedRecipe>();
+  const normalizedDraftName = normalizeAliasSeedValue(prepDraftName);
+
+  for (const capture of captures) {
+    const prepItems = normalizePrepSheetCapture({
+      prep_items: parseJsonArrayPayload(capture.parsed_items_json),
+      inferred_relationships: [],
+    }).prep_items;
+    const inferredRelationships = normalizePrepSheetCapture({
+      prep_items: [],
+      inferred_relationships: parseJsonArrayPayload(capture.inferred_relationships_json),
+    }).inferred_relationships;
+
+    for (const prepItem of prepItems) {
+      const matchScore = scoreAliasSeedMatch(normalizedDraftName, normalizeAliasSeedValue(prepItem.item_name));
+      if (matchScore <= 0) {
+        continue;
+      }
+
+      const prepKey = normalizeAliasSeedValue(prepItem.item_name);
+      const existingPrep = matchedPrepItems.get(prepKey);
+      if (!existingPrep || matchScore > existingPrep.confidence) {
+        matchedPrepItems.set(prepKey, {
+          prep_item: prepItem.item_name,
+          confidence: Number(matchScore.toFixed(2)),
+          capture_date: capture.capture_date,
+        });
+      }
+
+      for (const recipeName of prepItem.likely_used_in) {
+        upsertRelatedRecipeSeed(relatedRecipes, {
+          name: recipeName,
+          confidence: Math.max(matchScore, 0.72),
+          source_prep_item: prepItem.item_name,
+          capture_date: capture.capture_date,
+        });
+      }
+    }
+
+    for (const relationship of inferredRelationships) {
+      const matchScore = scoreAliasSeedMatch(normalizedDraftName, normalizeAliasSeedValue(relationship.prep_item));
+      if (matchScore <= 0) {
+        continue;
+      }
+
+      const prepKey = normalizeAliasSeedValue(relationship.prep_item);
+      const existingPrep = matchedPrepItems.get(prepKey);
+      const relationshipConfidence = Math.max(matchScore, relationship.confidence);
+      if (!existingPrep || relationshipConfidence > existingPrep.confidence) {
+        matchedPrepItems.set(prepKey, {
+          prep_item: relationship.prep_item,
+          confidence: Number(relationshipConfidence.toFixed(2)),
+          capture_date: capture.capture_date,
+        });
+      }
+
+      for (const recipeName of relationship.likely_used_in) {
+        upsertRelatedRecipeSeed(relatedRecipes, {
+          name: recipeName,
+          confidence: Math.max(matchScore, relationship.confidence),
+          source_prep_item: relationship.prep_item,
+          capture_date: capture.capture_date,
+        });
+      }
+    }
+  }
+
+  if (matchedPrepItems.size === 0 && relatedRecipes.size === 0) {
+    return null;
+  }
+
+  return {
+    venue_id: venueId,
+    matched_prep_items: Array.from(matchedPrepItems.values())
+      .sort((left, right) => right.confidence - left.confidence || right.capture_date.localeCompare(left.capture_date))
+      .slice(0, 6),
+    related_recipe_names: Array.from(relatedRecipes.values())
+      .sort((left, right) => right.confidence - left.confidence || right.capture_date.localeCompare(left.capture_date) || left.name.localeCompare(right.name))
+      .slice(0, 8),
+  };
+}
+
+function upsertRelatedRecipeSeed(
+  relatedRecipes: Map<string, RecipeAliasSeedRelatedRecipe>,
+  entry: RecipeAliasSeedRelatedRecipe,
+): void {
+  const normalizedName = normalizeAliasSeedValue(entry.name);
+  if (normalizedName.length === 0) {
+    return;
+  }
+
+  const existing = relatedRecipes.get(normalizedName);
+  if (!existing || entry.confidence > existing.confidence) {
+    relatedRecipes.set(normalizedName, {
+      ...entry,
+      confidence: Number(entry.confidence.toFixed(2)),
+    });
+  }
+}
+
+function parseJsonArrayPayload(value: string): unknown[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function scoreAliasSeedMatch(query: string, target: string): number {
+  if (!query || !target) {
+    return 0;
+  }
+  if (query === target) {
+    return 1;
+  }
+  if (target.startsWith(query) || query.startsWith(target)) {
+    return 0.9;
+  }
+  if (target.includes(query) || query.includes(target)) {
+    return 0.78;
+  }
+
+  const queryTokens = query.split(' ').filter(Boolean);
+  const targetTokens = new Set(target.split(' ').filter(Boolean));
+  if (queryTokens.length === 0 || targetTokens.size === 0) {
+    return 0;
+  }
+
+  const overlap = queryTokens.filter((token) => targetTokens.has(token)).length;
+  if (overlap === 0) {
+    return 0;
+  }
+  return Math.min(0.74, 0.42 + overlap * 0.12);
+}
+
+function normalizeAliasSeedValue(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function clampConfidenceScore(value: unknown): number {
