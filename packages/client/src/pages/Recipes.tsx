@@ -384,6 +384,12 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   const selectedItem = items.find((item) => Number(item.id) === selectedItemId) ?? null;
   const recipeOptions = recipesQuery.data ?? [];
   const selectedRecipe = recipeOptions.find((recipe) => Number(recipe.id) === selectedRecipeId) ?? null;
+  const source = sourceQuery.data?.source_intelligence ?? null;
+  const likelyUsedIn = source ? extractStringList(source.source_context.likely_used_in) : [];
+  const inferredRelationships = source ? extractPrepSheetInferredRelationships(source.source_context) : [];
+  const isPrepCapture = source != null && (
+    source.origin === 'prep_sheet' || sourceQuery.data?.draft.source_recipe_type === 'prep'
+  );
 
   const filteredItems = useMemo(() => {
     const query = itemSearch.trim().toLowerCase();
@@ -411,6 +417,15 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
     setRecipeSearch((current) => (current.trim().length === 0 ? draftAliasSeed : current));
   }, [draftAliasSeed]);
 
+  const itemSuggestions = useMemo(
+    () => buildDefaultItemAliasSuggestions(items, draftAliasSeed, inferredRelationships),
+    [draftAliasSeed, inferredRelationships, items],
+  );
+  const recipeSuggestions = useMemo(
+    () => buildDefaultRecipeAliasSuggestions(recipeOptions, draftAliasSeed, likelyUsedIn, inferredRelationships),
+    [draftAliasSeed, inferredRelationships, likelyUsedIn, recipeOptions],
+  );
+
   if (sourceQuery.isLoading) {
     return (
       <WorkflowPanel
@@ -437,18 +452,7 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
     return null;
   }
 
-  const source = sourceQuery.data.source_intelligence;
-  const inferredRelationships = extractPrepSheetInferredRelationships(source.source_context);
-  const likelyUsedIn = extractStringList(source.source_context.likely_used_in);
-  const isPrepCapture = source.origin === 'prep_sheet' || sourceQuery.data.draft.source_recipe_type === 'prep';
-  const itemSuggestions = useMemo(
-    () => buildDefaultItemAliasSuggestions(items, draftAliasSeed, inferredRelationships),
-    [draftAliasSeed, inferredRelationships, items],
-  );
-  const recipeSuggestions = useMemo(
-    () => buildDefaultRecipeAliasSuggestions(recipeOptions, draftAliasSeed, likelyUsedIn, inferredRelationships),
-    [draftAliasSeed, inferredRelationships, likelyUsedIn, recipeOptions],
-  );
+  const confirmedSource = sourceQuery.data.source_intelligence;
 
   return (
     <WorkflowPanel
@@ -481,30 +485,30 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
         <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Origin</div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">{source.origin.replaceAll('_', ' ')}</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">{confirmedSource.origin.replaceAll('_', ' ')}</div>
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Confidence</div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">{source.confidence_level} • {source.confidence_score}</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">{confirmedSource.confidence_level} • {confirmedSource.confidence_score}</div>
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Capture Session</div>
             <div className="mt-2 text-sm font-medium text-slate-900">
-              {source.capture_session_id != null ? `Session #${source.capture_session_id}` : 'No session attached'}
+              {confirmedSource.capture_session_id != null ? `Session #${confirmedSource.capture_session_id}` : 'No session attached'}
             </div>
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Raw Source</div>
             <div className="mt-2 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-              {source.raw_source || 'No raw source stored.'}
+              {confirmedSource.raw_source || 'No raw source stored.'}
             </div>
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <RecipeIntelListBlock title="Assumptions" items={source.assumptions} emptyLabel="No assumptions recorded." />
-          <RecipeIntelListBlock title="Follow-up Questions" items={source.follow_up_questions} emptyLabel="No follow-up questions recorded." />
-          <RecipeIntelListBlock title="Parsing Issues" items={source.parsing_issues} emptyLabel="No parsing issues recorded." />
-          <RecipeIntelListBlock title="Confidence Details" items={source.confidence_details} emptyLabel="No confidence details recorded." />
+          <RecipeIntelListBlock title="Assumptions" items={confirmedSource.assumptions} emptyLabel="No assumptions recorded." />
+          <RecipeIntelListBlock title="Follow-up Questions" items={confirmedSource.follow_up_questions} emptyLabel="No follow-up questions recorded." />
+          <RecipeIntelListBlock title="Parsing Issues" items={confirmedSource.parsing_issues} emptyLabel="No parsing issues recorded." />
+          <RecipeIntelListBlock title="Confidence Details" items={confirmedSource.confidence_details} emptyLabel="No confidence details recorded." />
         </div>
       </div>
       {isPrepCapture ? (
