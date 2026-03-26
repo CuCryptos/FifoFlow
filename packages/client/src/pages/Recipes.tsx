@@ -369,8 +369,10 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
     queryFn: () => api.recipes.list(),
   });
   const [selectedItemId, setSelectedItemId] = useState<number>(0);
+  const [itemSearch, setItemSearch] = useState('');
   const [itemAliasValue, setItemAliasValue] = useState('');
   const [selectedRecipeId, setSelectedRecipeId] = useState<number>(0);
+  const [recipeSearch, setRecipeSearch] = useState('');
   const [recipeAliasValue, setRecipeAliasValue] = useState('');
   const itemAliasesQuery = useRecipeIntelligenceItemAliases(selectedItemId);
   const recipeAliasesQuery = useRecipeIntelligenceRecipeAliases(selectedRecipeId);
@@ -379,6 +381,25 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   const addRecipeAlias = useAddRecipeIntelligenceRecipeAlias();
   const deleteRecipeAlias = useDeleteRecipeIntelligenceRecipeAlias();
   const draftAliasSeed = sourceQuery.data?.draft.draft_name ?? '';
+  const selectedItem = items.find((item) => Number(item.id) === selectedItemId) ?? null;
+  const recipeOptions = recipesQuery.data ?? [];
+  const selectedRecipe = recipeOptions.find((recipe) => Number(recipe.id) === selectedRecipeId) ?? null;
+
+  const filteredItems = useMemo(() => {
+    const query = itemSearch.trim().toLowerCase();
+    const ranked = query.length === 0
+      ? items
+      : items.filter((item) => item.name.toLowerCase().includes(query) || item.category.toLowerCase().includes(query));
+    return ranked.slice(0, 8);
+  }, [itemSearch, items]);
+
+  const filteredRecipes = useMemo(() => {
+    const query = recipeSearch.trim().toLowerCase();
+    const ranked = query.length === 0
+      ? recipeOptions
+      : recipeOptions.filter((recipe) => recipe.name.toLowerCase().includes(query));
+    return ranked.slice(0, 8);
+  }, [recipeSearch, recipeOptions]);
 
   useEffect(() => {
     if (!draftAliasSeed) {
@@ -386,6 +407,8 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
     }
     setItemAliasValue((current) => (current.trim().length === 0 ? draftAliasSeed : current));
     setRecipeAliasValue((current) => (current.trim().length === 0 ? draftAliasSeed : current));
+    setItemSearch((current) => (current.trim().length === 0 ? draftAliasSeed : current));
+    setRecipeSearch((current) => (current.trim().length === 0 ? draftAliasSeed : current));
   }, [draftAliasSeed]);
 
   if (sourceQuery.isLoading) {
@@ -490,16 +513,29 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
             <div className="rounded-3xl border border-slate-200 bg-white p-5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Inventory Item Alias</div>
               <div className="mt-4 space-y-3">
-                <select
-                  value={selectedItemId}
-                  onChange={(event) => setSelectedItemId(Number(event.target.value))}
+                <input
+                  value={itemSearch}
+                  onChange={(event) => setItemSearch(event.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
-                >
-                  <option value={0}>Select inventory item</option>
-                  {items.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
-                </select>
+                  placeholder="Search inventory items"
+                />
+                <AliasTargetSearchList<Item>
+                  items={filteredItems}
+                  selectedId={selectedItemId}
+                  getId={(item) => Number(item.id)}
+                  getLabel={(item) => item.name}
+                  getMeta={(item) => item.category}
+                  emptyLabel="No inventory items match this search."
+                  onSelect={(item) => {
+                    setSelectedItemId(Number(item.id));
+                    setItemSearch(item.name);
+                  }}
+                />
+                {selectedItem ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                    Selected: <span className="font-semibold">{selectedItem.name}</span> • {selectedItem.category}
+                  </div>
+                ) : null}
                 <input
                   value={itemAliasValue}
                   onChange={(event) => setItemAliasValue(event.target.value)}
@@ -541,16 +577,29 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
             <div className="rounded-3xl border border-slate-200 bg-white p-5">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe Alias</div>
               <div className="mt-4 space-y-3">
-                <select
-                  value={selectedRecipeId}
-                  onChange={(event) => setSelectedRecipeId(Number(event.target.value))}
+                <input
+                  value={recipeSearch}
+                  onChange={(event) => setRecipeSearch(event.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
-                >
-                  <option value={0}>Select recipe</option>
-                  {(recipesQuery.data ?? []).map((recipe) => (
-                    <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
-                  ))}
-                </select>
+                  placeholder="Search recipes"
+                />
+                <AliasTargetSearchList<{ id: number | string; name: string; type?: string | null }>
+                  items={filteredRecipes}
+                  selectedId={selectedRecipeId}
+                  getId={(recipe) => Number(recipe.id)}
+                  getLabel={(recipe) => recipe.name}
+                  getMeta={(recipe) => recipe.type ?? ''}
+                  emptyLabel="No recipes match this search."
+                  onSelect={(recipe) => {
+                    setSelectedRecipeId(Number(recipe.id));
+                    setRecipeSearch(recipe.name);
+                  }}
+                />
+                {selectedRecipe ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                    Selected: <span className="font-semibold">{selectedRecipe.name}</span>{selectedRecipe.type ? ` • ${selectedRecipe.type}` : ''}
+                  </div>
+                ) : null}
                 <input
                   value={recipeAliasValue}
                   onChange={(event) => setRecipeAliasValue(event.target.value)}
@@ -606,6 +655,46 @@ function formatRecipeCurrency(value: number | null): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function AliasTargetSearchList<T>(props: {
+  items: T[];
+  selectedId: number;
+  getId: (item: T) => number;
+  getLabel: (item: T) => string;
+  getMeta?: (item: T) => string;
+  emptyLabel: string;
+  onSelect: (item: T) => void;
+}) {
+  if (props.items.length === 0) {
+    return <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-500">{props.emptyLabel}</div>;
+  }
+
+  return (
+    <div className="max-h-48 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-2">
+      {props.items.map((item) => {
+        const id = props.getId(item);
+        const isSelected = id === props.selectedId;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => props.onSelect(item)}
+            className={`w-full rounded-2xl border px-3 py-2 text-left text-sm transition ${
+              isSelected
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                : 'border-transparent bg-white text-slate-900 hover:border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <div className="font-medium">{props.getLabel(item)}</div>
+            {props.getMeta ? (
+              <div className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{props.getMeta(item)}</div>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function formatYield(summary: OperationalRecipeWorkflowSummaryPayload): string {
