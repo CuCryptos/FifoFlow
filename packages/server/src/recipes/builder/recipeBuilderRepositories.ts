@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import Database from 'better-sqlite3';
 import type {
+  CreateRecipeCaptureSessionInput,
+  RecalculateRecipeDraftConfidenceInput,
+  RecipeBuilderSourceIntelligence,
+  RecipeCaptureInput,
+  RecipeCaptureSession,
   RecipeBuilderDraftRecipe,
   RecipeBuilderJob,
   RecipeBuilderParsedRow,
@@ -434,6 +439,219 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return row ? mapDraftRow(row) : null;
   }
 
+  async createCaptureSession(input: CreateRecipeCaptureSessionInput): Promise<RecipeCaptureSession> {
+    const result = this.db.prepare(
+      `
+        INSERT INTO recipe_capture_sessions (
+          venue_id,
+          name,
+          capture_mode,
+          led_by,
+          notes
+        ) VALUES (?, ?, ?, ?, ?)
+      `,
+    ).run(
+      input.venue_id ?? null,
+      input.name ?? null,
+      input.capture_mode,
+      input.led_by ?? null,
+      input.notes ?? null,
+    );
+
+    return this.getCaptureSessionById(Number(result.lastInsertRowid));
+  }
+
+  async listCaptureSessions(filters?: {
+    venue_id?: number | null;
+    status?: 'open' | 'completed';
+  }): Promise<RecipeCaptureSession[]> {
+    const clauses: string[] = [];
+    const params: Array<number | string> = [];
+
+    if (filters?.venue_id != null) {
+      clauses.push('venue_id = ?');
+      params.push(filters.venue_id);
+    }
+    if (filters?.status === 'open') {
+      clauses.push('completed_at IS NULL');
+    } else if (filters?.status === 'completed') {
+      clauses.push('completed_at IS NOT NULL');
+    }
+
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const rows = this.db.prepare(
+      `
+        SELECT *
+        FROM recipe_capture_sessions
+        ${where}
+        ORDER BY started_at DESC, id DESC
+      `,
+    ).all(...params) as CaptureSessionRow[];
+
+    return rows.map(mapCaptureSessionRow);
+  }
+
+  async getCaptureSession(sessionId: number | string): Promise<RecipeCaptureSession | null> {
+    const row = this.db.prepare(
+      'SELECT * FROM recipe_capture_sessions WHERE id = ? LIMIT 1',
+    ).get(sessionId) as CaptureSessionRow | undefined;
+    return row ? mapCaptureSessionRow(row) : null;
+  }
+
+  async listCaptureInputs(sessionId: number | string): Promise<RecipeCaptureInput[]> {
+    const rows = this.db.prepare(
+      `
+        SELECT *
+        FROM recipe_capture_inputs
+        WHERE recipe_capture_session_id = ?
+        ORDER BY created_at ASC, id ASC
+      `,
+    ).all(sessionId) as CaptureInputRow[];
+
+    return rows.map(mapCaptureInputRow);
+  }
+
+  async listDraftRecipesByCaptureSession(sessionId: number | string): Promise<RecipeBuilderDraftRecipe[]> {
+    const rows = this.db.prepare(
+      `
+        SELECT d.*
+        FROM recipe_builder_draft_recipes d
+        INNER JOIN recipe_builder_jobs j ON j.id = d.recipe_builder_job_id
+        WHERE j.capture_session_id = ?
+        ORDER BY d.updated_at DESC, d.id DESC
+      `,
+    ).all(sessionId) as DraftRow[];
+
+    return rows.map(mapDraftRow);
+  }
+
+  async getDraftSourceIntelligenceByDraftId(draftId: number | string): Promise<{
+    recipe_builder_job_id: number | string;
+    source_intelligence: RecipeBuilderSourceIntelligence;
+    draft: RecipeBuilderDraftRecipe;
+  } | null> {
+    const row = this.db.prepare(
+      `
+        SELECT
+          d.recipe_builder_job_id AS recipe_builder_job_id,
+          j.*,
+          d.id AS draft_id
+        FROM recipe_builder_draft_recipes d
+        INNER JOIN recipe_builder_jobs j ON j.id = d.recipe_builder_job_id
+        WHERE d.id = ?
+        LIMIT 1
+      `,
+    ).get(draftId) as (JobRow & { recipe_builder_job_id: number; draft_id: number }) | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    const draft = this.getDraftRecipeById(Number(draftId));
+
+    return {
+      recipe_builder_job_id: row.recipe_builder_job_id,
+      source_intelligence: mapJobRow(row),
+      draft,
+    };
+  }
+
+  async recalculateDraftConfidence(
+    draftId: number | string,
+    input: RecalculateRecipeDraftConfidenceInput,
+  ): Promise<{
+    draft_id: number | string;
+    recipe_builder_job_id: number | string;
+    confidence_level: RecipeBuilderJob['confidence_level'];
+    confidence_score: number;
+    factors: Array<{ factor: string; impact: number; detail: string }>;
+    source_intelligence: RecipeBuilderSourceIntelligence;
+  } | null> {
+    const draft = this.db.prepare(
+      `
+        SELECT *
+        FROM recipe_builder_draft_recipes
+        WHERE id = ?
+        LIMIT 1
+      `,
+    ).get(draftId) as DraftRow | undefined;
+
+    if (!draft) {
+      return null;
+    }
+
+    const rows = await this.listResolutionRows(draft.recipe_builder_job_id);
+    const parsedRows = await this.listParsedRows(draft.recipe_builder_job_id);
+    const readyRows = rows.filter((row) => row.review_status === 'READY').length;
+    const blockedRows = rows.filter((row) => row.review_status === 'BLOCKED').length;
+    const mappedInventoryRows = rows.filter((row) => row.inventory_mapping_status === 'MAPPED').length;
+
+    const ingredientCount = Math.max(parsedRows.length, draft.ingredient_row_count, 1);
+    const completenessPct = readyRows / ingredientCount;
+    const inventoryPct = mappedInventoryRows / ingredientCount;
+
+    const factors = [
+      {
+        factor: 'row_completeness',
+        impact: Math.round(completenessPct * 45),
+        detail: `${readyRows}/${ingredientCount} rows are review-ready`,
+      },
+      {
+        factor: 'inventory_mapping',
+        impact: Math.round(inventoryPct * 30),
+        detail: `${mappedInventoryRows}/${ingredientCount} rows are inventory-mapped`,
+      },
+      {
+        factor: 'blocked_rows',
+        impact: blockedRows === 0 ? 15 : Math.max(0, 15 - blockedRows * 10),
+        detail: blockedRows === 0 ? 'No blocked rows remain' : `${blockedRows} blocked rows remain`,
+      },
+      {
+        factor: 'operator_trigger',
+        impact: input.trigger === 'operator_review' ? 10 : 5,
+        detail: `Recalculated from ${input.trigger}`,
+      },
+    ];
+
+    const confidenceScore = Math.max(0, Math.min(100, factors.reduce((sum, factor) => sum + factor.impact, 0)));
+    const confidenceLevel: RecipeBuilderJob['confidence_level'] =
+      confidenceScore >= 90 ? 'verified'
+      : confidenceScore >= 75 ? 'reviewed'
+      : confidenceScore >= 50 ? 'estimated'
+      : 'draft';
+
+    this.db.prepare(
+      `
+        UPDATE recipe_builder_jobs
+        SET confidence_level = ?,
+            confidence_score = ?,
+            confidence_details_json = ?,
+            last_confidence_recalculated_at = datetime('now'),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `,
+    ).run(
+      confidenceLevel,
+      confidenceScore,
+      JSON.stringify(factors.map((factor) => factor.detail)),
+      draft.recipe_builder_job_id,
+    );
+
+    const job = await this.getJob(draft.recipe_builder_job_id);
+    if (!job) {
+      return null;
+    }
+
+    return {
+      draft_id: draft.id,
+      recipe_builder_job_id: draft.recipe_builder_job_id,
+      confidence_level: confidenceLevel,
+      confidence_score: confidenceScore,
+      factors,
+      source_intelligence: extractSourceIntelligence(job),
+    };
+  }
+
   private getJobById(id: number): RecipeBuilderJob {
     const row = this.db.prepare('SELECT * FROM recipe_builder_jobs WHERE id = ? LIMIT 1').get(id) as JobRow;
     return mapJobRow(row);
@@ -447,6 +665,11 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
   private getDraftRecipeByJobId(jobId: number | string): RecipeBuilderDraftRecipe {
     const row = this.db.prepare('SELECT * FROM recipe_builder_draft_recipes WHERE recipe_builder_job_id = ? LIMIT 1').get(jobId) as DraftRow;
     return mapDraftRow(row);
+  }
+
+  private getCaptureSessionById(id: number): RecipeCaptureSession {
+    const row = this.db.prepare('SELECT * FROM recipe_capture_sessions WHERE id = ? LIMIT 1').get(id) as CaptureSessionRow;
+    return mapCaptureSessionRow(row);
   }
 }
 
@@ -558,6 +781,42 @@ interface DraftRow {
   updated_at: string;
 }
 
+interface CaptureSessionRow {
+  id: number;
+  venue_id: number | null;
+  name: string | null;
+  capture_mode: RecipeCaptureSession['capture_mode'];
+  started_at: string;
+  completed_at: string | null;
+  led_by: string | null;
+  notes: string | null;
+  total_inputs: number;
+  total_drafts_created: number;
+  total_auto_matched: number;
+  total_needs_review: number;
+  total_approved: number;
+  estimated_time_saved_minutes: number;
+  discovered_sub_recipes_json: string;
+  new_items_needed_json: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CaptureInputRow {
+  id: number;
+  recipe_capture_session_id: number;
+  input_type: RecipeCaptureInput['input_type'];
+  source_text: string | null;
+  source_file_name: string | null;
+  source_mime_type: string | null;
+  source_storage_path: string | null;
+  parse_status: RecipeCaptureInput['parse_status'];
+  recipe_builder_job_id: number | null;
+  processing_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface TemplateSourceRow {
   template_id: number;
   template_name: string;
@@ -642,6 +901,18 @@ function mapDraftRow(row: DraftRow): RecipeBuilderDraftRecipe {
   };
 }
 
+function mapCaptureSessionRow(row: CaptureSessionRow): RecipeCaptureSession {
+  return {
+    ...row,
+  };
+}
+
+function mapCaptureInputRow(row: CaptureInputRow): RecipeCaptureInput {
+  return {
+    ...row,
+  };
+}
+
 function buildBuilderSourceHash(input: RecipeBuilderRequest): string {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex');
 }
@@ -671,4 +942,22 @@ function parseAlternativeMatches(value: string): RecipeBuilderParsedRow['alterna
   } catch {
     return [];
   }
+}
+
+function extractSourceIntelligence(job: RecipeBuilderJob): RecipeBuilderSourceIntelligence {
+  return {
+    origin: job.origin,
+    confidence_level: job.confidence_level,
+    confidence_score: job.confidence_score,
+    confidence_details: job.confidence_details,
+    source_images: job.source_images,
+    parsing_issues: job.parsing_issues,
+    assumptions: job.assumptions,
+    follow_up_questions: job.follow_up_questions,
+    source_context: job.source_context,
+    raw_source: job.raw_source,
+    capture_session_id: job.capture_session_id,
+    last_confidence_recalculated_at: job.last_confidence_recalculated_at,
+    inference_variance_pct: job.inference_variance_pct,
+  };
 }

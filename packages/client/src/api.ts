@@ -51,6 +51,16 @@ import type {
   SaleWithItem,
   SalesSummary,
   CreateSaleInput,
+  CreateItemAliasInput,
+  CreateRecipeAliasInput,
+  CreateRecipeCaptureSessionInput,
+  CreateRecipeInferenceRunInput,
+  RecalculateRecipeDraftConfidenceInput,
+  RecipeBuilderDraftRecipe,
+  RecipeBuilderSourceIntelligence,
+  RecipeCaptureInput,
+  RecipeCaptureSession,
+  StartRecipeConversationDraftInput,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -790,6 +800,32 @@ export interface RecipeDraftPromotionResultPayload {
   } | null;
 }
 
+export interface RecipeIntelligenceSessionDetailPayload {
+  session: RecipeCaptureSession;
+  inputs: RecipeCaptureInput[];
+  drafts: RecipeBuilderDraftRecipe[];
+}
+
+export interface RecipeDraftSourcePayload {
+  draft_id: number | string;
+  recipe_builder_job_id: number | string;
+  draft: RecipeBuilderDraftRecipe;
+  source_intelligence: RecipeBuilderSourceIntelligence;
+}
+
+export interface RecipeDraftConfidenceRecalculationPayload {
+  draft_id: number | string;
+  recipe_builder_job_id: number | string;
+  confidence_level: RecipeBuilderSourceIntelligence['confidence_level'];
+  confidence_score: number;
+  factors: Array<{
+    factor: string;
+    impact: number;
+    detail: string;
+  }>;
+  source_intelligence: RecipeBuilderSourceIntelligence;
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -1119,6 +1155,54 @@ export const api = {
         draft: RecipeDraftDetailPayload | null;
         promotion: RecipeDraftPromotionResultPayload;
       }>(`/recipe-drafts/${id}/promote`, { method: 'POST', body: JSON.stringify(data ?? {}) }),
+  },
+  recipeIntelligence: {
+    listSessions: (params?: { venue_id?: number; status?: 'open' | 'completed' }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      if (params?.status) qs.set('status', params.status);
+      const query = qs.toString();
+      return fetchJson<{ sessions: RecipeCaptureSession[] }>(`/recipe-intelligence/sessions${query ? `?${query}` : ''}`);
+    },
+    createSession: (data: CreateRecipeCaptureSessionInput) =>
+      fetchJson<{ session: RecipeCaptureSession }>('/recipe-intelligence/sessions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    createBlitzSession: (data: Omit<CreateRecipeCaptureSessionInput, 'capture_mode'> & { name?: string | null }) =>
+      fetchJson<{ session: RecipeCaptureSession }>('/recipe-intelligence/blitz-sessions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getSession: (sessionId: number) =>
+      fetchJson<RecipeIntelligenceSessionDetailPayload>(`/recipe-intelligence/sessions/${sessionId}`),
+    getDraftSource: (draftId: number) =>
+      fetchJson<RecipeDraftSourcePayload>(`/recipe-intelligence/drafts/${draftId}/source`),
+    recalculateDraftConfidence: (draftId: number, data: RecalculateRecipeDraftConfidenceInput) =>
+      fetchJson<RecipeDraftConfidenceRecalculationPayload>(`/recipe-intelligence/drafts/${draftId}/recalculate-confidence`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    createConversationDrafts: (data: StartRecipeConversationDraftInput) =>
+      fetchJson<unknown>('/recipe-intelligence/conversation-drafts', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    createInferenceRun: (data: CreateRecipeInferenceRunInput) =>
+      fetchJson<unknown>('/recipe-intelligence/inference-runs', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    addItemAlias: (itemId: number, data: CreateItemAliasInput) =>
+      fetchJson<unknown>(`/recipe-intelligence/items/${itemId}/aliases`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    addRecipeAlias: (recipeId: number, data: CreateRecipeAliasInput) =>
+      fetchJson<unknown>(`/recipe-intelligence/recipes/${recipeId}/aliases`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
   recipeTemplates: {
     list: () => fetchJson<{ templates: RecipeTemplateSummaryPayload[] }>('/recipe-templates'),
