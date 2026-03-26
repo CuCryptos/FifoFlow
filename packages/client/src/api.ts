@@ -56,6 +56,7 @@ import type {
   CreateRecipeCaptureSessionInput,
   CreateRecipeInferenceRunInput,
   RecalculateRecipeDraftConfidenceInput,
+  RecipeBuilderJobInput,
   RecipeBuilderDraftRecipe,
   RecipeBuilderSourceIntelligence,
   RecipeCaptureInput,
@@ -826,6 +827,29 @@ export interface RecipeDraftConfidenceRecalculationPayload {
   source_intelligence: RecipeBuilderSourceIntelligence;
 }
 
+export interface RecipeIntelligenceDraftRunPayload {
+  draft_id: number | string;
+  recipe_builder_job_id: number | string;
+  draft: RecipeBuilderDraftRecipe;
+  job: RecipeBuilderJobInput;
+  source_intelligence: RecipeBuilderSourceIntelligence;
+  run_summary: {
+    parsed_rows_created: number;
+    parsed_rows_total: number;
+    ready_rows: number;
+    review_rows: number;
+    blocked_rows: number;
+    unresolved_canonical_rows: number;
+    unresolved_inventory_rows: number;
+  };
+  notes: string[];
+}
+
+export interface RecipeIntelligenceDraftCreationPayload {
+  session: RecipeCaptureSession;
+  drafts: RecipeIntelligenceDraftRunPayload[];
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -1184,10 +1208,39 @@ export const api = {
         body: JSON.stringify(data),
       }),
     createConversationDrafts: (data: StartRecipeConversationDraftInput) =>
-      fetchJson<unknown>('/recipe-intelligence/conversation-drafts', {
+      fetchJson<RecipeIntelligenceDraftCreationPayload>('/recipe-intelligence/conversation-drafts', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    uploadPhotoDrafts: async (input: {
+      files: File[];
+      venue_id?: number | null;
+      session_name?: string | null;
+      created_by?: string | null;
+    }) => {
+      const formData = new FormData();
+      for (const file of input.files) {
+        formData.append('files', file);
+      }
+      if (input.venue_id != null) {
+        formData.append('venue_id', String(input.venue_id));
+      }
+      if (input.session_name) {
+        formData.append('session_name', input.session_name);
+      }
+      if (input.created_by) {
+        formData.append('created_by', input.created_by);
+      }
+      const res = await fetch(`${BASE}/recipe-intelligence/photo-drafts`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(typeof error.error === 'string' ? error.error : res.statusText);
+      }
+      return res.json() as Promise<RecipeIntelligenceDraftCreationPayload>;
+    },
     createInferenceRun: (data: CreateRecipeInferenceRunInput) =>
       fetchJson<unknown>('/recipe-intelligence/inference-runs', {
         method: 'POST',

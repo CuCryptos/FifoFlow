@@ -6,6 +6,49 @@ import { initializeDb } from '../db.js';
 import { createRecipeIntelligenceRoutes } from '../routes/recipeIntelligence.js';
 import { SQLiteRecipeBuilderRepository } from '../recipes/builder/index.js';
 
+const stubAi = {
+  async createConversationDraftSeeds() {
+    return [
+      {
+        draft_name: 'Miso Butterfish',
+        source_text: '6 oz butterfish\n2 oz miso glaze\n4 oz white rice',
+        draft_notes: 'Derived from chef conversation.',
+        yield_quantity: 4,
+        yield_unit: 'plate',
+        serving_quantity: 6,
+        serving_unit: 'oz',
+        serving_count: 4,
+        source_recipe_type: 'dish' as const,
+        method_notes: 'Glaze fish and plate with rice.',
+        assumptions: ['Rice portion was inferred from plating description'],
+        follow_up_questions: ['Confirm vegetable garnish'],
+        parsing_issues: [],
+        confidence_score: 78,
+      },
+    ];
+  },
+  async createPhotoDraftSeeds() {
+    return [
+      {
+        draft_name: 'Beurre Blanc',
+        source_text: '2 qt cream\n1 lb butter\n8 oz white wine',
+        draft_notes: 'Recovered from uploaded recipe card.',
+        yield_quantity: 2,
+        yield_unit: 'qt',
+        serving_quantity: null,
+        serving_unit: null,
+        serving_count: null,
+        source_recipe_type: 'prep' as const,
+        method_notes: 'Reduce wine, mount butter, finish cream.',
+        assumptions: [],
+        follow_up_questions: ['Confirm shallot quantity'],
+        parsing_issues: ['Card image did not clearly show garnish note'],
+        confidence_score: 72,
+      },
+    ];
+  },
+};
+
 describe('Recipe intelligence routes', () => {
   let db: Database.Database;
   let app: express.Express;
@@ -19,7 +62,7 @@ describe('Recipe intelligence routes', () => {
 
     app = express();
     app.use(express.json());
-    app.use('/api/recipe-intelligence', createRecipeIntelligenceRoutes(db));
+    app.use('/api/recipe-intelligence', createRecipeIntelligenceRoutes(db, { ai: stubAi }));
     app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       res.status(500).json({ error: err.message });
     });
@@ -208,14 +251,66 @@ describe('Recipe intelligence routes', () => {
     );
   });
 
-  it('returns explicit not implemented responses for future route shells', async () => {
+  it('creates conversation and photo drafts using the intelligence route', async () => {
     const conversationResponse = await request(app)
       .post('/api/recipe-intelligence/conversation-drafts')
       .send({
         venue_id: 1,
+        session_name: 'Chef Notes',
+        created_by: 'chef',
         entries: [{ name: 'Miso Butterfish', description: 'Butterfish with miso glaze' }],
       });
-    expect(conversationResponse.status).toBe(501);
+
+    expect(conversationResponse.status).toBe(201);
+    expect(conversationResponse.body.session).toMatchObject({
+      venue_id: 1,
+      capture_mode: 'conversation_batch',
+      total_drafts_created: 1,
+    });
+    expect(conversationResponse.body.drafts).toEqual([
+      expect.objectContaining({
+        draft: expect.objectContaining({
+          draft_name: 'Miso Butterfish',
+          method_notes: 'Glaze fish and plate with rice.',
+        }),
+        source_intelligence: expect.objectContaining({
+          origin: 'conversational',
+          confidence_level: 'reviewed',
+          assumptions: ['Rice portion was inferred from plating description'],
+        }),
+      }),
+    ]);
+
+    const photoResponse = await request(app)
+      .post('/api/recipe-intelligence/photo-drafts')
+      .field('venue_id', '1')
+      .field('session_name', 'Recipe Cards')
+      .field('created_by', 'chef')
+      .attach('files', Buffer.from('fake image bytes'), {
+        filename: 'recipe-card.png',
+        contentType: 'image/png',
+      });
+
+    expect(photoResponse.status).toBe(201);
+    expect(photoResponse.body.session).toMatchObject({
+      venue_id: 1,
+      capture_mode: 'single_photo',
+      total_drafts_created: 1,
+    });
+    expect(photoResponse.body.drafts).toEqual([
+      expect.objectContaining({
+        draft: expect.objectContaining({
+          draft_name: 'Beurre Blanc',
+          source_recipe_type: 'prep',
+        }),
+        source_intelligence: expect.objectContaining({
+          origin: 'photo_ingestion',
+          confidence_level: 'estimated',
+          parsing_issues: ['Card image did not clearly show garnish note'],
+          source_images: ['recipe-card.png'],
+        }),
+      }),
+    ]);
 
     const prepResponse = await request(app)
       .post('/api/recipe-intelligence/prep-sheet-captures')

@@ -13,6 +13,7 @@ const Activity = lazy(async () => ({ default: (await import('./pages/Activity'))
 const Counts = lazy(async () => ({ default: (await import('./pages/Counts')).Counts }));
 const Orders = lazy(async () => ({ default: (await import('./pages/Orders')).Orders }));
 const Recipes = lazy(async () => ({ default: (await import('./pages/Recipes')).Recipes }));
+const RecipeIntelligenceWorkspace = lazy(async () => ({ default: (await import('./pages/RecipeIntelligenceWorkspace')).RecipeIntelligenceWorkspace }));
 const DraftRecipeDetailPage = lazy(async () => ({ default: (await import('./pages/Recipes')).DraftRecipeDetailPage }));
 const PromotedRecipeDetailPage = lazy(async () => ({ default: (await import('./pages/Recipes')).PromotedRecipeDetailPage }));
 const Reports = lazy(async () => ({ default: (await import('./pages/Reports')).Reports }));
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="/inventory/:id" element={<RoutedPage><ItemDetail /></RoutedPage>} />
                 <Route path="/orders" element={<RoutedPage><Orders /></RoutedPage>} />
                 <Route path="/recipes" element={<RoutedPage><Recipes /></RoutedPage>} />
+                <Route path="/recipes/intelligence" element={<RoutedPage><RecipeIntelligenceWorkspace /></RoutedPage>} />
                 <Route path="/recipes/drafts/:draftId" element={<RoutedPage><DraftRecipeDetailPage /></RoutedPage>} />
                 <Route path="/recipes/promoted/:recipeVersionId" element={<RoutedPage><PromotedRecipeDetailPage /></RoutedPage>} />
                 <Route path="/allergens" element={<RoutedPage><Allergens /></RoutedPage>} />

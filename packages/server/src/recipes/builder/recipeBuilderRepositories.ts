@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import Database from 'better-sqlite3';
 import type {
   CreateRecipeCaptureSessionInput,
+  RecipeOrigin,
   RecalculateRecipeDraftConfidenceInput,
   RecipeBuilderSourceIntelligence,
   RecipeCaptureInput,
@@ -525,6 +526,163 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return rows.map(mapDraftRow);
   }
 
+  async createCaptureInput(input: {
+    recipe_capture_session_id: number | string;
+    input_type: RecipeCaptureInput['input_type'];
+    source_text?: string | null;
+    source_file_name?: string | null;
+    source_mime_type?: string | null;
+    source_storage_path?: string | null;
+    parse_status?: RecipeCaptureInput['parse_status'];
+    recipe_builder_job_id?: number | string | null;
+    processing_notes?: string | null;
+  }): Promise<RecipeCaptureInput> {
+    const result = this.db.prepare(
+      `
+        INSERT INTO recipe_capture_inputs (
+          recipe_capture_session_id,
+          input_type,
+          source_text,
+          source_file_name,
+          source_mime_type,
+          source_storage_path,
+          parse_status,
+          recipe_builder_job_id,
+          processing_notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    ).run(
+      input.recipe_capture_session_id,
+      input.input_type,
+      input.source_text ?? null,
+      input.source_file_name ?? null,
+      input.source_mime_type ?? null,
+      input.source_storage_path ?? null,
+      input.parse_status ?? 'PROCESSED',
+      input.recipe_builder_job_id ?? null,
+      input.processing_notes ?? null,
+    );
+
+    const row = this.db.prepare(
+      'SELECT * FROM recipe_capture_inputs WHERE id = ? LIMIT 1',
+    ).get(Number(result.lastInsertRowid)) as CaptureInputRow;
+
+    return mapCaptureInputRow(row);
+  }
+
+  async updateJobIntelligence(
+    jobId: number | string,
+    updates: Partial<{
+      origin: RecipeOrigin;
+      confidence_level: RecipeBuilderJob['confidence_level'];
+      confidence_score: number;
+      confidence_details: string[];
+      source_images: string[];
+      parsing_issues: string[];
+      assumptions: string[];
+      follow_up_questions: string[];
+      source_context: Record<string, unknown>;
+      capture_session_id: number | string | null;
+      inference_variance_pct: number | null;
+    }>,
+  ): Promise<RecipeBuilderJob> {
+    const current = await this.getJob(jobId);
+    if (!current) {
+      throw new Error(`Recipe builder job ${jobId} was not found`);
+    }
+
+    const merged = {
+      ...extractSourceIntelligence(current),
+      ...updates,
+      source_context: {
+        ...current.source_context,
+        ...(updates.source_context ?? {}),
+      },
+    };
+
+    this.db.prepare(
+      `
+        UPDATE recipe_builder_jobs
+        SET origin = ?,
+            confidence_level = ?,
+            confidence_score = ?,
+            confidence_details_json = ?,
+            source_images_json = ?,
+            parsing_issues_json = ?,
+            assumptions_json = ?,
+            follow_up_questions_json = ?,
+            source_context_json = ?,
+            capture_session_id = ?,
+            inference_variance_pct = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+      `,
+    ).run(
+      merged.origin,
+      merged.confidence_level,
+      merged.confidence_score,
+      JSON.stringify(merged.confidence_details),
+      JSON.stringify(merged.source_images),
+      JSON.stringify(merged.parsing_issues),
+      JSON.stringify(merged.assumptions),
+      JSON.stringify(merged.follow_up_questions),
+      JSON.stringify(merged.source_context),
+      merged.capture_session_id,
+      merged.inference_variance_pct,
+      jobId,
+    );
+
+    return this.getJobById(Number(jobId));
+  }
+
+  async refreshCaptureSessionStats(sessionId: number | string): Promise<RecipeCaptureSession> {
+    const totals = this.db.prepare(
+      `
+        SELECT
+          COUNT(DISTINCT i.id) AS total_inputs,
+          COUNT(DISTINCT j.id) AS total_jobs,
+          COUNT(DISTINCT d.id) AS total_drafts,
+          COUNT(DISTINCT CASE WHEN d.ready_for_review_flag = 1 THEN d.id END) AS total_ready_for_review,
+          COUNT(DISTINCT CASE WHEN d.approved_at IS NOT NULL THEN d.id END) AS total_approved
+        FROM recipe_capture_sessions s
+        LEFT JOIN recipe_capture_inputs i ON i.recipe_capture_session_id = s.id
+        LEFT JOIN recipe_builder_jobs j ON j.capture_session_id = s.id
+        LEFT JOIN recipe_builder_draft_recipes d ON d.recipe_builder_job_id = j.id
+        WHERE s.id = ?
+      `,
+    ).get(sessionId) as {
+      total_inputs: number;
+      total_jobs: number;
+      total_drafts: number;
+      total_ready_for_review: number;
+      total_approved: number;
+    };
+
+    this.db.prepare(
+      `
+        UPDATE recipe_capture_sessions
+        SET total_inputs = ?,
+            total_drafts_created = ?,
+            total_auto_matched = ?,
+            total_needs_review = ?,
+            total_approved = ?,
+            estimated_time_saved_minutes = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+      `,
+    ).run(
+      totals.total_inputs,
+      totals.total_drafts,
+      totals.total_jobs,
+      totals.total_ready_for_review,
+      totals.total_approved,
+      totals.total_drafts * 12,
+      sessionId,
+    );
+
+    return this.getCaptureSessionById(Number(sessionId));
+  }
+
   async getDraftSourceIntelligenceByDraftId(draftId: number | string): Promise<{
     recipe_builder_job_id: number | string;
     source_intelligence: RecipeBuilderSourceIntelligence;
@@ -830,6 +988,10 @@ interface TemplateSourceRow {
 }
 
 function mapJobRow(row: JobRow): RecipeBuilderJob {
+  const sourceContext = parseJsonObject(row.source_context_json);
+  const rawSource = typeof sourceContext.raw_source === 'string' && sourceContext.raw_source.trim().length > 0
+    ? sourceContext.raw_source
+    : row.source_text;
   return {
     id: row.id,
     source_type: row.source_type,
@@ -847,8 +1009,8 @@ function mapJobRow(row: JobRow): RecipeBuilderJob {
     parsing_issues: parseJsonArray(row.parsing_issues_json),
     assumptions: parseJsonArray(row.assumptions_json),
     follow_up_questions: parseJsonArray(row.follow_up_questions_json),
-    source_context: parseJsonObject(row.source_context_json),
-    raw_source: row.source_text,
+    source_context: sourceContext,
+    raw_source: rawSource,
     capture_session_id: row.capture_session_id,
     last_confidence_recalculated_at: row.last_confidence_recalculated_at,
     inference_variance_pct: row.inference_variance_pct,

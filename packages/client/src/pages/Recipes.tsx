@@ -69,6 +69,12 @@ export function Recipes() {
       description="The recipes surface is now operational-workflow-first. Draft creation starts in the new composer, then promotion, ingredient resolution, and costing stay aligned to the backend workflow."
       actions={(
         <div className="flex flex-wrap items-center justify-end gap-3">
+          <Link
+            to="/recipes/intelligence"
+            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            Recipe Intelligence
+          </Link>
           <button
             onClick={() => {
               setSearchParams({ compose: 'new' });

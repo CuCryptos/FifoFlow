@@ -60,3 +60,25 @@ export function useRecalculateRecipeDraftConfidence() {
     },
   });
 }
+
+export function useCreateConversationDrafts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.recipeIntelligence.createConversationDrafts,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
+      qc.invalidateQueries({ queryKey: ['recipe-drafts'] });
+    },
+  });
+}
+
+export function useUploadPhotoDrafts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.recipeIntelligence.uploadPhotoDrafts,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
+      qc.invalidateQueries({ queryKey: ['recipe-drafts'] });
+    },
+  });
+}
