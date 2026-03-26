@@ -135,6 +135,16 @@ describe('Recipe intelligence routes', () => {
     expect(detailResponse.body.inputs).toEqual([]);
     expect(detailResponse.body.drafts).toEqual([]);
     expect(detailResponse.body.prep_sheet_captures).toEqual([]);
+
+    const deleteResponse = await request(app).delete(`/api/recipe-intelligence/sessions/${createResponse.body.session.id}`);
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body).toEqual({
+      removed: true,
+      session_id: createResponse.body.session.id,
+    });
+
+    const afterDeleteResponse = await request(app).get(`/api/recipe-intelligence/sessions/${createResponse.body.session.id}`);
+    expect(afterDeleteResponse.status).toBe(404);
   });
 
   it('returns draft source intelligence and recalculates confidence', async () => {
@@ -490,5 +500,18 @@ describe('Recipe intelligence routes', () => {
         }),
       ],
     });
+
+    const captureDeleteResponse = await request(app)
+      .delete(`/api/recipe-intelligence/prep-sheet-captures/${prepResponse.body.capture.id}`);
+    expect(captureDeleteResponse.status).toBe(200);
+    expect(captureDeleteResponse.body).toEqual({
+      removed: true,
+      capture_id: prepResponse.body.capture.id,
+    });
+
+    const sessionDetailAfterCaptureDelete = await request(app)
+      .get(`/api/recipe-intelligence/sessions/${prepResponse.body.session.id}`);
+    expect(sessionDetailAfterCaptureDelete.status).toBe(200);
+    expect(sessionDetailAfterCaptureDelete.body.prep_sheet_captures).toEqual([]);
   });
 });

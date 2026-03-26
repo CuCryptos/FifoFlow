@@ -504,6 +504,13 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return row ? mapCaptureSessionRow(row) : null;
   }
 
+  async deleteCaptureSession(sessionId: number | string): Promise<boolean> {
+    const result = this.db.prepare(
+      'DELETE FROM recipe_capture_sessions WHERE id = ?',
+    ).run(sessionId);
+    return result.changes > 0;
+  }
+
   async listCaptureInputs(sessionId: number | string): Promise<RecipeCaptureInput[]> {
     const rows = this.db.prepare(
       `
@@ -640,6 +647,20 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     ).all(venueId, limit) as PrepSheetCaptureRow[];
 
     return rows.map(mapPrepSheetCaptureRow);
+  }
+
+  async getPrepSheetCapture(captureId: number | string): Promise<PrepSheetCapture | null> {
+    const row = this.db.prepare(
+      'SELECT * FROM prep_sheet_captures WHERE id = ? LIMIT 1',
+    ).get(captureId) as PrepSheetCaptureRow | undefined;
+    return row ? mapPrepSheetCaptureRow(row) : null;
+  }
+
+  async deletePrepSheetCapture(captureId: number | string): Promise<boolean> {
+    const result = this.db.prepare(
+      'DELETE FROM prep_sheet_captures WHERE id = ?',
+    ).run(captureId);
+    return result.changes > 0;
   }
 
   async listItemAliases(itemId: number | string): Promise<ItemAlias[]> {

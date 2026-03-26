@@ -417,6 +417,26 @@ export function createRecipeIntelligenceRoutes(
     });
   });
 
+  router.delete('/sessions/:sessionId', async (req, res) => {
+    const sessionId = parseRequiredPositiveInteger(req.params.sessionId);
+    if (sessionId == null) {
+      res.status(400).json({ error: 'Invalid session id' });
+      return;
+    }
+
+    const session = await repository.getCaptureSession(sessionId);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    await repository.deleteCaptureSession(sessionId);
+    res.json({
+      removed: true,
+      session_id: sessionId,
+    });
+  });
+
   router.get('/drafts/:draftId/source', async (req, res) => {
     const draftId = parseRequiredPositiveInteger(req.params.draftId);
     if (draftId == null) {
@@ -703,6 +723,26 @@ export function createRecipeIntelligenceRoutes(
     } catch (error: any) {
       res.status(500).json({ error: error.message ?? 'Failed to create prep sheet capture' });
     }
+  });
+
+  router.delete('/prep-sheet-captures/:captureId', async (req, res) => {
+    const captureId = parseRequiredPositiveInteger(req.params.captureId);
+    if (captureId == null) {
+      res.status(400).json({ error: 'Invalid prep sheet capture id' });
+      return;
+    }
+
+    const capture = await repository.getPrepSheetCapture(captureId);
+    if (!capture) {
+      res.status(404).json({ error: 'Prep sheet capture not found' });
+      return;
+    }
+
+    await repository.deletePrepSheetCapture(captureId);
+    res.json({
+      removed: true,
+      capture_id: captureId,
+    });
   });
 
   router.post('/inference-runs', (req, res) => {
