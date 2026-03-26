@@ -8,6 +8,10 @@ import {
   useRecipeDrafts,
   useUpdateRecipeDraft,
 } from '../hooks/useRecipeDrafts';
+import {
+  useRecipeDraftSourceIntelligence,
+  useRecalculateRecipeDraftConfidence,
+} from '../hooks/useRecipeIntelligence';
 import { useItems } from '../hooks/useItems';
 import { useVendors } from '../hooks/useVendors';
 import { useOperationalRecipeWorkflow, useOperationalRecipeWorkflowDetail } from '../hooks/useRecipeWorkflow';
@@ -337,9 +341,106 @@ export function DraftRecipeDetailPage() {
           body="No persisted draft exists for this id in the current runtime. Return to the queue and reopen the current draft inventory."
         />
       ) : (
-        <RecipeForm draftId={parsedDraftId} onDone={() => window.history.back()} />
+        <div className="space-y-4">
+          <DraftSourceIntelligencePanel draftId={parsedDraftId} />
+          <RecipeForm draftId={parsedDraftId} onDone={() => window.history.back()} />
+        </div>
       )}
     </WorkflowPage>
+  );
+}
+
+function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
+  const { toast } = useToast();
+  const sourceQuery = useRecipeDraftSourceIntelligence(draftId);
+  const recalculateConfidence = useRecalculateRecipeDraftConfidence();
+
+  if (sourceQuery.isLoading) {
+    return (
+      <WorkflowPanel
+        title="Draft Intelligence"
+        description="Capture origin, confidence, assumptions, and follow-up questions stored on the recipe builder job."
+      >
+        <div className="text-sm text-slate-500">Loading draft intelligence...</div>
+      </WorkflowPanel>
+    );
+  }
+
+  if (sourceQuery.error instanceof Error) {
+    return (
+      <WorkflowPanel
+        title="Draft Intelligence"
+        description="Capture origin, confidence, assumptions, and follow-up questions stored on the recipe builder job."
+      >
+        <div className="text-sm text-rose-600">{sourceQuery.error.message}</div>
+      </WorkflowPanel>
+    );
+  }
+
+  if (!sourceQuery.data) {
+    return null;
+  }
+
+  const source = sourceQuery.data.source_intelligence;
+
+  return (
+    <WorkflowPanel
+      title="Draft Intelligence"
+      description="This draft keeps its capture source, confidence record, and operator follow-up context on the builder job."
+      actions={(
+        <button
+          type="button"
+          disabled={recalculateConfidence.isPending}
+          onClick={() => {
+            recalculateConfidence.mutate(
+              { draftId, data: { trigger: 'operator_review' } },
+              {
+                onSuccess: (result: { confidence_level: string; confidence_score: number }) => {
+                  toast(`Confidence recalculated to ${result.confidence_level} (${result.confidence_score})`, 'success');
+                },
+                onError: (error: Error) => {
+                  toast(error.message, 'error');
+                },
+              },
+            );
+          }}
+          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {recalculateConfidence.isPending ? 'Recalculating...' : 'Recalculate Confidence'}
+        </button>
+      )}
+    >
+      <div className="grid gap-4 xl:grid-cols-[0.92fr,1.08fr]">
+        <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Origin</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">{source.origin.replaceAll('_', ' ')}</div>
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Confidence</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">{source.confidence_level} • {source.confidence_score}</div>
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Capture Session</div>
+            <div className="mt-2 text-sm font-medium text-slate-900">
+              {source.capture_session_id != null ? `Session #${source.capture_session_id}` : 'No session attached'}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Raw Source</div>
+            <div className="mt-2 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              {source.raw_source || 'No raw source stored.'}
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RecipeIntelListBlock title="Assumptions" items={source.assumptions} emptyLabel="No assumptions recorded." />
+          <RecipeIntelListBlock title="Follow-up Questions" items={source.follow_up_questions} emptyLabel="No follow-up questions recorded." />
+          <RecipeIntelListBlock title="Parsing Issues" items={source.parsing_issues} emptyLabel="No parsing issues recorded." />
+          <RecipeIntelListBlock title="Confidence Details" items={source.confidence_details} emptyLabel="No confidence details recorded." />
+        </div>
+      </div>
+    </WorkflowPanel>
   );
 }
 
@@ -1857,6 +1958,23 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg bg-white border border-border px-3 py-2">
       <div className="text-xs uppercase tracking-wide text-text-secondary">{label}</div>
       <div className="mt-1 text-base font-semibold text-text-primary">{value}</div>
+    </div>
+  );
+}
+
+function RecipeIntelListBlock({ title, items, emptyLabel }: { title: string; items: string[]; emptyLabel: string }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{title}</div>
+      <div className="mt-4 space-y-2">
+        {items.length === 0 ? (
+          <div className="text-sm text-slate-500">{emptyLabel}</div>
+        ) : items.map((item) => (
+          <div key={`${title}-${item}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {item}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

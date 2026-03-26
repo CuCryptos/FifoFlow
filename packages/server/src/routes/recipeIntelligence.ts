@@ -48,6 +48,32 @@ interface RecipeIntelligenceDraftSeed {
   confidence_score: number;
 }
 
+interface RecipeIntelligencePrepSheetItem {
+  item_name: string;
+  batch_quantity: number | null;
+  batch_unit: string | null;
+  frequency: string | null;
+  likely_used_in: string[];
+  source_text: string;
+  draft_notes: string | null;
+  method_notes: string | null;
+  assumptions: string[];
+  follow_up_questions: string[];
+  parsing_issues: string[];
+  confidence_score: number;
+}
+
+interface RecipeIntelligencePrepSheetRelationship {
+  prep_item: string;
+  likely_used_in: string[];
+  confidence: number;
+}
+
+interface RecipeIntelligencePrepSheetCaptureResult {
+  prep_items: RecipeIntelligencePrepSheetItem[];
+  inferred_relationships: RecipeIntelligencePrepSheetRelationship[];
+}
+
 interface RecipeIntelligenceAiClient {
   createConversationDraftSeeds(input: {
     entries: Array<{ name: string; description: string }>;
@@ -57,6 +83,11 @@ interface RecipeIntelligenceAiClient {
     mime_type: string;
     pages: InvoiceDocumentPageEvidence[];
   }): Promise<RecipeIntelligenceDraftSeed[]>;
+  createPrepSheetCapture(input: {
+    filename: string;
+    mime_type: string;
+    pages: InvoiceDocumentPageEvidence[];
+  }): Promise<RecipeIntelligencePrepSheetCaptureResult>;
 }
 
 class AnthropicRecipeIntelligenceAiClient implements RecipeIntelligenceAiClient {
@@ -194,6 +225,87 @@ Rules:
 
     return normalizeDraftSeeds(extractDraftSeedPayload(extractTextBlock(response.content)));
   }
+
+  async createPrepSheetCapture(input: {
+    filename: string;
+    mime_type: string;
+    pages: InvoiceDocumentPageEvidence[];
+  }): Promise<RecipeIntelligencePrepSheetCaptureResult> {
+    const content: Anthropic.ContentBlockParam[] = [
+      {
+        type: 'text',
+        text: `Extract prep components from this uploaded prep sheet.
+
+File: ${input.filename}
+Mime type: ${input.mime_type}
+
+Return only JSON with this exact shape:
+{
+  "prep_items": [
+    {
+      "item_name": "string",
+      "batch_quantity": 1,
+      "batch_unit": "string or null",
+      "frequency": "string or null",
+      "likely_used_in": ["string"],
+      "source_text": "ingredient lines only, one line per ingredient",
+      "draft_notes": "string or null",
+      "method_notes": "string or null",
+      "assumptions": ["string"],
+      "follow_up_questions": ["string"],
+      "parsing_issues": ["string"],
+      "confidence_score": 0
+    }
+  ],
+  "inferred_relationships": [
+    {
+      "prep_item": "string",
+      "likely_used_in": ["string"],
+      "confidence": 0
+    }
+  ]
+}
+
+Rules:
+- Only return prep components that look like reusable batches, sauces, dressings, mixes, or sub-recipes.
+- source_text must be ingredient lines only, not prose.
+- likely_used_in should list dish names only when the prep sheet actually implies them.
+- If batch quantity or unit is unreadable, use null and record that in parsing_issues.
+- Omit rows that are too unreadable to support responsibly.
+- Return JSON only.`,
+      },
+    ];
+
+    for (const page of input.pages) {
+      content.push({
+        type: 'text',
+        text: `PAGE ${page.pageNumber} TRANSCRIPT:\n${page.extractedText || '[no embedded text extracted]'}`,
+      });
+      if (page.imageBase64) {
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: page.imageMediaType,
+            data: page.imageBase64,
+          },
+        });
+      }
+    }
+
+    const response = await this.client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8192,
+      messages: [
+        {
+          role: 'user',
+          content,
+        },
+      ],
+    });
+
+    return normalizePrepSheetCapture(extractPrepSheetPayload(extractTextBlock(response.content)));
+  }
 }
 
 export function createRecipeIntelligenceRoutes(
@@ -272,15 +384,17 @@ export function createRecipeIntelligenceRoutes(
       return;
     }
 
-    const [inputs, drafts] = await Promise.all([
+    const [inputs, drafts, prepSheetCaptures] = await Promise.all([
       repository.listCaptureInputs(sessionId),
       repository.listDraftRecipesByCaptureSession(sessionId),
+      repository.listPrepSheetCaptures(sessionId),
     ]);
 
     res.json({
       session,
       inputs,
       drafts,
+      prep_sheet_captures: prepSheetCaptures,
     });
   });
 
@@ -448,13 +562,122 @@ export function createRecipeIntelligenceRoutes(
     }
   });
 
-  router.post('/prep-sheet-captures', (req, res) => {
-    const parsed = createPrepSheetCaptureSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid prep sheet capture payload' });
+  router.post('/prep-sheet-captures', upload.single('file'), async (req, res) => {
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) {
+      res.status(400).json({ error: 'No prep sheet file uploaded' });
       return;
     }
-    res.status(501).json({ error: 'Prep sheet capture is not implemented yet' });
+
+    const parsedVenueId = Number(req.body?.venue_id);
+    if (!Number.isInteger(parsedVenueId) || parsedVenueId <= 0) {
+      res.status(400).json({ error: 'A positive venue_id is required' });
+      return;
+    }
+
+    const captureDate = typeof req.body?.capture_date === 'string' && req.body.capture_date.trim().length > 0
+      ? req.body.capture_date.trim()
+      : new Date().toISOString().slice(0, 10);
+
+    const session = await repository.createCaptureSession({
+      venue_id: parsedVenueId,
+      name: typeof req.body?.session_name === 'string' && req.body.session_name.trim().length > 0
+        ? req.body.session_name.trim()
+        : `Prep Sheet ${captureDate}`,
+      capture_mode: 'prep_sheet_batch',
+      led_by: typeof req.body?.created_by === 'string' ? req.body.created_by : null,
+      notes: typeof req.body?.processing_notes === 'string' ? req.body.processing_notes : null,
+    });
+
+    try {
+      const ai = resolveAiClient();
+      const pages = await buildPhotoEvidence(file);
+      const transcript = buildPageTranscript(pages);
+      const captureResult = await ai.createPrepSheetCapture({
+        filename: file.originalname,
+        mime_type: file.mimetype,
+        pages,
+      });
+
+      const parsed = createPrepSheetCaptureSchema.safeParse({
+        venue_id: parsedVenueId,
+        capture_date: captureDate,
+        source_file_name: file.originalname,
+        source_mime_type: file.mimetype,
+        source_storage_path: null,
+        extracted_text: transcript || null,
+        parsed_items_json: JSON.stringify(captureResult.prep_items),
+        inferred_relationships_json: JSON.stringify(captureResult.inferred_relationships),
+        created_by: typeof req.body?.created_by === 'string' ? req.body.created_by : null,
+        recipe_capture_session_id: Number(session.id),
+        processing_notes: typeof req.body?.processing_notes === 'string'
+          ? req.body.processing_notes
+          : `Prep sheet capture created from ${file.originalname}`,
+      });
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid prep sheet capture payload' });
+        return;
+      }
+
+      const capture = await repository.createPrepSheetCapture(parsed.data);
+      const drafts: Array<Awaited<ReturnType<typeof createDraftFromSeed>>> = [];
+
+      for (const prepItem of captureResult.prep_items) {
+        const created = await createDraftFromSeed({
+          repository,
+          canonicalIngredientRepository,
+          sessionId: Number(session.id),
+          seed: {
+            draft_name: prepItem.item_name,
+            source_text: prepItem.source_text,
+            draft_notes: prepItem.draft_notes,
+            yield_quantity: prepItem.batch_quantity,
+            yield_unit: prepItem.batch_unit,
+            serving_quantity: null,
+            serving_unit: null,
+            serving_count: null,
+            source_recipe_type: 'prep',
+            method_notes: prepItem.method_notes,
+            assumptions: prepItem.assumptions,
+            follow_up_questions: prepItem.follow_up_questions,
+            parsing_issues: prepItem.parsing_issues,
+            confidence_score: prepItem.confidence_score,
+          },
+          origin: 'prep_sheet',
+          rawSource: transcript || file.originalname,
+          inputRecord: {
+            input_type: 'prep_sheet',
+            source_text: transcript || null,
+            source_file_name: file.originalname,
+            source_mime_type: file.mimetype,
+            processing_notes: `Created from prep sheet ${file.originalname}`,
+          },
+          sourceContext: {
+            created_by: typeof req.body?.created_by === 'string' ? req.body.created_by : null,
+            file_name: file.originalname,
+            mime_type: file.mimetype,
+            capture_date: captureDate,
+            likely_used_in: prepItem.likely_used_in,
+            inferred_relationships: captureResult.inferred_relationships.filter(
+              (relationship) => relationship.prep_item === prepItem.item_name,
+            ),
+          },
+          sourceImages: [file.originalname],
+        });
+        drafts.push(created);
+      }
+
+      const refreshedSession = await repository.refreshCaptureSessionStats(session.id);
+      res.status(201).json({
+        session: refreshedSession,
+        capture,
+        drafts,
+        prep_items: captureResult.prep_items,
+        inferred_relationships: captureResult.inferred_relationships,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message ?? 'Failed to create prep sheet capture' });
+    }
   });
 
   router.post('/inference-runs', (req, res) => {
@@ -505,7 +728,7 @@ async function createDraftFromSeed(input: {
   origin: RecipeBuilderJob['origin'];
   rawSource: string;
   inputRecord: {
-    input_type: 'photo' | 'text';
+    input_type: 'photo' | 'text' | 'prep_sheet';
     source_text?: string | null;
     source_file_name?: string | null;
     source_mime_type?: string | null;
@@ -688,6 +911,17 @@ function extractDraftSeedPayload(text: string): unknown[] {
   return Array.isArray(payload.drafts) ? payload.drafts : [];
 }
 
+function extractPrepSheetPayload(text: string): {
+  prep_items?: unknown;
+  inferred_relationships?: unknown;
+} {
+  const payload = JSON.parse(extractJsonPayload(text)) as {
+    prep_items?: unknown;
+    inferred_relationships?: unknown;
+  };
+  return payload;
+}
+
 function extractJsonPayload(text: string): string {
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   return (jsonMatch?.[1] ?? text).trim();
@@ -718,12 +952,62 @@ function normalizeDraftSeeds(input: unknown[]): RecipeIntelligenceDraftSeed[] {
     .filter((seed) => seed.draft_name.length > 0 && seed.source_text.length > 0);
 }
 
+function normalizePrepSheetCapture(input: {
+  prep_items?: unknown;
+  inferred_relationships?: unknown;
+}): RecipeIntelligencePrepSheetCaptureResult {
+  const prepItems = Array.isArray(input.prep_items) ? input.prep_items : [];
+  const inferredRelationships = Array.isArray(input.inferred_relationships) ? input.inferred_relationships : [];
+
+  return {
+    prep_items: prepItems
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => {
+        const row = entry as Record<string, unknown>;
+        return {
+          item_name: String(row.item_name ?? '').trim(),
+          batch_quantity: parseNullableNumber(row.batch_quantity),
+          batch_unit: normalizeNullableString(row.batch_unit),
+          frequency: normalizeNullableString(row.frequency),
+          likely_used_in: normalizeStringArray(row.likely_used_in),
+          source_text: String(row.source_text ?? '').trim(),
+          draft_notes: normalizeNullableString(row.draft_notes),
+          method_notes: normalizeNullableString(row.method_notes),
+          assumptions: normalizeStringArray(row.assumptions),
+          follow_up_questions: normalizeStringArray(row.follow_up_questions),
+          parsing_issues: normalizeStringArray(row.parsing_issues),
+          confidence_score: clampConfidenceScore(row.confidence_score),
+        } satisfies RecipeIntelligencePrepSheetItem;
+      })
+      .filter((item) => item.item_name.length > 0 && item.source_text.length > 0),
+    inferred_relationships: inferredRelationships
+      .filter((entry) => entry && typeof entry === 'object')
+      .map((entry) => {
+        const row = entry as Record<string, unknown>;
+        return {
+          prep_item: String(row.prep_item ?? '').trim(),
+          likely_used_in: normalizeStringArray(row.likely_used_in),
+          confidence: clampConfidenceRatio(row.confidence),
+        } satisfies RecipeIntelligencePrepSheetRelationship;
+      })
+      .filter((relationship) => relationship.prep_item.length > 0),
+  };
+}
+
 function clampConfidenceScore(value: unknown): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
     return 50;
   }
   return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function clampConfidenceRatio(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0.5;
+  }
+  return Math.max(0, Math.min(1, Number(parsed.toFixed(2))));
 }
 
 function normalizeStringArray(value: unknown): string[] {

@@ -82,3 +82,14 @@ export function useUploadPhotoDrafts() {
     },
   });
 }
+
+export function useUploadPrepSheetCapture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.recipeIntelligence.uploadPrepSheetCapture,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
+      qc.invalidateQueries({ queryKey: ['recipe-drafts'] });
+    },
+  });
+}

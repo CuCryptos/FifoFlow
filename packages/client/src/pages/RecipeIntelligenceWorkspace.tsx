@@ -8,6 +8,7 @@ import {
   useRecipeIntelligenceSession,
   useRecipeIntelligenceSessions,
   useUploadPhotoDrafts,
+  useUploadPrepSheetCapture,
 } from '../hooks/useRecipeIntelligence';
 import {
   WorkflowEmptyState,
@@ -24,6 +25,9 @@ export function RecipeIntelligenceWorkspace() {
   const [operatorName, setOperatorName] = useState('');
   const [photoSessionName, setPhotoSessionName] = useState('');
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [prepSessionName, setPrepSessionName] = useState('');
+  const [prepCaptureDate, setPrepCaptureDate] = useState(new Date().toISOString().slice(0, 10));
+  const [prepFile, setPrepFile] = useState<File | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState<number | null>(null);
 
@@ -34,6 +38,7 @@ export function RecipeIntelligenceWorkspace() {
   const selectedDraftSourceQuery = useRecipeDraftSourceIntelligence(selectedDraftId ?? 0);
   const createConversationDrafts = useCreateConversationDrafts();
   const uploadPhotoDrafts = useUploadPhotoDrafts();
+  const uploadPrepSheetCapture = useUploadPrepSheetCapture();
 
   const sessions = sessionsQuery.data ?? [];
   const selectedSession = selectedSessionQuery.data ?? null;
@@ -115,6 +120,39 @@ export function RecipeIntelligenceWorkspace() {
     }
   }
 
+  async function handlePrepSheetSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedVenueId) {
+      toast('Select a venue before uploading a prep sheet.');
+      return;
+    }
+    if (!prepFile) {
+      toast('Choose a prep sheet PDF or image.');
+      return;
+    }
+
+    try {
+      const result = await uploadPrepSheetCapture.mutateAsync({
+        file: prepFile,
+        venue_id: selectedVenueId,
+        capture_date: prepCaptureDate,
+        session_name: prepSessionName.trim() || null,
+        created_by: operatorName.trim() || null,
+      });
+      setSelectedSessionId(Number(result.session.id));
+      setSelectedDraftId(Number(result.drafts[0]?.draft_id ?? 0) || null);
+      setPrepFile(null);
+      setPrepSessionName('');
+      const input = document.getElementById('recipe-intelligence-prep-input') as HTMLInputElement | null;
+      if (input) {
+        input.value = '';
+      }
+      toast(`Created ${result.drafts.length} prep draft${result.drafts.length === 1 ? '' : 's'} from prep sheet capture.`);
+    } catch (error: any) {
+      toast(error.message ?? 'Failed to create prep sheet capture.');
+    }
+  }
+
   return (
     <WorkflowPage
       eyebrow="Recipe Intelligence"
@@ -138,7 +176,7 @@ export function RecipeIntelligenceWorkspace() {
         />
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+          <div className="grid gap-6 xl:grid-cols-3">
             <WorkflowPanel
               title="Describe Recipe"
               description="Convert one chef-described recipe into a builder draft seed, then let the existing recipe builder parse and resolve it."
@@ -238,6 +276,59 @@ export function RecipeIntelligenceWorkspace() {
                 </div>
               </form>
             </WorkflowPanel>
+
+            <WorkflowPanel
+              title="Upload Prep Sheet"
+              description="Parse a prep sheet into reusable prep-component drafts and keep the capture linked to the same intelligence session model."
+            >
+              <form className="space-y-4" onSubmit={handlePrepSheetSubmit}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Session Name
+                    <input
+                      value={prepSessionName}
+                      onChange={(event) => setPrepSessionName(event.target.value)}
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400"
+                      placeholder="Dinner prep sheet"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    Capture Date
+                    <input
+                      type="date"
+                      value={prepCaptureDate}
+                      onChange={(event) => setPrepCaptureDate(event.target.value)}
+                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400"
+                    />
+                  </label>
+                </div>
+                <label className="block rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm font-medium text-slate-700">
+                  Prep Sheet File
+                  <input
+                    id="recipe-intelligence-prep-input"
+                    type="file"
+                    accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(event) => setPrepFile(event.target.files?.[0] ?? null)}
+                    className="mt-3 block w-full text-sm text-slate-600"
+                  />
+                  <div className="mt-3 text-xs text-slate-500">
+                    {prepFile ? `${prepFile.name} • ${Math.max(1, Math.round(prepFile.size / 1024))} KB` : 'No prep sheet selected.'}
+                  </div>
+                </label>
+                <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                  <p className="text-sm text-slate-500">
+                    Prep sheets create prep-component drafts, inferred usage hints, and a persisted prep capture record under the session.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={uploadPrepSheetCapture.isPending}
+                    className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                  >
+                    {uploadPrepSheetCapture.isPending ? 'Parsing Prep Sheet...' : 'Create Prep Drafts'}
+                  </button>
+                </div>
+              </form>
+            </WorkflowPanel>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
@@ -314,6 +405,21 @@ export function RecipeIntelligenceWorkspace() {
                     <Metric label="Ready" value={selectedSession.session.total_needs_review} />
                     <Metric label="Time Saved" value={`${selectedSession.session.estimated_time_saved_minutes} min`} />
                   </div>
+                  {selectedSession.prep_sheet_captures.length > 0 ? (
+                    <div className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">Prep Sheet Captures</div>
+                      <div className="mt-3 space-y-2">
+                        {selectedSession.prep_sheet_captures.map((capture) => (
+                          <div key={capture.id} className="rounded-2xl border border-blue-200 bg-white px-3 py-3 text-sm text-slate-700">
+                            <div className="font-semibold text-slate-950">{capture.source_file_name}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {capture.capture_date} • {capture.processed ? 'processed' : 'pending'} • session #{capture.recipe_capture_session_id}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="space-y-3">
                     {sortedDrafts.length === 0 ? (
                       <WorkflowEmptyState

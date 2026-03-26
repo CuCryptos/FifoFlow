@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 import Database from 'better-sqlite3';
 import type {
+  CreatePrepSheetCaptureInput,
   CreateRecipeCaptureSessionInput,
+  PrepSheetCapture,
   RecipeOrigin,
   RecalculateRecipeDraftConfidenceInput,
   RecipeBuilderSourceIntelligence,
@@ -570,6 +572,59 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return mapCaptureInputRow(row);
   }
 
+  async createPrepSheetCapture(input: CreatePrepSheetCaptureInput): Promise<PrepSheetCapture> {
+    const result = this.db.prepare(
+      `
+        INSERT INTO prep_sheet_captures (
+          venue_id,
+          capture_date,
+          source_file_name,
+          source_mime_type,
+          source_storage_path,
+          extracted_text,
+          parsed_items_json,
+          inferred_relationships_json,
+          processed,
+          processing_notes,
+          recipe_capture_session_id,
+          created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    ).run(
+      input.venue_id,
+      input.capture_date,
+      input.source_file_name,
+      input.source_mime_type,
+      input.source_storage_path ?? null,
+      input.extracted_text ?? null,
+      input.parsed_items_json ?? '[]',
+      input.inferred_relationships_json ?? '[]',
+      1,
+      input.processing_notes ?? null,
+      input.recipe_capture_session_id ?? null,
+      input.created_by ?? null,
+    );
+
+    const row = this.db.prepare(
+      'SELECT * FROM prep_sheet_captures WHERE id = ? LIMIT 1',
+    ).get(Number(result.lastInsertRowid)) as PrepSheetCaptureRow;
+
+    return mapPrepSheetCaptureRow(row);
+  }
+
+  async listPrepSheetCaptures(sessionId: number | string): Promise<PrepSheetCapture[]> {
+    const rows = this.db.prepare(
+      `
+        SELECT *
+        FROM prep_sheet_captures
+        WHERE recipe_capture_session_id = ?
+        ORDER BY created_at DESC, id DESC
+      `,
+    ).all(sessionId) as PrepSheetCaptureRow[];
+
+    return rows.map(mapPrepSheetCaptureRow);
+  }
+
   async updateJobIntelligence(
     jobId: number | string,
     updates: Partial<{
@@ -987,6 +1042,23 @@ interface TemplateSourceRow {
   sort_order: number;
 }
 
+interface PrepSheetCaptureRow {
+  id: number;
+  venue_id: number;
+  capture_date: string;
+  source_file_name: string;
+  source_mime_type: string;
+  source_storage_path: string | null;
+  extracted_text: string | null;
+  parsed_items_json: string;
+  inferred_relationships_json: string;
+  processed: number;
+  processing_notes: string | null;
+  recipe_capture_session_id: number | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 function mapJobRow(row: JobRow): RecipeBuilderJob {
   const sourceContext = parseJsonObject(row.source_context_json);
   const rawSource = typeof sourceContext.raw_source === 'string' && sourceContext.raw_source.trim().length > 0
@@ -1070,6 +1142,12 @@ function mapCaptureSessionRow(row: CaptureSessionRow): RecipeCaptureSession {
 }
 
 function mapCaptureInputRow(row: CaptureInputRow): RecipeCaptureInput {
+  return {
+    ...row,
+  };
+}
+
+function mapPrepSheetCaptureRow(row: PrepSheetCaptureRow): PrepSheetCapture {
   return {
     ...row,
   };

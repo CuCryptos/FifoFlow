@@ -56,6 +56,7 @@ import type {
   CreateRecipeCaptureSessionInput,
   CreateRecipeInferenceRunInput,
   RecalculateRecipeDraftConfidenceInput,
+  PrepSheetCapture,
   RecipeBuilderJobInput,
   RecipeBuilderDraftRecipe,
   RecipeBuilderSourceIntelligence,
@@ -805,6 +806,7 @@ export interface RecipeIntelligenceSessionDetailPayload {
   session: RecipeCaptureSession;
   inputs: RecipeCaptureInput[];
   drafts: RecipeBuilderDraftRecipe[];
+  prep_sheet_captures: PrepSheetCapture[];
 }
 
 export interface RecipeDraftSourcePayload {
@@ -848,6 +850,29 @@ export interface RecipeIntelligenceDraftRunPayload {
 export interface RecipeIntelligenceDraftCreationPayload {
   session: RecipeCaptureSession;
   drafts: RecipeIntelligenceDraftRunPayload[];
+}
+
+export interface RecipeIntelligencePrepSheetPayload extends RecipeIntelligenceDraftCreationPayload {
+  capture: PrepSheetCapture;
+  prep_items: Array<{
+    item_name: string;
+    batch_quantity: number | null;
+    batch_unit: string | null;
+    frequency: string | null;
+    likely_used_in: string[];
+    source_text: string;
+    draft_notes: string | null;
+    method_notes: string | null;
+    assumptions: string[];
+    follow_up_questions: string[];
+    parsing_issues: string[];
+    confidence_score: number;
+  }>;
+  inferred_relationships: Array<{
+    prep_item: string;
+    likely_used_in: string[];
+    confidence: number;
+  }>;
 }
 
 export interface PackFreshnessEntryPayload {
@@ -1240,6 +1265,37 @@ export const api = {
         throw new Error(typeof error.error === 'string' ? error.error : res.statusText);
       }
       return res.json() as Promise<RecipeIntelligenceDraftCreationPayload>;
+    },
+    uploadPrepSheetCapture: async (input: {
+      file: File;
+      venue_id: number;
+      capture_date: string;
+      session_name?: string | null;
+      created_by?: string | null;
+      processing_notes?: string | null;
+    }) => {
+      const formData = new FormData();
+      formData.append('file', input.file);
+      formData.append('venue_id', String(input.venue_id));
+      formData.append('capture_date', input.capture_date);
+      if (input.session_name) {
+        formData.append('session_name', input.session_name);
+      }
+      if (input.created_by) {
+        formData.append('created_by', input.created_by);
+      }
+      if (input.processing_notes) {
+        formData.append('processing_notes', input.processing_notes);
+      }
+      const res = await fetch(`${BASE}/recipe-intelligence/prep-sheet-captures`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(typeof error.error === 'string' ? error.error : res.statusText);
+      }
+      return res.json() as Promise<RecipeIntelligencePrepSheetPayload>;
     },
     createInferenceRun: (data: CreateRecipeInferenceRunInput) =>
       fetchJson<unknown>('/recipe-intelligence/inference-runs', {

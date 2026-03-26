@@ -47,6 +47,33 @@ const stubAi = {
       },
     ];
   },
+  async createPrepSheetCapture() {
+    return {
+      prep_items: [
+        {
+          item_name: 'Beurre Blanc',
+          batch_quantity: 2,
+          batch_unit: 'qt',
+          frequency: 'daily',
+          likely_used_in: ['Fish of the Day'],
+          source_text: '2 qt cream\n1 lb butter\n8 oz white wine',
+          draft_notes: 'Recovered from prep sheet.',
+          method_notes: 'Reduce wine, mount butter, finish cream.',
+          assumptions: [],
+          follow_up_questions: ['Confirm shallot quantity'],
+          parsing_issues: [],
+          confidence_score: 76,
+        },
+      ],
+      inferred_relationships: [
+        {
+          prep_item: 'Beurre Blanc',
+          likely_used_in: ['Fish of the Day'],
+          confidence: 0.82,
+        },
+      ],
+    };
+  },
 };
 
 describe('Recipe intelligence routes', () => {
@@ -107,6 +134,7 @@ describe('Recipe intelligence routes', () => {
     });
     expect(detailResponse.body.inputs).toEqual([]);
     expect(detailResponse.body.drafts).toEqual([]);
+    expect(detailResponse.body.prep_sheet_captures).toEqual([]);
   });
 
   it('returns draft source intelligence and recalculates confidence', async () => {
@@ -314,13 +342,37 @@ describe('Recipe intelligence routes', () => {
 
     const prepResponse = await request(app)
       .post('/api/recipe-intelligence/prep-sheet-captures')
-      .send({
-        venue_id: 1,
-        capture_date: '2026-03-26',
-        source_file_name: 'prep-sheet.pdf',
-        source_mime_type: 'application/pdf',
+      .field('venue_id', '1')
+      .field('capture_date', '2026-03-26')
+      .field('session_name', 'Daily Prep Sheet')
+      .field('created_by', 'chef')
+      .attach('file', Buffer.from('fake prep image bytes'), {
+        filename: 'prep-sheet.png',
+        contentType: 'image/png',
       });
-    expect(prepResponse.status).toBe(501);
+    expect(prepResponse.status).toBe(201);
+    expect(prepResponse.body.session).toMatchObject({
+      venue_id: 1,
+      capture_mode: 'prep_sheet_batch',
+      total_drafts_created: 1,
+    });
+    expect(prepResponse.body.capture).toMatchObject({
+      capture_date: '2026-03-26',
+      source_file_name: 'prep-sheet.png',
+      recipe_capture_session_id: prepResponse.body.session.id,
+    });
+    expect(prepResponse.body.prep_items).toEqual([
+      expect.objectContaining({
+        item_name: 'Beurre Blanc',
+        likely_used_in: ['Fish of the Day'],
+      }),
+    ]);
+    expect(prepResponse.body.inferred_relationships).toEqual([
+      expect.objectContaining({
+        prep_item: 'Beurre Blanc',
+        confidence: 0.82,
+      }),
+    ]);
 
     const inferenceResponse = await request(app)
       .post('/api/recipe-intelligence/inference-runs')
