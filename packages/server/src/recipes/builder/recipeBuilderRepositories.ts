@@ -187,8 +187,16 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
           preparation_note,
           parse_status,
           parser_confidence,
+          estimated_flag,
+          estimation_basis,
+          alternative_item_matches_json,
+          alternative_recipe_matches_json,
+          detected_component_type,
+          matched_recipe_id,
+          matched_recipe_version_id,
+          match_basis,
           explanation_text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     );
 
@@ -209,6 +217,14 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
         row.preparation_note,
         row.parse_status,
         row.parser_confidence,
+        row.estimated_flag,
+        row.estimation_basis,
+        JSON.stringify(row.alternative_item_matches),
+        JSON.stringify(row.alternative_recipe_matches),
+        row.detected_component_type,
+        row.matched_recipe_id,
+        row.matched_recipe_version_id,
+        row.match_basis,
         row.explanation_text,
       );
     }
@@ -232,10 +248,15 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
           canonical_match_reason,
           inventory_item_id,
           inventory_mapping_status,
+          recipe_mapping_status,
+          recipe_id,
+          recipe_version_id,
+          recipe_match_confidence,
+          recipe_match_reason,
           quantity_normalization_status,
           review_status,
           explanation_text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     );
 
@@ -249,6 +270,11 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
         row.canonical_match_reason,
         row.inventory_item_id,
         row.inventory_mapping_status,
+        row.recipe_mapping_status,
+        row.recipe_id,
+        row.recipe_version_id,
+        row.recipe_match_confidence,
+        row.recipe_match_reason,
         row.quantity_normalization_status,
         row.review_status,
         row.explanation_text,
@@ -285,8 +311,16 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
             blocked_row_count,
             unresolved_canonical_count,
             unresolved_inventory_count,
-            source_recipe_type
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            source_recipe_type,
+            method_notes,
+            review_priority,
+            ready_for_review_flag,
+            approved_by,
+            approved_at,
+            rejected_by,
+            rejected_at,
+            rejection_reason
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       ).run(
         draft.recipe_builder_job_id,
@@ -306,6 +340,14 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
         draft.unresolved_canonical_count,
         draft.unresolved_inventory_count,
         draft.source_recipe_type,
+        draft.method_notes,
+        draft.review_priority,
+        draft.ready_for_review_flag,
+        draft.approved_by,
+        draft.approved_at,
+        draft.rejected_by,
+        draft.rejected_at,
+        draft.rejection_reason,
       );
       return { action: 'created', record: this.getDraftRecipeById(Number(result.lastInsertRowid)) };
     }
@@ -329,6 +371,14 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
             unresolved_canonical_count = ?,
             unresolved_inventory_count = ?,
             source_recipe_type = ?,
+            method_notes = ?,
+            review_priority = ?,
+            ready_for_review_flag = ?,
+            approved_by = ?,
+            approved_at = ?,
+            rejected_by = ?,
+            rejected_at = ?,
+            rejection_reason = ?,
             updated_at = datetime('now')
         WHERE recipe_builder_job_id = ?
       `,
@@ -349,6 +399,14 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
       draft.unresolved_canonical_count,
       draft.unresolved_inventory_count,
       draft.source_recipe_type,
+      draft.method_notes,
+      draft.review_priority,
+      draft.ready_for_review_flag,
+      draft.approved_by,
+      draft.approved_at,
+      draft.rejected_by,
+      draft.rejected_at,
+      draft.rejection_reason,
       draft.recipe_builder_job_id,
     );
 
@@ -401,6 +459,18 @@ interface JobRow {
   draft_name: string | null;
   status: RecipeBuilderJob['status'];
   source_hash: string | null;
+  origin: RecipeBuilderJob['origin'];
+  confidence_level: RecipeBuilderJob['confidence_level'];
+  confidence_score: number;
+  confidence_details_json: string;
+  source_images_json: string;
+  parsing_issues_json: string;
+  assumptions_json: string;
+  follow_up_questions_json: string;
+  source_context_json: string;
+  capture_session_id: number | null;
+  last_confidence_recalculated_at: string | null;
+  inference_variance_pct: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -422,6 +492,14 @@ interface ParsedRow {
   preparation_note: string | null;
   parse_status: RecipeBuilderParsedRow['parse_status'];
   parser_confidence: RecipeBuilderParsedRow['parser_confidence'];
+  estimated_flag: number;
+  estimation_basis: string | null;
+  alternative_item_matches_json: string;
+  alternative_recipe_matches_json: string;
+  detected_component_type: RecipeBuilderParsedRow['detected_component_type'];
+  matched_recipe_id: number | null;
+  matched_recipe_version_id: number | null;
+  match_basis: NonNullable<RecipeBuilderParsedRow['match_basis']> | null;
   explanation_text: string;
   created_at: string;
   updated_at: string;
@@ -437,6 +515,11 @@ interface ResolutionRow {
   canonical_match_reason: string | null;
   inventory_item_id: number | null;
   inventory_mapping_status: RecipeBuilderResolutionRow['inventory_mapping_status'];
+  recipe_mapping_status: RecipeBuilderResolutionRow['recipe_mapping_status'];
+  recipe_id: number | null;
+  recipe_version_id: number | null;
+  recipe_match_confidence: RecipeBuilderResolutionRow['recipe_match_confidence'];
+  recipe_match_reason: string | null;
   quantity_normalization_status: RecipeBuilderResolutionRow['quantity_normalization_status'];
   review_status: RecipeBuilderResolutionRow['review_status'];
   explanation_text: string;
@@ -463,6 +546,14 @@ interface DraftRow {
   unresolved_canonical_count: number;
   unresolved_inventory_count: number;
   source_recipe_type: RecipeBuilderDraftRecipe['source_recipe_type'];
+  method_notes: string | null;
+  review_priority: RecipeBuilderDraftRecipe['review_priority'];
+  ready_for_review_flag: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_by: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -481,13 +572,61 @@ interface TemplateSourceRow {
 
 function mapJobRow(row: JobRow): RecipeBuilderJob {
   return {
-    ...row,
+    id: row.id,
+    source_type: row.source_type,
+    source_text: row.source_text,
+    source_template_id: row.source_template_id,
+    source_template_version_id: row.source_template_version_id,
+    draft_name: row.draft_name,
+    status: row.status,
+    source_hash: row.source_hash,
+    origin: row.origin,
+    confidence_level: row.confidence_level,
+    confidence_score: row.confidence_score,
+    confidence_details: parseJsonArray(row.confidence_details_json),
+    source_images: parseJsonArray(row.source_images_json),
+    parsing_issues: parseJsonArray(row.parsing_issues_json),
+    assumptions: parseJsonArray(row.assumptions_json),
+    follow_up_questions: parseJsonArray(row.follow_up_questions_json),
+    source_context: parseJsonObject(row.source_context_json),
+    raw_source: row.source_text,
+    capture_session_id: row.capture_session_id,
+    last_confidence_recalculated_at: row.last_confidence_recalculated_at,
+    inference_variance_pct: row.inference_variance_pct,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
 function mapParsedRow(row: ParsedRow): RecipeBuilderParsedRow {
   return {
-    ...row,
+    id: row.id,
+    recipe_builder_job_id: row.recipe_builder_job_id,
+    line_index: row.line_index,
+    raw_line_text: row.raw_line_text,
+    source_template_ingredient_name: row.source_template_ingredient_name,
+    source_template_quantity: row.source_template_quantity,
+    source_template_unit: row.source_template_unit,
+    source_template_sort_order: row.source_template_sort_order,
+    quantity_raw: row.quantity_raw,
+    quantity_normalized: row.quantity_normalized,
+    unit_raw: row.unit_raw,
+    unit_normalized: row.unit_normalized,
+    ingredient_text: row.ingredient_text,
+    preparation_note: row.preparation_note,
+    parse_status: row.parse_status,
+    parser_confidence: row.parser_confidence,
+    estimated_flag: row.estimated_flag,
+    estimation_basis: row.estimation_basis,
+    alternative_item_matches: parseAlternativeMatches(row.alternative_item_matches_json),
+    alternative_recipe_matches: parseAlternativeMatches(row.alternative_recipe_matches_json),
+    detected_component_type: row.detected_component_type,
+    matched_recipe_id: row.matched_recipe_id,
+    matched_recipe_version_id: row.matched_recipe_version_id,
+    match_basis: row.match_basis,
+    explanation_text: row.explanation_text,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
@@ -505,4 +644,31 @@ function mapDraftRow(row: DraftRow): RecipeBuilderDraftRecipe {
 
 function buildBuilderSourceHash(input: RecipeBuilderRequest): string {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex');
+}
+
+function parseJsonArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonObject(value: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseAlternativeMatches(value: string): RecipeBuilderParsedRow['alternative_item_matches'] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }

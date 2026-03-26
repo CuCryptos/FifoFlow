@@ -400,7 +400,45 @@ export type RecipeBuilderConfidenceLabel = 'HIGH' | 'MEDIUM' | 'LOW';
 export type RecipeBuilderReviewStatus = 'READY' | 'NEEDS_REVIEW' | 'BLOCKED' | 'INCOMPLETE' | 'CREATED';
 export type RecipeBuilderCostabilityStatus = 'COSTABLE' | 'NEEDS_REVIEW' | 'NOT_COSTABLE';
 
-export interface RecipeBuilderJob {
+export type RecipeOrigin =
+  | 'manual_entry'
+  | 'photo_ingestion'
+  | 'conversational'
+  | 'purchase_inference'
+  | 'prep_sheet'
+  | 'vendor_doc'
+  | 'pos_import';
+
+export type RecipeConfidenceLevel = 'draft' | 'estimated' | 'reviewed' | 'verified' | 'locked';
+export type RecipeCaptureMode = 'single_photo' | 'photo_batch' | 'conversation_batch' | 'prep_sheet_batch' | 'blitz';
+export type RecipeCaptureInputType = 'photo' | 'text' | 'prep_sheet' | 'vendor_doc';
+export type RecipeCaptureInputStatus = 'PENDING' | 'PROCESSED' | 'FAILED';
+
+export interface RecipeBuilderAlternativeMatch {
+  id: number | string;
+  name: string;
+  confidence: RecipeBuilderConfidenceLabel;
+  score: number;
+  match_basis: 'item_name' | 'item_alias' | 'recipe_name' | 'recipe_alias' | 'operator';
+}
+
+export interface RecipeBuilderSourceIntelligence {
+  origin: RecipeOrigin;
+  confidence_level: RecipeConfidenceLevel;
+  confidence_score: number;
+  confidence_details: string[];
+  source_images: string[];
+  parsing_issues: string[];
+  assumptions: string[];
+  follow_up_questions: string[];
+  source_context: Record<string, unknown>;
+  raw_source: string | null;
+  capture_session_id: number | string | null;
+  last_confidence_recalculated_at: string | null;
+  inference_variance_pct: number | null;
+}
+
+export interface RecipeBuilderJob extends RecipeBuilderSourceIntelligence {
   id: number | string;
   source_type: RecipeBuilderSourceType;
   source_text: string | null;
@@ -430,6 +468,14 @@ export interface RecipeBuilderParsedRow {
   preparation_note: string | null;
   parse_status: RecipeBuilderParseStatus;
   parser_confidence: RecipeBuilderConfidenceLabel;
+  estimated_flag: number;
+  estimation_basis: string | null;
+  alternative_item_matches: RecipeBuilderAlternativeMatch[];
+  alternative_recipe_matches: RecipeBuilderAlternativeMatch[];
+  detected_component_type: 'inventory_item' | 'sub_recipe' | 'prep_component' | 'unknown';
+  matched_recipe_id: number | string | null;
+  matched_recipe_version_id: number | string | null;
+  match_basis: 'item_name' | 'item_alias' | 'recipe_name' | 'recipe_alias' | 'operator' | null;
   explanation_text: string;
   created_at?: string;
   updated_at?: string;
@@ -447,6 +493,11 @@ export interface RecipeBuilderResolutionRow {
   inventory_mapping_status: 'UNMAPPED' | 'MAPPED' | 'NEEDS_REVIEW' | 'SKIPPED';
   quantity_normalization_status: 'NORMALIZED' | 'PARTIAL' | 'NEEDS_REVIEW' | 'FAILED';
   review_status: RecipeBuilderReviewStatus;
+  recipe_mapping_status: 'UNMAPPED' | 'MAPPED' | 'NEEDS_REVIEW' | 'SKIPPED';
+  recipe_id: number | string | null;
+  recipe_version_id: number | string | null;
+  recipe_match_confidence: RecipeBuilderConfidenceLabel | null;
+  recipe_match_reason: string | null;
   explanation_text: string;
   created_at?: string;
   updated_at?: string;
@@ -471,8 +522,122 @@ export interface RecipeBuilderDraftRecipe {
   unresolved_canonical_count: number;
   unresolved_inventory_count: number;
   source_recipe_type: RecipeType | null;
+  method_notes: string | null;
+  review_priority: 'low' | 'normal' | 'high';
+  ready_for_review_flag: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejected_by: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface RecipeCaptureSession {
+  id: number | string;
+  venue_id: number | string | null;
+  name: string | null;
+  capture_mode: RecipeCaptureMode;
+  started_at: string;
+  completed_at: string | null;
+  led_by: string | null;
+  notes: string | null;
+  total_inputs: number;
+  total_drafts_created: number;
+  total_auto_matched: number;
+  total_needs_review: number;
+  total_approved: number;
+  estimated_time_saved_minutes: number;
+  discovered_sub_recipes_json: string;
+  new_items_needed_json: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RecipeCaptureInput {
+  id: number | string;
+  recipe_capture_session_id: number | string;
+  input_type: RecipeCaptureInputType;
+  source_text: string | null;
+  source_file_name: string | null;
+  source_mime_type: string | null;
+  source_storage_path: string | null;
+  parse_status: RecipeCaptureInputStatus;
+  recipe_builder_job_id: number | string | null;
+  processing_notes: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ItemAlias {
+  id: number | string;
+  item_id: number | string;
+  alias: string;
+  normalized_alias: string;
+  alias_type: 'chef_slang' | 'vendor_name' | 'common_name' | 'abbreviation' | 'menu_name' | 'component_name';
+  active: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RecipeAlias {
+  id: number | string;
+  recipe_id: number | string;
+  alias: string;
+  normalized_alias: string;
+  alias_type: 'chef_slang' | 'abbreviation' | 'old_name' | 'component_name';
+  active: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PrepSheetCapture {
+  id: number | string;
+  venue_id: number | string;
+  capture_date: string;
+  source_file_name: string;
+  source_mime_type: string;
+  source_storage_path: string | null;
+  extracted_text: string | null;
+  parsed_items_json: string;
+  inferred_relationships_json: string;
+  processed: number;
+  processing_notes: string | null;
+  recipe_capture_session_id: number | string | null;
+  created_by: string | null;
+  created_at?: string;
+}
+
+export interface RecipeInferenceRun {
+  id: number | string;
+  venue_id: number | string | null;
+  period_start: string;
+  period_end: string;
+  status: 'PENDING' | 'COMPLETED' | 'FAILED';
+  notes_json: string;
+  created_at?: string;
+  completed_at?: string | null;
+}
+
+export interface RecipeInferenceResult {
+  id: number | string;
+  recipe_inference_run_id: number | string;
+  item_id: number | string;
+  recipe_id: number | string | null;
+  recipe_version_id: number | string | null;
+  total_purchased_base_qty: number;
+  total_units_sold: number;
+  inferred_portion_base_qty: number;
+  current_recipe_portion_base_qty: number | null;
+  variance_pct: number | null;
+  waste_factor: number;
+  menu_usage_json: string;
+  acknowledged: number;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+  action_taken: string | null;
+  created_at?: string;
 }
 
 export interface InvoiceLine {

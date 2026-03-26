@@ -251,6 +251,11 @@ async function persistDraft(
     canonical_match_reason: string | null;
     inventory_item_id: number | null;
     inventory_mapping_status: RecipeBuilderResolutionRow['inventory_mapping_status'];
+    recipe_mapping_status: RecipeBuilderResolutionRow['recipe_mapping_status'];
+    recipe_id: number | null;
+    recipe_version_id: number | null;
+    recipe_match_confidence: RecipeBuilderResolutionRow['recipe_match_confidence'];
+    recipe_match_reason: string | null;
     quantity_normalization_status: RecipeBuilderResolutionRow['quantity_normalization_status'];
     review_status: RecipeBuilderResolutionRow['review_status'];
     explanation_text: string;
@@ -291,6 +296,14 @@ async function persistDraft(
       preparation_note: null,
       parse_status: quantityResolved ? 'PARSED' : 'NEEDS_REVIEW',
       parser_confidence: quantityResolved ? 'HIGH' : 'LOW',
+      estimated_flag: 0,
+      estimation_basis: null,
+      alternative_item_matches: [],
+      alternative_recipe_matches: [],
+      detected_component_type: 'inventory_item',
+      matched_recipe_id: null,
+      matched_recipe_version_id: null,
+      match_basis: null,
       explanation_text: ingredient.template_ingredient_name
         ? 'Draft row persisted from template-backed recipe composition.'
         : 'Draft row persisted from manual recipe composition.',
@@ -305,6 +318,11 @@ async function persistDraft(
         : null,
       inventory_item_id: ingredient.item_id ?? null,
       inventory_mapping_status: inventoryResolved ? 'MAPPED' : 'UNMAPPED',
+      recipe_mapping_status: 'UNMAPPED',
+      recipe_id: null,
+      recipe_version_id: null,
+      recipe_match_confidence: null,
+      recipe_match_reason: null,
       quantity_normalization_status: quantityResolved ? 'NORMALIZED' : 'FAILED',
       review_status: reviewStatus,
       explanation_text: reviewStatus === 'READY'
@@ -362,6 +380,14 @@ async function persistDraft(
     unresolved_canonical_count: unresolvedCanonicalCount,
     unresolved_inventory_count: unresolvedInventoryCount,
     source_recipe_type: input.source_recipe_type,
+    method_notes: null,
+    review_priority: 'normal',
+    ready_for_review_flag: completenessStatus === 'BLOCKED' ? 0 : 1,
+    approved_by: null,
+    approved_at: null,
+    rejected_by: null,
+    rejected_at: null,
+    rejection_reason: null,
   });
 
   await builderRepository.updateJobStatus(job.id, mapJobFinalStatus(draft.record.completeness_status));
