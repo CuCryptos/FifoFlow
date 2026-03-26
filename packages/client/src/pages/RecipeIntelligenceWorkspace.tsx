@@ -20,8 +20,10 @@ import {
 export function RecipeIntelligenceWorkspace() {
   const { selectedVenueId } = useVenueContext();
   const { toast } = useToast();
-  const [conversationName, setConversationName] = useState('');
-  const [conversationDescription, setConversationDescription] = useState('');
+  const [conversationSessionName, setConversationSessionName] = useState('');
+  const [conversationEntries, setConversationEntries] = useState<Array<{ id: number; name: string; description: string }>>([
+    { id: 1, name: '', description: '' },
+  ]);
   const [operatorName, setOperatorName] = useState('');
   const [photoSessionName, setPhotoSessionName] = useState('');
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
@@ -64,24 +66,28 @@ export function RecipeIntelligenceWorkspace() {
       toast('Select a venue before creating conversation drafts.');
       return;
     }
-    if (!conversationName.trim() || !conversationDescription.trim()) {
-      toast('Recipe name and description are required.');
+    const entries = conversationEntries
+      .map((entry) => ({
+        name: entry.name.trim(),
+        description: entry.description.trim(),
+      }))
+      .filter((entry) => entry.name.length > 0 && entry.description.length > 0);
+    if (entries.length === 0) {
+      toast('At least one recipe name and description pair is required.');
       return;
     }
 
     try {
       const result = await createConversationDrafts.mutateAsync({
         venue_id: selectedVenueId,
-        session_name: conversationName.trim(),
+        session_name: conversationSessionName.trim() || null,
         created_by: operatorName.trim() || null,
-        entries: [{
-          name: conversationName.trim(),
-          description: conversationDescription.trim(),
-        }],
+        entries,
       });
       setSelectedSessionId(Number(result.session.id));
       setSelectedDraftId(Number(result.drafts[0]?.draft_id ?? 0) || null);
-      setConversationDescription('');
+      setConversationEntries([{ id: 1, name: '', description: '' }]);
+      setConversationSessionName('');
       toast(`Created ${result.drafts.length} draft${result.drafts.length === 1 ? '' : 's'} from conversation input.`);
     } catch (error: any) {
       toast(error.message ?? 'Failed to create conversation draft.');
@@ -179,17 +185,17 @@ export function RecipeIntelligenceWorkspace() {
           <div className="grid gap-6 xl:grid-cols-3">
             <WorkflowPanel
               title="Describe Recipe"
-              description="Convert one chef-described recipe into a builder draft seed, then let the existing recipe builder parse and resolve it."
+              description="Capture multiple chef-described dishes in one conversation session, then let the existing recipe builder parse and resolve each draft."
             >
               <form className="space-y-4" onSubmit={handleConversationSubmit}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="text-sm font-medium text-slate-700">
-                    Recipe Name
+                    Session Name
                     <input
-                      value={conversationName}
-                      onChange={(event) => setConversationName(event.target.value)}
+                      value={conversationSessionName}
+                      onChange={(event) => setConversationSessionName(event.target.value)}
                       className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-400"
-                      placeholder="Miso Butterfish"
+                      placeholder="Dinner blitz"
                     />
                   </label>
                   <label className="text-sm font-medium text-slate-700">
@@ -202,26 +208,73 @@ export function RecipeIntelligenceWorkspace() {
                     />
                   </label>
                 </div>
-                <label className="block text-sm font-medium text-slate-700">
-                  Chef Description
-                  <textarea
-                    value={conversationDescription}
-                    onChange={(event) => setConversationDescription(event.target.value)}
-                    rows={8}
-                    className="mt-1 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-400"
-                    placeholder="Butterfish with miso glaze, white rice, bok choy, and sesame oil finish."
-                  />
-                </label>
+                <div className="space-y-3">
+                  {conversationEntries.map((entry, index) => (
+                    <div key={entry.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe Entry {index + 1}</div>
+                        {conversationEntries.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() => setConversationEntries((current) => current.filter((candidate) => candidate.id !== entry.id))}
+                            className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-3">
+                        <label className="text-sm font-medium text-slate-700">
+                          Recipe Name
+                          <input
+                            value={entry.name}
+                            onChange={(event) => setConversationEntries((current) => current.map((candidate) => (
+                              candidate.id === entry.id ? { ...candidate, name: event.target.value } : candidate
+                            )))}
+                            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-400"
+                            placeholder="Miso Butterfish"
+                          />
+                        </label>
+                        <label className="text-sm font-medium text-slate-700">
+                          Chef Description
+                          <textarea
+                            value={entry.description}
+                            onChange={(event) => setConversationEntries((current) => current.map((candidate) => (
+                              candidate.id === entry.id ? { ...candidate, description: event.target.value } : candidate
+                            )))}
+                            rows={4}
+                            className="mt-1 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-400"
+                            placeholder="Butterfish with miso glaze, white rice, bok choy, and sesame oil finish."
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setConversationEntries((current) => [
+                      ...current,
+                      {
+                        id: Math.max(...current.map((entry) => entry.id)) + 1,
+                        name: '',
+                        description: '',
+                      },
+                    ])}
+                    className="rounded-full border border-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+                  >
+                    Add Another Recipe
+                  </button>
+                </div>
                 <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
                   <p className="text-sm text-slate-500">
-                    The AI creates a draft seed only. Builder parsing, canonical resolution, and review still happen in FIFOFlow.
+                    The AI creates draft seeds only. Builder parsing, canonical resolution, and review still happen in FIFOFlow.
                   </p>
                   <button
                     type="submit"
                     disabled={createConversationDrafts.isPending}
                     className="rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
                   >
-                    {createConversationDrafts.isPending ? 'Creating Draft...' : 'Create Draft From Description'}
+                    {createConversationDrafts.isPending ? 'Creating Drafts...' : 'Create Drafts From Conversation'}
                   </button>
                 </div>
               </form>

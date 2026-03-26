@@ -1,4 +1,5 @@
 import type {
+  RecipeBuilderAlternativeMatch,
   RecipeBuilderCostabilityStatus,
   RecipeBuilderDraftRecipe,
   RecipeBuilderJob,
@@ -122,6 +123,11 @@ export interface RecipeBuilderPersistenceRepository {
   listParsedRows(jobId: number | string): Promise<RecipeBuilderParsedRow[]>;
   listResolutionRows(jobId: number | string): Promise<RecipeBuilderResolutionRow[]>;
   getDraftRecipe(jobId: number | string): Promise<RecipeBuilderDraftRecipe | null>;
+  findItemMatchCandidates?(input: string): Promise<RecipeBuilderAlternativeMatch[]>;
+  findRecipeMatchCandidates?(input: string): Promise<Array<RecipeBuilderAlternativeMatch & {
+    recipe_id: number | string;
+    recipe_version_id: number | string | null;
+  }>>;
 }
 
 export interface RecipeBuilderDependencies {

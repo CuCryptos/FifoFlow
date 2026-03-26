@@ -1,4 +1,5 @@
 import type {
+  RecipeBuilderAlternativeMatch,
   RecipeBuilderDraftRecipe,
   RecipeBuilderJob,
   RecipeBuilderParsedRow,
@@ -47,9 +48,9 @@ export async function executeRecipeBuilderJob(
 
     await dependencies.repository.updateJobStatus(job.id, 'PARSED');
 
-    const persistedParsedRows = await dependencies.repository.replaceParsedRows(
-      job.id,
-      parsedInputRows.map((row) => ({
+    const parsedRowsForPersistence = await Promise.all(parsedInputRows.map(async (row) => {
+      const aliasHints = await buildAliasHints(row, dependencies);
+      return {
         line_index: row.line_index,
         raw_line_text: row.raw_line_text,
         source_template_ingredient_name: row.template_context?.ingredient_name ?? null,
@@ -66,14 +67,19 @@ export async function executeRecipeBuilderJob(
         parser_confidence: row.parsed.parser_confidence,
         estimated_flag: 0,
         estimation_basis: null,
-        alternative_item_matches: [],
-        alternative_recipe_matches: [],
-        detected_component_type: 'inventory_item',
-        matched_recipe_id: null,
-        matched_recipe_version_id: null,
-        match_basis: null,
-        explanation_text: row.parsed.explanation_text,
-      })),
+        alternative_item_matches: aliasHints.alternative_item_matches,
+        alternative_recipe_matches: aliasHints.alternative_recipe_matches,
+        detected_component_type: aliasHints.detected_component_type,
+        matched_recipe_id: aliasHints.matched_recipe_id,
+        matched_recipe_version_id: aliasHints.matched_recipe_version_id,
+        match_basis: aliasHints.match_basis,
+        explanation_text: [row.parsed.explanation_text, aliasHints.explanation_text].filter(Boolean).join(' '),
+      };
+    }));
+
+    const persistedParsedRows = await dependencies.repository.replaceParsedRows(
+      job.id,
+      parsedRowsForPersistence,
     );
 
     const parsedByIndex = new Map(persistedParsedRows.map((row) => [row.line_index, row]));
@@ -283,6 +289,31 @@ async function buildResolutionRow(
     };
   }
 
+  const matchedRecipe = parsedRow.alternative_recipe_matches[0] ?? null;
+  if (parsedRow.matched_recipe_id != null && matchedRecipe) {
+    return {
+      parsed_row_id: parsedRow.id,
+      recipe_builder_job_id: job.id,
+      canonical_ingredient_id: null,
+      canonical_match_status: 'skipped',
+      canonical_confidence: 'LOW',
+      canonical_match_reason: null,
+      inventory_item_id: null,
+      inventory_mapping_status: 'SKIPPED',
+      recipe_mapping_status: 'MAPPED',
+      recipe_id: parsedRow.matched_recipe_id,
+      recipe_version_id: parsedRow.matched_recipe_version_id,
+      recipe_match_confidence: matchedRecipe.confidence,
+      recipe_match_reason: parsedRow.match_basis,
+      quantity_normalization_status: quantityStatus,
+      review_status: deriveAliasReviewStatus(parsedRow, quantityStatus),
+      explanation_text: [
+        parsedRow.explanation_text,
+        `Recipe intelligence matched this component to recipe "${matchedRecipe.name}" via ${matchedRecipe.match_basis.replace('_', ' ')}.`,
+      ].join(' '),
+    };
+  }
+
   const canonicalMatchStatus = canonicalResolution?.status ?? 'skipped';
   const canonicalConfidence = canonicalResolution == null
     ? 'LOW'
@@ -298,6 +329,12 @@ async function buildResolutionRow(
         parsed_row: sourceRow,
         canonical_resolution: canonicalResolution,
       })
+    : parsedRow.alternative_item_matches[0]
+      ? {
+          inventory_item_id: parsedRow.alternative_item_matches[0].id,
+          inventory_mapping_status: 'MAPPED' as const,
+          explanation_text: `Recipe intelligence matched this component to inventory item "${parsedRow.alternative_item_matches[0].name}" via ${parsedRow.alternative_item_matches[0].match_basis.replace('_', ' ')}.`,
+        }
     : canonicalIngredientId != null
       ? {
           inventory_item_id: null,
@@ -380,6 +417,97 @@ function deriveReviewStatus(
     return 'NEEDS_REVIEW';
   }
   return 'READY';
+}
+
+function deriveAliasReviewStatus(
+  parsedRow: RecipeBuilderParsedRow,
+  quantityStatus: RecipeBuilderResolutionRow['quantity_normalization_status'],
+): RecipeBuilderResolutionRow['review_status'] {
+  if (parsedRow.parse_status === 'FAILED' || quantityStatus === 'FAILED') {
+    return 'BLOCKED';
+  }
+  if (
+    parsedRow.parse_status === 'PARTIAL'
+    || parsedRow.parse_status === 'NEEDS_REVIEW'
+    || quantityStatus === 'PARTIAL'
+    || quantityStatus === 'NEEDS_REVIEW'
+  ) {
+    return 'NEEDS_REVIEW';
+  }
+  return 'READY';
+}
+
+async function buildAliasHints(
+  inputRow: RecipeBuilderParsedInputRow,
+  dependencies: RecipeBuilderDependencies,
+): Promise<{
+  alternative_item_matches: RecipeBuilderAlternativeMatch[];
+  alternative_recipe_matches: RecipeBuilderAlternativeMatch[];
+  detected_component_type: RecipeBuilderParsedRow['detected_component_type'];
+  matched_recipe_id: number | string | null;
+  matched_recipe_version_id: number | string | null;
+  match_basis: RecipeBuilderParsedRow['match_basis'];
+  explanation_text: string | null;
+}> {
+  const ingredientText = inputRow.parsed.ingredient_text?.trim();
+  if (!ingredientText) {
+    return {
+      alternative_item_matches: [],
+      alternative_recipe_matches: [],
+      detected_component_type: 'unknown',
+      matched_recipe_id: null,
+      matched_recipe_version_id: null,
+      match_basis: null,
+      explanation_text: null,
+    };
+  }
+
+  const [itemMatches, recipeMatches] = await Promise.all([
+    dependencies.repository.findItemMatchCandidates?.(ingredientText) ?? Promise.resolve([]),
+    dependencies.repository.findRecipeMatchCandidates?.(ingredientText) ?? Promise.resolve([]),
+  ]);
+
+  const topRecipeMatch = recipeMatches[0] ?? null;
+  if (topRecipeMatch) {
+    return {
+      alternative_item_matches: itemMatches,
+      alternative_recipe_matches: recipeMatches.map(({ id, name, confidence, score, match_basis }) => ({
+        id,
+        name,
+        confidence,
+        score,
+        match_basis,
+      })),
+      detected_component_type: 'sub_recipe',
+      matched_recipe_id: topRecipeMatch.recipe_id,
+      matched_recipe_version_id: topRecipeMatch.recipe_version_id,
+      match_basis: topRecipeMatch.match_basis,
+      explanation_text: `Recipe intelligence found ${recipeMatches.length} recipe candidate${recipeMatches.length === 1 ? '' : 's'} for this component.`,
+    };
+  }
+
+  const topItemMatch = itemMatches[0] ?? null;
+  if (topItemMatch) {
+    return {
+      alternative_item_matches: itemMatches,
+      alternative_recipe_matches: [],
+      detected_component_type: 'inventory_item',
+      matched_recipe_id: null,
+      matched_recipe_version_id: null,
+      match_basis: topItemMatch.match_basis,
+      explanation_text: `Recipe intelligence found ${itemMatches.length} inventory candidate${itemMatches.length === 1 ? '' : 's'} for this component.`,
+    };
+  }
+
+  return {
+    alternative_item_matches: [],
+    alternative_recipe_matches: [],
+    detected_component_type: 'inventory_item',
+    matched_recipe_id: null,
+    matched_recipe_version_id: null,
+    match_basis: null,
+    explanation_text: null,
+  };
 }
 
 function trimNumber(value: number): string {

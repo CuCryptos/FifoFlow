@@ -689,6 +689,16 @@ export function createRecipeIntelligenceRoutes(
     res.status(501).json({ error: 'Recipe inference runs are not implemented yet' });
   });
 
+  router.get('/items/:itemId/aliases', async (req, res) => {
+    const itemId = parseRequiredPositiveInteger(req.params.itemId);
+    if (itemId == null) {
+      res.status(400).json({ error: 'Invalid item id' });
+      return;
+    }
+    const aliases = await repository.listItemAliases(itemId);
+    res.json({ item_id: itemId, aliases });
+  });
+
   router.post('/items/:itemId/aliases', (req, res) => {
     const itemId = parseRequiredPositiveInteger(req.params.itemId);
     if (itemId == null) {
@@ -700,7 +710,31 @@ export function createRecipeIntelligenceRoutes(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid item alias payload' });
       return;
     }
-    res.status(501).json({ error: `Item alias CRUD for item ${itemId} is not implemented yet` });
+    repository.upsertItemAlias(itemId, parsed.data)
+      .then((aliases) => res.status(201).json({ item_id: itemId, aliases }))
+      .catch((error: any) => res.status(400).json({ error: error.message ?? 'Failed to save item alias' }));
+  });
+
+  router.delete('/items/:itemId/aliases/:aliasId', (req, res) => {
+    const itemId = parseRequiredPositiveInteger(req.params.itemId);
+    const aliasId = parseRequiredPositiveInteger(req.params.aliasId);
+    if (itemId == null || aliasId == null) {
+      res.status(400).json({ error: 'Invalid item alias target' });
+      return;
+    }
+    repository.removeItemAlias(itemId, aliasId)
+      .then((aliases) => res.json({ item_id: itemId, aliases }))
+      .catch((error: any) => res.status(400).json({ error: error.message ?? 'Failed to remove item alias' }));
+  });
+
+  router.get('/recipes/:recipeId/aliases', async (req, res) => {
+    const recipeId = parseRequiredPositiveInteger(req.params.recipeId);
+    if (recipeId == null) {
+      res.status(400).json({ error: 'Invalid recipe id' });
+      return;
+    }
+    const aliases = await repository.listRecipeAliases(recipeId);
+    res.json({ recipe_id: recipeId, aliases });
   });
 
   router.post('/recipes/:recipeId/aliases', (req, res) => {
@@ -714,7 +748,21 @@ export function createRecipeIntelligenceRoutes(
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid recipe alias payload' });
       return;
     }
-    res.status(501).json({ error: `Recipe alias CRUD for recipe ${recipeId} is not implemented yet` });
+    repository.upsertRecipeAlias(recipeId, parsed.data)
+      .then((aliases) => res.status(201).json({ recipe_id: recipeId, aliases }))
+      .catch((error: any) => res.status(400).json({ error: error.message ?? 'Failed to save recipe alias' }));
+  });
+
+  router.delete('/recipes/:recipeId/aliases/:aliasId', (req, res) => {
+    const recipeId = parseRequiredPositiveInteger(req.params.recipeId);
+    const aliasId = parseRequiredPositiveInteger(req.params.aliasId);
+    if (recipeId == null || aliasId == null) {
+      res.status(400).json({ error: 'Invalid recipe alias target' });
+      return;
+    }
+    repository.removeRecipeAlias(recipeId, aliasId)
+      .then((aliases) => res.json({ recipe_id: recipeId, aliases }))
+      .catch((error: any) => res.status(400).json({ error: error.message ?? 'Failed to remove recipe alias' }));
   });
 
   return router;

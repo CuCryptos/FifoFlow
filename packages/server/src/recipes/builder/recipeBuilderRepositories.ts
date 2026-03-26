@@ -3,7 +3,10 @@ import Database from 'better-sqlite3';
 import type {
   CreatePrepSheetCaptureInput,
   CreateRecipeCaptureSessionInput,
+  ItemAlias,
   PrepSheetCapture,
+  RecipeBuilderAlternativeMatch,
+  RecipeAlias,
   RecipeOrigin,
   RecalculateRecipeDraftConfidenceInput,
   RecipeBuilderSourceIntelligence,
@@ -625,6 +628,239 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return rows.map(mapPrepSheetCaptureRow);
   }
 
+  async listItemAliases(itemId: number | string): Promise<ItemAlias[]> {
+    const rows = this.db.prepare(
+      `
+        SELECT *
+        FROM item_aliases
+        WHERE item_id = ?
+          AND active = 1
+        ORDER BY alias COLLATE NOCASE ASC, id ASC
+      `,
+    ).all(itemId) as ItemAliasRow[];
+
+    return rows.map(mapItemAliasRow);
+  }
+
+  async upsertItemAlias(itemId: number | string, input: { alias: string; alias_type: ItemAlias['alias_type'] }): Promise<ItemAlias[]> {
+    const alias = input.alias.trim();
+    if (!alias) {
+      throw new Error('Alias is required');
+    }
+
+    this.db.prepare(
+      `
+        INSERT INTO item_aliases (
+          item_id,
+          alias,
+          normalized_alias,
+          alias_type,
+          active
+        ) VALUES (?, ?, ?, ?, 1)
+        ON CONFLICT(item_id, alias) DO UPDATE SET
+          normalized_alias = excluded.normalized_alias,
+          alias_type = excluded.alias_type,
+          active = 1,
+          updated_at = datetime('now')
+      `,
+    ).run(itemId, alias, normalizeIngredientLookup(alias), input.alias_type);
+
+    return this.listItemAliases(itemId);
+  }
+
+  async removeItemAlias(itemId: number | string, aliasId: number | string): Promise<ItemAlias[]> {
+    this.db.prepare(
+      `
+        UPDATE item_aliases
+        SET active = 0,
+            updated_at = datetime('now')
+        WHERE id = ?
+          AND item_id = ?
+      `,
+    ).run(aliasId, itemId);
+
+    return this.listItemAliases(itemId);
+  }
+
+  async listRecipeAliases(recipeId: number | string): Promise<RecipeAlias[]> {
+    const rows = this.db.prepare(
+      `
+        SELECT *
+        FROM recipe_aliases
+        WHERE recipe_id = ?
+          AND active = 1
+        ORDER BY alias COLLATE NOCASE ASC, id ASC
+      `,
+    ).all(recipeId) as RecipeAliasRow[];
+
+    return rows.map(mapRecipeAliasRow);
+  }
+
+  async upsertRecipeAlias(recipeId: number | string, input: { alias: string; alias_type: RecipeAlias['alias_type'] }): Promise<RecipeAlias[]> {
+    const alias = input.alias.trim();
+    if (!alias) {
+      throw new Error('Alias is required');
+    }
+
+    this.db.prepare(
+      `
+        INSERT INTO recipe_aliases (
+          recipe_id,
+          alias,
+          normalized_alias,
+          alias_type,
+          active
+        ) VALUES (?, ?, ?, ?, 1)
+        ON CONFLICT(recipe_id, alias) DO UPDATE SET
+          normalized_alias = excluded.normalized_alias,
+          alias_type = excluded.alias_type,
+          active = 1,
+          updated_at = datetime('now')
+      `,
+    ).run(recipeId, alias, normalizeIngredientLookup(alias), input.alias_type);
+
+    return this.listRecipeAliases(recipeId);
+  }
+
+  async removeRecipeAlias(recipeId: number | string, aliasId: number | string): Promise<RecipeAlias[]> {
+    this.db.prepare(
+      `
+        UPDATE recipe_aliases
+        SET active = 0,
+            updated_at = datetime('now')
+        WHERE id = ?
+          AND recipe_id = ?
+      `,
+    ).run(aliasId, recipeId);
+
+    return this.listRecipeAliases(recipeId);
+  }
+
+  async findItemMatchCandidates(input: string): Promise<RecipeBuilderAlternativeMatch[]> {
+    const normalized = normalizeIngredientLookup(input);
+    const rows = this.db.prepare(
+      `
+        WITH direct_matches AS (
+          SELECT
+            i.id AS item_id,
+            i.name AS item_name,
+            'item_name' AS match_basis,
+            0.98 AS score
+          FROM items i
+          WHERE LOWER(TRIM(i.name)) = LOWER(TRIM(?))
+        ),
+        alias_matches AS (
+          SELECT
+            i.id AS item_id,
+            i.name AS item_name,
+            'item_alias' AS match_basis,
+            0.95 AS score
+          FROM item_aliases ia
+          INNER JOIN items i ON i.id = ia.item_id
+          WHERE ia.active = 1
+            AND ia.normalized_alias = ?
+        )
+        SELECT *
+        FROM (
+          SELECT * FROM direct_matches
+          UNION ALL
+          SELECT * FROM alias_matches
+        )
+        ORDER BY score DESC, item_name COLLATE NOCASE ASC, item_id ASC
+      `,
+    ).all(input, normalized) as Array<{
+      item_id: number;
+      item_name: string;
+      match_basis: RecipeBuilderAlternativeMatch['match_basis'];
+      score: number;
+    }>;
+
+    return dedupeAlternativeMatches(
+      rows.map((row) => ({
+        id: row.item_id,
+        name: row.item_name,
+        confidence: row.score >= 0.97 ? 'HIGH' : 'MEDIUM',
+        score: row.score,
+        match_basis: row.match_basis,
+      })),
+    );
+  }
+
+  async findRecipeMatchCandidates(
+    input: string,
+  ): Promise<Array<RecipeBuilderAlternativeMatch & { recipe_id: number | string; recipe_version_id: number | string | null }>> {
+    const normalized = normalizeIngredientLookup(input);
+    const rows = this.db.prepare(
+      `
+        WITH latest_versions AS (
+          SELECT rv.recipe_id, rv.id AS recipe_version_id
+          FROM recipe_versions rv
+          INNER JOIN (
+            SELECT recipe_id, MAX(version_number) AS max_version_number
+            FROM recipe_versions
+            GROUP BY recipe_id
+          ) latest ON latest.recipe_id = rv.recipe_id AND latest.max_version_number = rv.version_number
+        ),
+        direct_matches AS (
+          SELECT
+            r.id AS recipe_id,
+            r.name AS recipe_name,
+            lv.recipe_version_id AS recipe_version_id,
+            'recipe_name' AS match_basis,
+            0.98 AS score
+          FROM recipes r
+          LEFT JOIN latest_versions lv ON lv.recipe_id = r.id
+          WHERE LOWER(TRIM(r.name)) = LOWER(TRIM(?))
+        ),
+        alias_matches AS (
+          SELECT
+            r.id AS recipe_id,
+            r.name AS recipe_name,
+            lv.recipe_version_id AS recipe_version_id,
+            'recipe_alias' AS match_basis,
+            0.95 AS score
+          FROM recipe_aliases ra
+          INNER JOIN recipes r ON r.id = ra.recipe_id
+          LEFT JOIN latest_versions lv ON lv.recipe_id = r.id
+          WHERE ra.active = 1
+            AND ra.normalized_alias = ?
+        )
+        SELECT *
+        FROM (
+          SELECT * FROM direct_matches
+          UNION ALL
+          SELECT * FROM alias_matches
+        )
+        ORDER BY score DESC, recipe_name COLLATE NOCASE ASC, recipe_id ASC
+      `,
+    ).all(input, normalized) as Array<{
+      recipe_id: number;
+      recipe_name: string;
+      recipe_version_id: number | null;
+      match_basis: RecipeBuilderAlternativeMatch['match_basis'];
+      score: number;
+    }>;
+
+    const seen = new Set<number>();
+    return rows
+      .filter((row) => {
+        if (seen.has(row.recipe_id)) {
+          return false;
+        }
+        seen.add(row.recipe_id);
+        return true;
+      })
+      .map((row) => ({
+        id: row.recipe_id,
+        recipe_id: row.recipe_id,
+        recipe_version_id: row.recipe_version_id,
+        name: row.recipe_name,
+        confidence: row.score >= 0.97 ? 'HIGH' : 'MEDIUM',
+        score: row.score,
+        match_basis: row.match_basis,
+      }));
+  }
+
   async updateJobIntelligence(
     jobId: number | string,
     updates: Partial<{
@@ -1059,6 +1295,28 @@ interface PrepSheetCaptureRow {
   created_at: string;
 }
 
+interface ItemAliasRow {
+  id: number;
+  item_id: number;
+  alias: string;
+  normalized_alias: string;
+  alias_type: ItemAlias['alias_type'];
+  active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RecipeAliasRow {
+  id: number;
+  recipe_id: number;
+  alias: string;
+  normalized_alias: string;
+  alias_type: RecipeAlias['alias_type'];
+  active: number;
+  created_at: string;
+  updated_at: string;
+}
+
 function mapJobRow(row: JobRow): RecipeBuilderJob {
   const sourceContext = parseJsonObject(row.source_context_json);
   const rawSource = typeof sourceContext.raw_source === 'string' && sourceContext.raw_source.trim().length > 0
@@ -1151,6 +1409,32 @@ function mapPrepSheetCaptureRow(row: PrepSheetCaptureRow): PrepSheetCapture {
   return {
     ...row,
   };
+}
+
+function mapItemAliasRow(row: ItemAliasRow): ItemAlias {
+  return {
+    ...row,
+  };
+}
+
+function mapRecipeAliasRow(row: RecipeAliasRow): RecipeAlias {
+  return {
+    ...row,
+  };
+}
+
+function dedupeAlternativeMatches(matches: RecipeBuilderAlternativeMatch[]): RecipeBuilderAlternativeMatch[] {
+  const seen = new Set<string>();
+  const deduped: RecipeBuilderAlternativeMatch[] = [];
+  for (const match of matches) {
+    const key = String(match.id);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(match);
+  }
+  return deduped;
 }
 
 function buildBuilderSourceHash(input: RecipeBuilderRequest): string {

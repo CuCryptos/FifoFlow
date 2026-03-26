@@ -329,6 +329,73 @@ describe('recipe builder assembly engine', () => {
     }
   });
 
+  it('captures intentional prep-component mappings through recipe aliases', async () => {
+    const db = createDb();
+    const canonicalRepository = new SQLiteCanonicalIngredientRepository(db);
+    const builderRepository = new SQLiteRecipeBuilderRepository(db);
+    try {
+      syncCanonicalIngredientDictionary(canonicalRepository, createSeed(), '2026-03-14T10:00:00.000Z');
+
+      const recipeId = Number(
+        db.prepare('INSERT INTO recipes (name, type, notes) VALUES (?, ?, NULL)').run('Fish of the Day', 'dish').lastInsertRowid,
+      );
+      const recipeVersionId = Number(
+        db.prepare(
+          `INSERT INTO recipe_versions (recipe_id, version_number, status, yield_quantity, yield_unit)
+           VALUES (?, 1, 'active', 1, 'plate')`,
+        ).run(recipeId).lastInsertRowid,
+      );
+      await builderRepository.upsertRecipeAlias(recipeId, {
+        alias: 'beurre blanc',
+        alias_type: 'component_name',
+      });
+
+      const result = await runRecipeBuilderJob(
+        {
+          source_type: 'freeform',
+          source_text: '2 cup beurre blanc',
+          draft_name: 'Prep Alias Draft',
+          yield_quantity: 1,
+          yield_unit: 'quart',
+          source_recipe_type: 'prep',
+        },
+        {
+          source: builderRepository,
+          repository: builderRepository,
+          canonicalIngredientRepository: canonicalRepository,
+        },
+      );
+
+      expect(result.parsed_rows[0]).toMatchObject({
+        ingredient_text: 'beurre blanc',
+        detected_component_type: 'sub_recipe',
+        matched_recipe_id: recipeId,
+        matched_recipe_version_id: recipeVersionId,
+        match_basis: 'recipe_alias',
+      });
+      expect(result.parsed_rows[0]?.alternative_recipe_matches).toEqual([
+        expect.objectContaining({
+          id: recipeId,
+          name: 'Fish of the Day',
+          match_basis: 'recipe_alias',
+        }),
+      ]);
+      expect(result.resolution_rows[0]).toMatchObject({
+        canonical_match_status: 'skipped',
+        recipe_mapping_status: 'MAPPED',
+        recipe_id: recipeId,
+        recipe_version_id: recipeVersionId,
+        recipe_match_reason: 'recipe_alias',
+        review_status: 'READY',
+      });
+      expect(result.draft_recipe).toMatchObject({
+        completeness_status: 'NEEDS_REVIEW',
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   it('supports stable reruns against the same builder job', async () => {
     const db = createDb();
     const canonicalRepository = new SQLiteCanonicalIngredientRepository(db);

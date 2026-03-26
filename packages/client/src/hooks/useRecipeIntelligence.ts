@@ -93,3 +93,63 @@ export function useUploadPrepSheetCapture() {
     },
   });
 }
+
+export function useRecipeIntelligenceItemAliases(itemId: number) {
+  return useQuery({
+    queryKey: ['recipe-intelligence', 'item-aliases', itemId],
+    queryFn: () => api.recipeIntelligence.listItemAliases(itemId),
+    enabled: itemId > 0,
+  });
+}
+
+export function useAddRecipeIntelligenceItemAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, data }: { itemId: number; data: { alias: string; alias_type: 'chef_slang' | 'vendor_name' | 'common_name' | 'abbreviation' | 'menu_name' | 'component_name' } }) =>
+      api.recipeIntelligence.addItemAlias(itemId, data),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'item-aliases', result.item_id] });
+    },
+  });
+}
+
+export function useDeleteRecipeIntelligenceItemAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, aliasId }: { itemId: number; aliasId: number }) =>
+      api.recipeIntelligence.deleteItemAlias(itemId, aliasId),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'item-aliases', result.item_id] });
+    },
+  });
+}
+
+export function useRecipeIntelligenceRecipeAliases(recipeId: number) {
+  return useQuery({
+    queryKey: ['recipe-intelligence', 'recipe-aliases', recipeId],
+    queryFn: () => api.recipeIntelligence.listRecipeAliases(recipeId),
+    enabled: recipeId > 0,
+  });
+}
+
+export function useAddRecipeIntelligenceRecipeAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, data }: { recipeId: number; data: { alias: string; alias_type: 'chef_slang' | 'abbreviation' | 'old_name' | 'component_name' } }) =>
+      api.recipeIntelligence.addRecipeAlias(recipeId, data),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'recipe-aliases', result.recipe_id] });
+    },
+  });
+}
+
+export function useDeleteRecipeIntelligenceRecipeAlias() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, aliasId }: { recipeId: number; aliasId: number }) =>
+      api.recipeIntelligence.deleteRecipeAlias(recipeId, aliasId),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'recipe-aliases', result.recipe_id] });
+    },
+  });
+}

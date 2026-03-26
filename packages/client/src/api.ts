@@ -1,5 +1,6 @@
 import type {
   Item,
+  ItemAlias,
   ItemStorage,
   Transaction,
   TransactionWithItem,
@@ -57,6 +58,7 @@ import type {
   CreateRecipeInferenceRunInput,
   RecalculateRecipeDraftConfidenceInput,
   PrepSheetCapture,
+  RecipeAlias,
   RecipeBuilderJobInput,
   RecipeBuilderDraftRecipe,
   RecipeBuilderSourceIntelligence,
@@ -875,6 +877,16 @@ export interface RecipeIntelligencePrepSheetPayload extends RecipeIntelligenceDr
   }>;
 }
 
+export interface RecipeIntelligenceItemAliasPayload {
+  item_id: number;
+  aliases: ItemAlias[];
+}
+
+export interface RecipeIntelligenceRecipeAliasPayload {
+  recipe_id: number;
+  aliases: RecipeAlias[];
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -1297,20 +1309,32 @@ export const api = {
       }
       return res.json() as Promise<RecipeIntelligencePrepSheetPayload>;
     },
+    listItemAliases: (itemId: number) =>
+      fetchJson<RecipeIntelligenceItemAliasPayload>(`/recipe-intelligence/items/${itemId}/aliases`),
     createInferenceRun: (data: CreateRecipeInferenceRunInput) =>
       fetchJson<unknown>('/recipe-intelligence/inference-runs', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     addItemAlias: (itemId: number, data: CreateItemAliasInput) =>
-      fetchJson<unknown>(`/recipe-intelligence/items/${itemId}/aliases`, {
+      fetchJson<RecipeIntelligenceItemAliasPayload>(`/recipe-intelligence/items/${itemId}/aliases`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    deleteItemAlias: (itemId: number, aliasId: number) =>
+      fetchJson<RecipeIntelligenceItemAliasPayload>(`/recipe-intelligence/items/${itemId}/aliases/${aliasId}`, {
+        method: 'DELETE',
+      }),
+    listRecipeAliases: (recipeId: number) =>
+      fetchJson<RecipeIntelligenceRecipeAliasPayload>(`/recipe-intelligence/recipes/${recipeId}/aliases`),
     addRecipeAlias: (recipeId: number, data: CreateRecipeAliasInput) =>
-      fetchJson<unknown>(`/recipe-intelligence/recipes/${recipeId}/aliases`, {
+      fetchJson<RecipeIntelligenceRecipeAliasPayload>(`/recipe-intelligence/recipes/${recipeId}/aliases`, {
         method: 'POST',
         body: JSON.stringify(data),
+      }),
+    deleteRecipeAlias: (recipeId: number, aliasId: number) =>
+      fetchJson<RecipeIntelligenceRecipeAliasPayload>(`/recipe-intelligence/recipes/${recipeId}/aliases/${aliasId}`, {
+        method: 'DELETE',
       }),
   },
   recipeTemplates: {

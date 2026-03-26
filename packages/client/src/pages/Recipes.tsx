@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   useCreateRecipeDraft,
@@ -9,7 +10,13 @@ import {
   useUpdateRecipeDraft,
 } from '../hooks/useRecipeDrafts';
 import {
+  useAddRecipeIntelligenceItemAlias,
+  useAddRecipeIntelligenceRecipeAlias,
+  useDeleteRecipeIntelligenceItemAlias,
+  useDeleteRecipeIntelligenceRecipeAlias,
   useRecipeDraftSourceIntelligence,
+  useRecipeIntelligenceItemAliases,
+  useRecipeIntelligenceRecipeAliases,
   useRecalculateRecipeDraftConfidence,
 } from '../hooks/useRecipeIntelligence';
 import { useItems } from '../hooks/useItems';
@@ -38,6 +45,7 @@ import type {
   RecipeTemplateDetailPayload,
   RecipeWorkflowIngredientDiffPayload,
 } from '../api';
+import { api } from '../api';
 
 export function Recipes() {
   const navigate = useNavigate();
@@ -351,9 +359,34 @@ export function DraftRecipeDetailPage() {
 }
 
 function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
+  const { selectedVenueId } = useVenueContext();
   const { toast } = useToast();
   const sourceQuery = useRecipeDraftSourceIntelligence(draftId);
   const recalculateConfidence = useRecalculateRecipeDraftConfidence();
+  const { data: items = [] } = useItems({ venue_id: selectedVenueId ?? undefined });
+  const recipesQuery = useQuery({
+    queryKey: ['recipe-intelligence', 'alias-recipe-options'],
+    queryFn: () => api.recipes.list(),
+  });
+  const [selectedItemId, setSelectedItemId] = useState<number>(0);
+  const [itemAliasValue, setItemAliasValue] = useState('');
+  const [selectedRecipeId, setSelectedRecipeId] = useState<number>(0);
+  const [recipeAliasValue, setRecipeAliasValue] = useState('');
+  const itemAliasesQuery = useRecipeIntelligenceItemAliases(selectedItemId);
+  const recipeAliasesQuery = useRecipeIntelligenceRecipeAliases(selectedRecipeId);
+  const addItemAlias = useAddRecipeIntelligenceItemAlias();
+  const deleteItemAlias = useDeleteRecipeIntelligenceItemAlias();
+  const addRecipeAlias = useAddRecipeIntelligenceRecipeAlias();
+  const deleteRecipeAlias = useDeleteRecipeIntelligenceRecipeAlias();
+  const draftAliasSeed = sourceQuery.data?.draft.draft_name ?? '';
+
+  useEffect(() => {
+    if (!draftAliasSeed) {
+      return;
+    }
+    setItemAliasValue((current) => (current.trim().length === 0 ? draftAliasSeed : current));
+    setRecipeAliasValue((current) => (current.trim().length === 0 ? draftAliasSeed : current));
+  }, [draftAliasSeed]);
 
   if (sourceQuery.isLoading) {
     return (
@@ -382,6 +415,9 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
   }
 
   const source = sourceQuery.data.source_intelligence;
+  const inferredRelationships = extractPrepSheetInferredRelationships(source.source_context);
+  const likelyUsedIn = extractStringList(source.source_context.likely_used_in);
+  const isPrepCapture = source.origin === 'prep_sheet' || sourceQuery.data.draft.source_recipe_type === 'prep';
 
   return (
     <WorkflowPanel
@@ -440,6 +476,122 @@ function DraftSourceIntelligencePanel({ draftId }: { draftId: number }) {
           <RecipeIntelListBlock title="Confidence Details" items={source.confidence_details} emptyLabel="No confidence details recorded." />
         </div>
       </div>
+      {isPrepCapture ? (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.92fr,1.08fr]">
+          <RecipeIntelListBlock
+            title="Prep Sheet Inferred Relationships"
+            items={[
+              ...likelyUsedIn.map((entry) => `Likely used in: ${entry}`),
+              ...inferredRelationships.map((entry) => `${entry.prep_item} -> ${entry.likely_used_in.join(', ')} (${Math.round(entry.confidence * 100)}%)`),
+            ]}
+            emptyLabel="No inferred prep relationships were stored for this draft."
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Inventory Item Alias</div>
+              <div className="mt-4 space-y-3">
+                <select
+                  value={selectedItemId}
+                  onChange={(event) => setSelectedItemId(Number(event.target.value))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
+                >
+                  <option value={0}>Select inventory item</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+                <input
+                  value={itemAliasValue}
+                  onChange={(event) => setItemAliasValue(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
+                  placeholder="Alias text"
+                />
+                <button
+                  type="button"
+                  disabled={selectedItemId <= 0 || !itemAliasValue.trim() || addItemAlias.isPending}
+                  onClick={() => {
+                    addItemAlias.mutate(
+                      { itemId: selectedItemId, data: { alias: itemAliasValue.trim(), alias_type: 'component_name' } },
+                      {
+                        onSuccess: () => toast('Item alias saved', 'success'),
+                        onError: (error) => toast(error.message, 'error'),
+                      },
+                    );
+                  }}
+                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {addItemAlias.isPending ? 'Saving...' : 'Add Item Alias'}
+                </button>
+                <RecipeAliasList
+                  items={itemAliasesQuery.data?.aliases.map((alias) => ({
+                    id: Number(alias.id),
+                    label: alias.alias,
+                    onRemove: () => deleteItemAlias.mutate(
+                      { itemId: selectedItemId, aliasId: Number(alias.id) },
+                      {
+                        onSuccess: () => toast('Item alias removed', 'success'),
+                        onError: (error) => toast(error.message, 'error'),
+                      },
+                    ),
+                  })) ?? []}
+                  emptyLabel={selectedItemId > 0 ? 'No item aliases for this item yet.' : 'Select an inventory item to manage aliases.'}
+                />
+              </div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Recipe Alias</div>
+              <div className="mt-4 space-y-3">
+                <select
+                  value={selectedRecipeId}
+                  onChange={(event) => setSelectedRecipeId(Number(event.target.value))}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
+                >
+                  <option value={0}>Select recipe</option>
+                  {(recipesQuery.data ?? []).map((recipe) => (
+                    <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
+                  ))}
+                </select>
+                <input
+                  value={recipeAliasValue}
+                  onChange={(event) => setRecipeAliasValue(event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none"
+                  placeholder="Alias text"
+                />
+                <button
+                  type="button"
+                  disabled={selectedRecipeId <= 0 || !recipeAliasValue.trim() || addRecipeAlias.isPending}
+                  onClick={() => {
+                    addRecipeAlias.mutate(
+                      { recipeId: selectedRecipeId, data: { alias: recipeAliasValue.trim(), alias_type: 'component_name' } },
+                      {
+                        onSuccess: () => toast('Recipe alias saved', 'success'),
+                        onError: (error) => toast(error.message, 'error'),
+                      },
+                    );
+                  }}
+                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {addRecipeAlias.isPending ? 'Saving...' : 'Add Recipe Alias'}
+                </button>
+                <RecipeAliasList
+                  items={recipeAliasesQuery.data?.aliases.map((alias) => ({
+                    id: Number(alias.id),
+                    label: alias.alias,
+                    onRemove: () => deleteRecipeAlias.mutate(
+                      { recipeId: selectedRecipeId, aliasId: Number(alias.id) },
+                      {
+                        onSuccess: () => toast('Recipe alias removed', 'success'),
+                        onError: (error) => toast(error.message, 'error'),
+                      },
+                    ),
+                  })) ?? []}
+                  emptyLabel={selectedRecipeId > 0 ? 'No recipe aliases for this recipe yet.' : 'Select a recipe to manage aliases.'}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </WorkflowPanel>
   );
 }
@@ -1977,6 +2129,54 @@ function RecipeIntelListBlock({ title, items, emptyLabel }: { title: string; ite
       </div>
     </div>
   );
+}
+
+function RecipeAliasList({
+  items,
+  emptyLabel,
+}: {
+  items: Array<{ id: number; label: string; onRemove: () => void }>;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="space-y-2">
+      {items.length === 0 ? (
+        <div className="text-sm text-slate-500">{emptyLabel}</div>
+      ) : items.map((item) => (
+        <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <span>{item.label}</span>
+          <button
+            type="button"
+            onClick={item.onRemove}
+            className="rounded-full border border-slate-300 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 transition hover:border-slate-400 hover:bg-slate-100"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function extractStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0) : [];
+}
+
+function extractPrepSheetInferredRelationships(value: unknown): Array<{ prep_item: string; likely_used_in: string[]; confidence: number }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => {
+      const row = entry as Record<string, unknown>;
+      return {
+        prep_item: typeof row.prep_item === 'string' ? row.prep_item : '',
+        likely_used_in: extractStringList(row.likely_used_in),
+        confidence: typeof row.confidence === 'number' ? row.confidence : 0,
+      };
+    })
+    .filter((entry) => entry.prep_item.trim().length > 0);
 }
 
 function IngredientResolutionCard({ row }: { row: OperationalRecipeIngredientRowPayload }) {

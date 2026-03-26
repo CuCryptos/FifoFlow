@@ -7,25 +7,25 @@ import { createRecipeIntelligenceRoutes } from '../routes/recipeIntelligence.js'
 import { SQLiteRecipeBuilderRepository } from '../recipes/builder/index.js';
 
 const stubAi = {
-  async createConversationDraftSeeds() {
-    return [
-      {
-        draft_name: 'Miso Butterfish',
-        source_text: '6 oz butterfish\n2 oz miso glaze\n4 oz white rice',
-        draft_notes: 'Derived from chef conversation.',
-        yield_quantity: 4,
-        yield_unit: 'plate',
-        serving_quantity: 6,
-        serving_unit: 'oz',
-        serving_count: 4,
-        source_recipe_type: 'dish' as const,
-        method_notes: 'Glaze fish and plate with rice.',
-        assumptions: ['Rice portion was inferred from plating description'],
-        follow_up_questions: ['Confirm vegetable garnish'],
-        parsing_issues: [],
-        confidence_score: 78,
-      },
-    ];
+  async createConversationDraftSeeds(input: { entries: Array<{ name: string; description: string }> }) {
+    return input.entries.map((entry, index) => ({
+      draft_name: entry.name,
+      source_text: `${entry.name}\n${entry.description}`,
+      draft_notes: `Derived from chef conversation entry ${index + 1}.`,
+      yield_quantity: 4,
+      yield_unit: 'plate',
+      serving_quantity: 6,
+      serving_unit: 'oz',
+      serving_count: 4,
+      source_recipe_type: 'dish' as const,
+      method_notes: index === 0 ? 'Glaze fish and plate with rice.' : 'Sear and plate with vegetables.',
+      assumptions: index === 0
+        ? ['Rice portion was inferred from plating description']
+        : ['Second entry was captured in the same batch session'],
+      follow_up_questions: index === 0 ? ['Confirm vegetable garnish'] : ['Confirm side garnish'],
+      parsing_issues: [],
+      confidence_score: index === 0 ? 78 : 71,
+    }));
   },
   async createPhotoDraftSeeds() {
     return [
@@ -286,28 +286,99 @@ describe('Recipe intelligence routes', () => {
         venue_id: 1,
         session_name: 'Chef Notes',
         created_by: 'chef',
-        entries: [{ name: 'Miso Butterfish', description: 'Butterfish with miso glaze' }],
+        entries: [
+          { name: 'Miso Butterfish', description: 'Butterfish with miso glaze' },
+          { name: 'Grilled Short Ribs', description: 'Short ribs with sesame slaw' },
+        ],
       });
 
     expect(conversationResponse.status).toBe(201);
     expect(conversationResponse.body.session).toMatchObject({
       venue_id: 1,
       capture_mode: 'conversation_batch',
-      total_drafts_created: 1,
+      total_drafts_created: 2,
     });
-    expect(conversationResponse.body.drafts).toEqual([
+    expect(conversationResponse.body.drafts).toHaveLength(2);
+    expect(conversationResponse.body.drafts.map((draft: any) => draft.draft.draft_name)).toEqual([
+      'Miso Butterfish',
+      'Grilled Short Ribs',
+    ]);
+    expect(conversationResponse.body.drafts[0]).toEqual(expect.objectContaining({
+      draft: expect.objectContaining({
+        draft_name: 'Miso Butterfish',
+        method_notes: 'Glaze fish and plate with rice.',
+      }),
+      source_intelligence: expect.objectContaining({
+        origin: 'conversational',
+        confidence_level: 'reviewed',
+        assumptions: ['Rice portion was inferred from plating description'],
+      }),
+    }));
+
+    const aliasVenueItemId = Number(
+      db.prepare('INSERT INTO items (name, category, unit) VALUES (?, ?, ?)').run('Beurre Blanc Base', 'sauce_base', 'oz').lastInsertRowid,
+    );
+    const aliasRecipeId = Number(
+      db.prepare('INSERT INTO recipes (name, type, notes) VALUES (?, ?, NULL)').run('Fish of the Day', 'dish').lastInsertRowid,
+    );
+
+    const itemAliasCreateResponse = await request(app)
+      .post(`/api/recipe-intelligence/items/${aliasVenueItemId}/aliases`)
+      .send({
+        alias: 'Beurre Blanc',
+        alias_type: 'component_name',
+      });
+
+    expect(itemAliasCreateResponse.status).toBe(201);
+    expect(itemAliasCreateResponse.body.aliases).toHaveLength(1);
+    expect(itemAliasCreateResponse.body.aliases[0]).toMatchObject({
+      alias: 'Beurre Blanc',
+      alias_type: 'component_name',
+      active: 1,
+    });
+
+    const itemAliasListResponse = await request(app).get(`/api/recipe-intelligence/items/${aliasVenueItemId}/aliases`);
+    expect(itemAliasListResponse.status).toBe(200);
+    expect(itemAliasListResponse.body.aliases).toEqual([
       expect.objectContaining({
-        draft: expect.objectContaining({
-          draft_name: 'Miso Butterfish',
-          method_notes: 'Glaze fish and plate with rice.',
-        }),
-        source_intelligence: expect.objectContaining({
-          origin: 'conversational',
-          confidence_level: 'reviewed',
-          assumptions: ['Rice portion was inferred from plating description'],
-        }),
+        alias: 'Beurre Blanc',
+        alias_type: 'component_name',
       }),
     ]);
+
+    const itemAliasDeleteResponse = await request(app)
+      .delete(`/api/recipe-intelligence/items/${aliasVenueItemId}/aliases/${itemAliasCreateResponse.body.aliases[0].id}`);
+    expect(itemAliasDeleteResponse.status).toBe(200);
+    expect(itemAliasDeleteResponse.body.aliases).toEqual([]);
+
+    const recipeAliasCreateResponse = await request(app)
+      .post(`/api/recipe-intelligence/recipes/${aliasRecipeId}/aliases`)
+      .send({
+        alias: 'Fish of the Day',
+        alias_type: 'component_name',
+      });
+
+    expect(recipeAliasCreateResponse.status).toBe(201);
+    expect(recipeAliasCreateResponse.body.aliases).toHaveLength(1);
+    expect(recipeAliasCreateResponse.body.aliases[0]).toMatchObject({
+      alias: 'Fish of the Day',
+      alias_type: 'component_name',
+      active: 1,
+    });
+
+    const recipeAliasListResponse = await request(app).get(`/api/recipe-intelligence/recipes/${aliasRecipeId}/aliases`);
+    expect(recipeAliasListResponse.status).toBe(200);
+    expect(recipeAliasListResponse.body.aliases).toEqual([
+      expect.objectContaining({
+        alias: 'Fish of the Day',
+        alias_type: 'component_name',
+      }),
+    ]);
+
+    const recipeAliasDeleteResponse = await request(app)
+      .delete(`/api/recipe-intelligence/recipes/${aliasRecipeId}/aliases/${recipeAliasCreateResponse.body.aliases[0].id}`);
+    expect(recipeAliasDeleteResponse.status).toBe(200);
+    expect(recipeAliasDeleteResponse.body.aliases).toEqual([]);
 
     const photoResponse = await request(app)
       .post('/api/recipe-intelligence/photo-drafts')
