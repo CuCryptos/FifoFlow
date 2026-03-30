@@ -150,6 +150,54 @@ describe('Product enrichment routes', () => {
         item: expect.objectContaining({ id: itemId }),
       }),
     ]);
+
+    const importResponse = await request(app)
+      .post(`/api/product-enrichment/items/${itemId}/import-allergens`)
+      .send({
+        external_product_match_id: matchResponse.body.matches[0].id,
+        import_mode: 'draft_claims',
+        created_by: 'tester',
+      });
+    expect(importResponse.status).toBe(200);
+    expect(importResponse.body).toMatchObject({
+      item_id: itemId,
+      imported_rows: 1,
+      evidence_rows: 1,
+      skipped_rows: 0,
+    });
+
+    const importedProfile = db.prepare(`
+      SELECT ia.status, ia.confidence, ae.source_type, ae.status_claimed, ae.captured_by
+      FROM item_allergens ia
+      JOIN allergen_evidence ae ON ae.item_allergen_id = ia.id
+      JOIN allergens a ON a.id = ia.allergen_id
+      WHERE ia.item_id = ? AND a.code = 'soy'
+      LIMIT 1
+    `).get(itemId) as any;
+    expect(importedProfile).toMatchObject({
+      status: 'contains',
+      confidence: 'moderate',
+      source_type: 'vendor_declaration',
+      status_claimed: 'contains',
+      captured_by: 'tester',
+    });
+
+    const auditRow = db.prepare(`
+      SELECT *
+      FROM item_allergen_import_audit
+      WHERE item_id = ?
+      LIMIT 1
+    `).get(itemId) as any;
+    expect(auditRow).toMatchObject({
+      item_id: itemId,
+      import_source: 'external_product',
+      import_mode: 'draft_claims',
+      created_by: 'tester',
+    });
+
+    const clearedQueueResponse = await request(app).get('/api/product-enrichment/review-queue');
+    expect(clearedQueueResponse.status).toBe(200);
+    expect(clearedQueueResponse.body.ready_to_import).toEqual([]);
   });
 
   it('imports manual catalog rows and scopes the review queue by venue', async () => {

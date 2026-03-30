@@ -184,14 +184,6 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
     CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders(vendor_id);
     CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
-    CREATE INDEX IF NOT EXISTS idx_items_vendor_id ON items(vendor_id);
-    CREATE INDEX IF NOT EXISTS idx_items_venue_id ON items(venue_id);
-    CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id);
-    CREATE INDEX IF NOT EXISTS idx_items_gtin ON items(gtin);
-    CREATE INDEX IF NOT EXISTS idx_items_upc ON items(upc);
-    CREATE INDEX IF NOT EXISTS idx_items_sysco_supc ON items(sysco_supc);
-    CREATE INDEX IF NOT EXISTS idx_items_manufacturer_item_code ON items(manufacturer_item_code);
-
     CREATE TABLE IF NOT EXISTS vendor_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -215,11 +207,6 @@ export function initializeDb(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_vendor_prices_item_id ON vendor_prices(item_id);
     CREATE INDEX IF NOT EXISTS idx_vendor_prices_vendor_id ON vendor_prices(vendor_id);
-    CREATE INDEX IF NOT EXISTS idx_vendor_prices_vendor_item_code ON vendor_prices(vendor_item_code);
-    CREATE INDEX IF NOT EXISTS idx_vendor_prices_gtin ON vendor_prices(gtin);
-    CREATE INDEX IF NOT EXISTS idx_vendor_prices_upc ON vendor_prices(upc);
-    CREATE INDEX IF NOT EXISTS idx_vendor_prices_sysco_supc ON vendor_prices(sysco_supc);
-
     CREATE TRIGGER IF NOT EXISTS update_vendor_price_timestamp
     AFTER UPDATE ON vendor_prices
     BEGIN

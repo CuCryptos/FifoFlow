@@ -112,6 +112,15 @@ export interface ExternalProductCatalogSyncSummary {
   products: ExternalProductRecord[];
 }
 
+export interface ProductEnrichmentAllergenImportResult {
+  item_id: number;
+  external_product_match_id: number;
+  imported_rows: number;
+  evidence_rows: number;
+  skipped_rows: number;
+  audit_id: number;
+}
+
 const ITEM_IDENTIFIER_FIELDS = [
   'brand_name',
   'manufacturer_name',
@@ -610,6 +619,11 @@ export class ExternalProductRepository {
       JOIN external_product_allergen_claims claims ON claims.external_product_id = m.external_product_id
       WHERE m.active = 1
         AND m.match_status IN ('confirmed', 'auto_confirmed')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM item_allergen_import_audit audit
+          WHERE audit.external_product_match_id = m.id
+        )
         ${venueId != null ? 'AND i.venue_id = ?' : ''}
       GROUP BY m.id, m.item_id
       ORDER BY allergen_claim_count DESC, m.item_id ASC
@@ -654,6 +668,175 @@ export class ExternalProductRepository {
       ready_to_import: readyToImport,
       unmatched_items: unmatchedItems,
     };
+  }
+
+  importAllergenClaimsForMatch(
+    itemId: number,
+    matchId: number,
+    input: {
+      import_mode: 'draft_claims' | 'direct_apply';
+      created_by?: string | null;
+    },
+  ): ProductEnrichmentAllergenImportResult {
+    const match = this.getMatchById(matchId);
+    if (!match || match.item_id !== itemId) {
+      throw new Error('Match not found');
+    }
+    if (match.active !== 1) {
+      throw new Error('Match is not active');
+    }
+    if (!['confirmed', 'auto_confirmed'].includes(match.match_status)) {
+      throw new Error('Only confirmed product matches can be imported');
+    }
+
+    const claims = this.db.prepare(`
+      SELECT *
+      FROM external_product_allergen_claims
+      WHERE external_product_id = ?
+      ORDER BY allergen_id ASC
+    `).all(match.external_product_id) as Array<{
+      id: number;
+      external_product_id: number;
+      allergen_id: number;
+      status: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+      confidence: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+      source_excerpt: string | null;
+    }>;
+
+    if (claims.length === 0) {
+      throw new Error('No external allergen claims were available for that product match');
+    }
+
+    const findItemAllergen = this.db.prepare(`
+      SELECT *
+      FROM item_allergens
+      WHERE item_id = ? AND allergen_id = ?
+      LIMIT 1
+    `);
+    const insertItemAllergen = this.db.prepare(`
+      INSERT INTO item_allergens (
+        item_id,
+        allergen_id,
+        status,
+        confidence,
+        notes,
+        last_reviewed_at
+      ) VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `);
+    const updateItemAllergen = this.db.prepare(`
+      UPDATE item_allergens
+      SET status = ?,
+          confidence = ?,
+          notes = COALESCE(notes, ?),
+          last_reviewed_at = datetime('now')
+      WHERE id = ?
+    `);
+    const insertEvidence = this.db.prepare(`
+      INSERT INTO allergen_evidence (
+        item_allergen_id,
+        source_type,
+        source_label,
+        source_excerpt,
+        status_claimed,
+        confidence_claimed,
+        captured_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertAudit = this.db.prepare(`
+      INSERT INTO item_allergen_import_audit (
+        item_id,
+        external_product_match_id,
+        import_source,
+        import_mode,
+        summary_json,
+        created_by
+      ) VALUES (?, ?, 'external_product', ?, ?, ?)
+    `);
+
+    const result = this.db.transaction(() => {
+      let importedRows = 0;
+      let evidenceRows = 0;
+      let skippedRows = 0;
+      const importedAllergens: string[] = [];
+      const skippedAllergens: string[] = [];
+
+      for (const claim of claims) {
+        const existing = findItemAllergen.get(itemId, claim.allergen_id) as {
+          id: number;
+          status: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+          confidence: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+        } | undefined;
+
+        const importedConfidence = normalizeImportedConfidence(claim.confidence, input.import_mode);
+        const shouldApply = shouldApplyImportedClaim(existing, claim.status, importedConfidence, input.import_mode);
+
+        let itemAllergenId: number;
+        if (!existing) {
+          const insertResult = insertItemAllergen.run(
+            itemId,
+            claim.allergen_id,
+            claim.status,
+            importedConfidence,
+            buildImportedNote(match.external_product.catalog_name, match.external_product.product_name),
+          );
+          itemAllergenId = Number(insertResult.lastInsertRowid);
+          importedRows += 1;
+          importedAllergens.push(String(claim.allergen_id));
+        } else {
+          itemAllergenId = existing.id;
+          if (shouldApply) {
+            updateItemAllergen.run(
+              claim.status,
+              importedConfidence,
+              buildImportedNote(match.external_product.catalog_name, match.external_product.product_name),
+              existing.id,
+            );
+            importedRows += 1;
+            importedAllergens.push(String(claim.allergen_id));
+          } else {
+            skippedRows += 1;
+            skippedAllergens.push(String(claim.allergen_id));
+          }
+        }
+
+        insertEvidence.run(
+          itemAllergenId,
+          resolveImportedEvidenceSourceType(match.external_product.catalog_code),
+          `${match.external_product.catalog_name}: ${match.external_product.product_name}`,
+          claim.source_excerpt ?? match.external_product.allergen_statement ?? match.external_product.ingredient_statement ?? null,
+          claim.status,
+          importedConfidence,
+          input.created_by ?? null,
+        );
+        evidenceRows += 1;
+      }
+
+      const auditResult = insertAudit.run(
+        itemId,
+        matchId,
+        input.import_mode,
+        JSON.stringify({
+          external_product_id: match.external_product_id,
+          imported_rows: importedRows,
+          evidence_rows: evidenceRows,
+          skipped_rows: skippedRows,
+          imported_allergen_ids: importedAllergens,
+          skipped_allergen_ids: skippedAllergens,
+        }),
+        input.created_by ?? null,
+      );
+
+      return {
+        item_id: itemId,
+        external_product_match_id: matchId,
+        imported_rows: importedRows,
+        evidence_rows: evidenceRows,
+        skipped_rows: skippedRows,
+        audit_id: Number(auditResult.lastInsertRowid),
+      };
+    });
+
+    return result();
   }
 
   private hasAllergenTables(): boolean {
@@ -894,4 +1077,71 @@ function normalizeAllergenKey(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+}
+
+function resolveImportedEvidenceSourceType(catalogCode: string): 'manufacturer_spec' | 'vendor_declaration' {
+  return catalogCode === 'sysco' ? 'vendor_declaration' : 'manufacturer_spec';
+}
+
+function normalizeImportedConfidence(
+  confidence: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown',
+  importMode: 'draft_claims' | 'direct_apply',
+): 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown' {
+  if (importMode === 'direct_apply') {
+    return confidence;
+  }
+  if (confidence === 'verified' || confidence === 'high') {
+    return 'moderate';
+  }
+  return confidence;
+}
+
+function shouldApplyImportedClaim(
+  existing: { status: string; confidence: string } | undefined,
+  importedStatus: string,
+  importedConfidence: string,
+  importMode: 'draft_claims' | 'direct_apply',
+): boolean {
+  if (!existing) {
+    return true;
+  }
+
+  if (existing.confidence === 'verified' && existing.status !== importedStatus) {
+    return false;
+  }
+
+  if (existing.status === 'unknown') {
+    return true;
+  }
+
+  if (existing.status === importedStatus && confidenceRank(importedConfidence) > confidenceRank(existing.confidence)) {
+    return true;
+  }
+
+  if (importMode === 'direct_apply' && confidenceRank(importedConfidence) >= confidenceRank(existing.confidence)) {
+    return true;
+  }
+
+  return confidenceRank(existing.confidence) <= confidenceRank('unverified');
+}
+
+function confidenceRank(confidence: string): number {
+  switch (confidence) {
+    case 'verified':
+      return 5;
+    case 'high':
+      return 4;
+    case 'moderate':
+      return 3;
+    case 'low':
+      return 2;
+    case 'unverified':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function buildImportedNote(catalogName: string, productName: string): string {
+  return `Imported from ${catalogName} product data for ${productName}`;
 }

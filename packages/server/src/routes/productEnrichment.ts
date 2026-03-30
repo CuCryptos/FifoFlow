@@ -273,12 +273,25 @@ export function createProductEnrichmentRoutes(db: Database.Database): Router {
       return;
     }
 
-    res.status(501).json({
-      error: 'Allergen import is not implemented yet.',
-      item_id: itemId,
-      external_product_match_id: parsed.data.external_product_match_id,
-      import_mode: parsed.data.import_mode,
-    });
+    try {
+      const result = repository.importAllergenClaimsForMatch(itemId, parsed.data.external_product_match_id, parsed.data);
+      res.json(result);
+    } catch (error: any) {
+      const message = error?.message ?? 'Unable to import allergen claims';
+      if (message.includes('Match not found')) {
+        res.status(404).json({ error: 'Match not found' });
+        return;
+      }
+      if (message.includes('No external allergen claims')) {
+        res.status(400).json({ error: message });
+        return;
+      }
+      if (message.includes('Only confirmed product matches') || message.includes('Match is not active')) {
+        res.status(400).json({ error: message });
+        return;
+      }
+      res.status(400).json({ error: message });
+    }
   });
 
   return router;

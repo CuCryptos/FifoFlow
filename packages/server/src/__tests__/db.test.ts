@@ -82,4 +82,66 @@ describe('Database', () => {
       ).run(9999, 'in', 10, 'Received');
     }).toThrow();
   });
+
+  it('migrates legacy inventory tables before creating enrichment indexes', () => {
+    db.close();
+    db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        unit TEXT NOT NULL,
+        current_qty REAL NOT NULL DEFAULT 0,
+        vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+        venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+        storage_area_id INTEGER REFERENCES storage_areas(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE venues (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE vendors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE storage_areas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE vendor_prices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+        vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+        vendor_item_name TEXT,
+        order_unit TEXT,
+        order_unit_price REAL NOT NULL,
+        qty_per_unit REAL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    expect(() => initializeDb(db)).not.toThrow();
+
+    const itemColumns = db.prepare(`PRAGMA table_info(items)`).all() as Array<{ name: string }>;
+    const vendorPriceColumns = db.prepare(`PRAGMA table_info(vendor_prices)`).all() as Array<{ name: string }>;
+    expect(itemColumns.map((column) => column.name)).toContain('gtin');
+    expect(itemColumns.map((column) => column.name)).toContain('sysco_supc');
+    expect(vendorPriceColumns.map((column) => column.name)).toContain('gtin');
+    expect(vendorPriceColumns.map((column) => column.name)).toContain('vendor_item_code');
+  });
 });

@@ -3,11 +3,17 @@ import { Link } from 'react-router-dom';
 import { Database, FileUp, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
 import type {
   ProductEnrichmentCatalogSyncInput,
+  ProductEnrichmentAllergenImportPayload,
   ProductEnrichmentManualImportAllergenClaimInput,
   ProductEnrichmentManualImportProductInput,
   ProductEnrichmentReviewQueuePayload,
 } from '../../api';
-import { useProductEnrichmentCatalogs, useProductEnrichmentReviewQueue, useSyncProductEnrichmentCatalog } from '../../hooks/useProductEnrichment';
+import {
+  useImportProductEnrichmentAllergens,
+  useProductEnrichmentCatalogs,
+  useProductEnrichmentReviewQueue,
+  useSyncProductEnrichmentCatalog,
+} from '../../hooks/useProductEnrichment';
 import { WorkflowEmptyState, WorkflowPanel, WorkflowStatusPill } from '../workflow/WorkflowPrimitives';
 
 interface AllergenReferenceEntry {
@@ -24,9 +30,11 @@ export function ProductEnrichmentQueue({
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
+  const [lastImportResult, setLastImportResult] = useState<ProductEnrichmentAllergenImportPayload | null>(null);
   const queueQuery = useProductEnrichmentReviewQueue(venueId ?? undefined);
   const catalogsQuery = useProductEnrichmentCatalogs();
   const syncCatalogMutation = useSyncProductEnrichmentCatalog();
+  const importAllergensMutation = useImportProductEnrichmentAllergens();
 
   const allergenLookup = useMemo(() => buildAllergenLookup(allergens), [allergens]);
   const queue = queueQuery.data;
@@ -71,6 +79,25 @@ export function ProductEnrichmentQueue({
       setImportNote(`Imported ${parsed.products.length} product row${parsed.products.length === 1 ? '' : 's'} from ${file.name}.${unresolvedSuffix}`);
     } catch (error) {
       setImportNote(error instanceof Error ? error.message : 'Unable to import that file.');
+    }
+  };
+
+  const handleImportClaims = async (itemId: number, matchId: number) => {
+    try {
+      const result = await importAllergensMutation.mutateAsync({
+        itemId,
+        data: {
+          external_product_match_id: matchId,
+          import_mode: 'draft_claims',
+          created_by: 'operator',
+        },
+      });
+      setLastImportResult(result);
+      setImportNote(
+        `Imported ${result.imported_rows} allergen row${result.imported_rows === 1 ? '' : 's'} and captured ${result.evidence_rows} evidence row${result.evidence_rows === 1 ? '' : 's'}.`,
+      );
+    } catch (error) {
+      setImportNote(error instanceof Error ? error.message : 'Unable to import allergen claims.');
     }
   };
 
@@ -141,6 +168,11 @@ export function ProductEnrichmentQueue({
               <MiniMetric label="Claims" value={syncSummary.allergen_claims_upserted} />
             </div>
           ) : null}
+          {lastImportResult ? (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              Last claim import: item #{lastImportResult.item_id}, {lastImportResult.imported_rows} applied, {lastImportResult.skipped_rows} skipped, audit #{lastImportResult.audit_id}.
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -201,15 +233,11 @@ export function ProductEnrichmentQueue({
             emptyTitle="Nothing ready yet"
             emptyBody="Import a catalog file or confirm more product matches to populate this lane."
             items={queue.ready_to_import.map((entry) => (
-              <ItemCard
+              <ReadyImportCard
                 key={`ready-${entry.item.id}`}
-                title={entry.item.name}
-                subtitle={`${entry.active_match.external_product.product_name} • ${entry.allergen_claim_count} allergen claim${entry.allergen_claim_count === 1 ? '' : 's'}`}
-                href={`/allergens/items/${entry.item.id}`}
-                pills={[
-                  <WorkflowStatusPill key="ready" tone="green">{entry.active_match.match_status}</WorkflowStatusPill>,
-                  <WorkflowStatusPill key="basis" tone="blue">{entry.active_match.match_basis}</WorkflowStatusPill>,
-                ]}
+                entry={entry}
+                onImport={handleImportClaims}
+                loading={importAllergensMutation.isPending}
               />
             ))}
           />
@@ -242,6 +270,47 @@ export function ProductEnrichmentQueue({
         </div>
       ) : null}
     </WorkflowPanel>
+  );
+}
+
+function ReadyImportCard({
+  entry,
+  onImport,
+  loading,
+}: {
+  entry: ProductEnrichmentReviewQueuePayload['ready_to_import'][number];
+  onImport: (itemId: number, matchId: number) => void | Promise<void>;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <Link to={`/allergens/items/${entry.item.id}`} className="block transition hover:text-slate-700">
+        <div className="text-sm font-semibold text-slate-950">{entry.item.name}</div>
+        <div className="mt-1 text-xs leading-5 text-slate-500">
+          {entry.active_match.external_product.product_name} • {entry.allergen_claim_count} allergen claim{entry.allergen_claim_count === 1 ? '' : 's'}
+        </div>
+      </Link>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <WorkflowStatusPill tone="green">{entry.active_match.match_status}</WorkflowStatusPill>
+        <WorkflowStatusPill tone="blue">{entry.active_match.match_basis}</WorkflowStatusPill>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => void onImport(entry.item.id, entry.active_match.id)}
+          disabled={loading}
+          className="inline-flex items-center rounded-full bg-slate-950 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? 'Importing…' : 'Import claims'}
+        </button>
+        <Link
+          to={`/allergens/items/${entry.item.id}`}
+          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
+        >
+          Review item
+        </Link>
+      </div>
+    </div>
   );
 }
 

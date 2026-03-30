@@ -555,6 +555,21 @@ export interface ProductEnrichmentCatalogSyncPayload {
   };
 }
 
+export interface ProductEnrichmentAllergenImportInput {
+  external_product_match_id: number;
+  import_mode: 'draft_claims' | 'direct_apply';
+  created_by?: string | null;
+}
+
+export interface ProductEnrichmentAllergenImportPayload {
+  item_id: number;
+  external_product_match_id: number;
+  imported_rows: number;
+  evidence_rows: number;
+  skipped_rows: number;
+  audit_id: number;
+}
+
 export interface ProductEnrichmentItemIdentifierInput {
   brand_name?: string | null;
   manufacturer_name?: string | null;
@@ -1395,6 +1410,11 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+    importAllergens: (itemId: number, data: ProductEnrichmentAllergenImportInput) =>
+      fetchJson<ProductEnrichmentAllergenImportPayload>(`/product-enrichment/items/${itemId}/import-allergens`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     reviewQueue: (params?: { venue_id?: number; limit?: number }) => {
       const qs = new URLSearchParams();
       if (params?.venue_id != null) qs.set('venue_id', String(params.venue_id));
