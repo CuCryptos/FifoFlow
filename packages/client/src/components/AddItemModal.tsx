@@ -374,6 +374,9 @@ function inferInventoryUnitFromProduct(product: { product_name: string; pack_tex
   const text = [product.product_name, product.pack_text, product.size_text].filter(Boolean).join(' ').toLowerCase();
   if (/\bcan\b|\bcans\b/.test(text)) return 'can';
   if (/\bbottle\b|\bbtls?\b/.test(text)) return 'bottle';
+  if (/\b(tonic|soda|cola|ginger beer|ginger ale|juice|mixer|mix|bitters|cocktail)\b/.test(text) && /\b(ml|l|fl\s?oz|oz)\b/.test(text)) {
+    return 'bottle';
+  }
   return null;
 }
 
