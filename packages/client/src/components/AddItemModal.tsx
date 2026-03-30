@@ -5,8 +5,10 @@ import type { Category, Unit } from '@fifoflow/shared';
 import { X } from 'lucide-react';
 import { InventoryUnitEconomicsSummary } from './inventory/InventoryUnitEconomicsSummary';
 import { useProductEnrichmentSearch } from '../hooks/useProductEnrichment';
+import { useVenueContext } from '../contexts/VenueContext';
 
 export function AddItemModal({ onClose }: { onClose: () => void }) {
+  const { selectedVenueId } = useVenueContext();
   const [name, setName] = useState('');
   const [category, setCategory] = useState<Category>(CATEGORIES[0]);
   const [unit, setUnit] = useState<Unit>(UNITS[0]);
@@ -48,6 +50,7 @@ export function AddItemModal({ onClose }: { onClose: () => void }) {
         item_size_value: itemSizeValue ? Number(itemSizeValue) : null,
         item_size_unit: itemSizeUnit || null,
         item_size: itemSizeValue && itemSizeUnit ? `${itemSizeValue} ${itemSizeUnit}` : null,
+        venue_id: selectedVenueId ?? null,
         brand_name: brandName || null,
         manufacturer_name: manufacturerName || null,
         gtin: gtin || null,
@@ -100,6 +103,11 @@ export function AddItemModal({ onClose }: { onClose: () => void }) {
             <h2 className="text-lg font-semibold text-text-primary">Add Inventory Item</h2>
             <p className="mt-1 text-sm text-text-secondary">
               Define the counting unit first, then the purchase pack, then the measurable content recipes can consume.
+            </p>
+            <p className="mt-1 text-xs text-text-muted">
+              {selectedVenueId
+                ? `This item will be added to the currently selected venue.`
+                : 'No venue is selected, so this item may not appear in a venue-filtered inventory list.'}
             </p>
           </div>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
