@@ -22,6 +22,7 @@ import { createRecipeDraftRoutes } from './routes/recipeDrafts.js';
 import { createRecipeIntelligenceRoutes } from './routes/recipeIntelligence.js';
 import { createAllergyAssistantRoutes } from './routes/allergyAssistant.js';
 import { createAllergenRoutes } from './routes/allergens.js';
+import { createProductEnrichmentRoutes } from './routes/productEnrichment.js';
 import { createProteinUsageRoutes } from './routes/proteinUsage.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
@@ -60,6 +61,7 @@ app.use('/api/intelligence', createIntelligenceRoutes(getDb()));
 app.use('/api/recipe-workflow', createRecipeWorkflowRoutes(getDb()));
 app.use('/api/allergy-assistant', createAllergyAssistantRoutes(getDb()));
 app.use('/api/allergens', createAllergenRoutes(getDb()));
+app.use('/api/product-enrichment', createProductEnrichmentRoutes(getDb()));
 app.use('/api/protein-usage', createProteinUsageRoutes(getDb()));
 
 app.get('/api/health', (_req, res) => {

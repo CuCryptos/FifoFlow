@@ -5,6 +5,7 @@ import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { useUpdateItem } from '../../hooks/useItems';
 import { useToast } from '../../contexts/ToastContext';
 import { InventoryUnitEconomicsSummary, deriveInventoryUnitEconomics } from './InventoryUnitEconomicsSummary';
+import { ItemIdentifierEditor } from '../products/ItemIdentifierEditor';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '—';
@@ -395,6 +396,8 @@ export function InventoryItemSidePanel({
         <DetailTile label="Storage Area" value={areaName} />
         <DetailTile label="Reorder Status" value={reorderStatus} />
       </div>
+
+      <ItemIdentifierEditor itemId={item.id} item={item} compact />
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="flex items-center justify-between gap-3">

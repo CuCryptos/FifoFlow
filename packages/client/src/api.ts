@@ -65,6 +65,9 @@ import type {
   RecipeCaptureInput,
   RecipeCaptureSession,
   StartRecipeConversationDraftInput,
+  ExternalProduct,
+  ExternalProductCatalog,
+  ExternalProductMatch,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -464,6 +467,68 @@ export interface AllergenItemDetailPayload {
   evidence: AllergenItemEvidencePayload[];
   match_aliases: AllergenItemMatchAliasPayload[];
   linked_document_products: AllergenItemLinkedDocumentProductPayload[];
+}
+
+export interface ProductEnrichmentExternalProductPayload extends ExternalProduct {
+  catalog_code: string;
+  catalog_name: string;
+}
+
+export interface ProductEnrichmentMatchPayload extends ExternalProductMatch {
+  external_product: ProductEnrichmentExternalProductPayload;
+}
+
+export interface ProductEnrichmentItemDetailPayload {
+  item: Item;
+  vendor_prices: VendorPrice[];
+  matches: ProductEnrichmentMatchPayload[];
+  allergen_claims: Array<{
+    id: number;
+    external_product_id: number;
+    allergen_id: number;
+    allergen_code: string | null;
+    allergen_name: string | null;
+    status: string;
+    confidence: string;
+    source_excerpt: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+}
+
+export interface ProductEnrichmentReviewQueuePayload {
+  missing_identifiers: Item[];
+  candidate_conflicts: Array<{
+    item: Item;
+    active_match_count: number;
+    active_matches: ProductEnrichmentMatchPayload[];
+  }>;
+  ready_to_import: Array<{
+    item: Item;
+    active_match: ProductEnrichmentMatchPayload;
+    allergen_claim_count: number;
+  }>;
+  unmatched_items: Item[];
+}
+
+export interface ProductEnrichmentItemIdentifierInput {
+  brand_name?: string | null;
+  manufacturer_name?: string | null;
+  gtin?: string | null;
+  upc?: string | null;
+  sysco_supc?: string | null;
+  manufacturer_item_code?: string | null;
+}
+
+export interface ProductEnrichmentVendorPriceIdentifierInput {
+  vendor_item_code?: string | null;
+  vendor_pack_text?: string | null;
+  gtin?: string | null;
+  upc?: string | null;
+  sysco_supc?: string | null;
+  brand_name?: string | null;
+  manufacturer_name?: string | null;
+  source_catalog?: string | null;
 }
 
 export interface AllergenItemProfileUpdateInput {
@@ -1233,6 +1298,54 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(input),
       }),
+  },
+  productEnrichment: {
+    listCatalogs: () => fetchJson<{ catalogs: ExternalProductCatalog[] }>('/product-enrichment/catalogs'),
+    search: (params?: {
+      query?: string;
+      catalog?: string;
+      gtin?: string;
+      upc?: string;
+      sysco_supc?: string;
+      limit?: number;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params?.query) qs.set('query', params.query);
+      if (params?.catalog) qs.set('catalog', params.catalog);
+      if (params?.gtin) qs.set('gtin', params.gtin);
+      if (params?.upc) qs.set('upc', params.upc);
+      if (params?.sysco_supc) qs.set('sysco_supc', params.sysco_supc);
+      if (params?.limit != null) qs.set('limit', String(params.limit));
+      const query = qs.toString();
+      return fetchJson<{ products: ProductEnrichmentExternalProductPayload[] }>(`/product-enrichment/search${query ? `?${query}` : ''}`);
+    },
+    getItem: (itemId: number) =>
+      fetchJson<ProductEnrichmentItemDetailPayload>(`/product-enrichment/items/${itemId}`),
+    updateItemIdentifiers: (itemId: number, data: ProductEnrichmentItemIdentifierInput) =>
+      fetchJson<{ item: Item }>(`/product-enrichment/items/${itemId}/identifiers`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    updateVendorPriceIdentifiers: (itemId: number, priceId: number, data: ProductEnrichmentVendorPriceIdentifierInput) =>
+      fetchJson<{ vendor_price: VendorPrice }>(`/product-enrichment/items/${itemId}/vendor-prices/${priceId}/identifiers`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    matchItem: (itemId: number, data?: { vendor_price_id?: number | null; mode?: 'auto' }) =>
+      fetchJson<{ matches: ProductEnrichmentMatchPayload[] }>(`/product-enrichment/items/${itemId}/match`, {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      }),
+    updateMatchDecision: (
+      itemId: number,
+      matchId: number,
+      data: { match_status: 'confirmed' | 'rejected'; matched_by?: 'system' | 'operator'; notes?: string | null; active?: boolean },
+    ) => fetchJson<{ match: ProductEnrichmentMatchPayload }>(`/product-enrichment/items/${itemId}/matches/${matchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    reviewQueue: () =>
+      fetchJson<ProductEnrichmentReviewQueuePayload>('/product-enrichment/review-queue'),
   },
   recipeDrafts: {
     list: () => fetchJson<{ drafts: RecipeDraftSummaryPayload[] }>('/recipe-drafts'),

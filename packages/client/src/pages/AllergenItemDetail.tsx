@@ -4,6 +4,7 @@ import { useAllergenItem } from '../hooks/useAllergens';
 import { ItemAllergenEditor } from '../components/allergens/ItemAllergenEditor';
 import { AllergenEvidenceTimeline } from '../components/allergens/AllergenEvidenceTimeline';
 import { ItemMatchAliasEditor } from '../components/allergens/ItemMatchAliasEditor';
+import { ItemIdentifierEditor } from '../components/products/ItemIdentifierEditor';
 import { WorkflowMetricCard, WorkflowMetricGrid, WorkflowPage, WorkflowPanel, WorkflowStatusPill } from '../components/workflow/WorkflowPrimitives';
 
 export function AllergenItemDetail() {
@@ -43,6 +44,7 @@ export function AllergenItemDetail() {
             <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
               <ItemAllergenEditor detail={detail} />
               <div className="space-y-6">
+                <ItemIdentifierEditor itemId={detail.item.id} item={{ id: detail.item.id, name: detail.item.name }} />
                 <AllergenEvidenceTimeline
                   itemId={detail.item.id}
                   evidence={detail.evidence}
