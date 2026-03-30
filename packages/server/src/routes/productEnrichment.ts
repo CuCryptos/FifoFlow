@@ -43,6 +43,37 @@ const itemImportSchema = z.object({
   created_by: z.string().max(200).nullable().optional(),
 });
 
+const manualImportAllergenClaimSchema = z.object({
+  allergen_code: z.string().min(1).max(100),
+  status: z.enum(['contains', 'may_contain', 'free_of', 'unknown'] as const),
+  confidence: z.enum(['verified', 'high', 'moderate', 'low', 'unverified', 'unknown'] as const).nullable().optional(),
+  source_excerpt: z.string().max(1000).nullable().optional(),
+});
+
+const manualImportProductSchema = z.object({
+  external_key: z.string().max(200).nullable().optional(),
+  gtin: z.string().max(100).nullable().optional(),
+  upc: z.string().max(100).nullable().optional(),
+  vendor_item_code: z.string().max(100).nullable().optional(),
+  sysco_supc: z.string().max(100).nullable().optional(),
+  brand_name: z.string().max(200).nullable().optional(),
+  manufacturer_name: z.string().max(200).nullable().optional(),
+  product_name: z.string().min(1).max(250),
+  pack_text: z.string().max(200).nullable().optional(),
+  size_text: z.string().max(200).nullable().optional(),
+  ingredient_statement: z.string().max(20_000).nullable().optional(),
+  allergen_statement: z.string().max(10_000).nullable().optional(),
+  source_url: z.string().url().max(1000).nullable().optional(),
+  raw_payload_json: z.string().max(100_000).nullable().optional(),
+  allergen_claims: z.array(manualImportAllergenClaimSchema).max(50).optional().default([]),
+});
+
+const catalogSyncSchema = z.object({
+  mode: z.enum(['manual_import'] as const),
+  created_by: z.string().max(200).nullable().optional(),
+  products: z.array(manualImportProductSchema).min(1).max(2000),
+});
+
 export function createProductEnrichmentRoutes(db: Database.Database): Router {
   const repository = new ExternalProductRepository(db);
   const matchService = new ExternalProductMatchService(repository);
@@ -53,16 +84,47 @@ export function createProductEnrichmentRoutes(db: Database.Database): Router {
   });
 
   router.post('/catalogs/:catalogCode/sync', (req, res) => {
-    const catalog = repository.listCatalogs().find((entry) => entry.code === req.params.catalogCode);
+    const catalog = repository.getCatalogByCode(req.params.catalogCode);
     if (!catalog) {
       res.status(404).json({ error: 'Catalog not found' });
       return;
     }
 
-    res.status(501).json({
-      error: 'Catalog sync is not implemented yet.',
-      catalog_code: catalog.code,
-    });
+    const parsed = catalogSyncSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    if (parsed.data.mode !== 'manual_import' || catalog.code !== 'manual_import') {
+      res.status(400).json({
+        error: 'Only manual_import sync is supported right now, and it must target the manual_import catalog.',
+      });
+      return;
+    }
+
+    const run = repository.createSyncRun(catalog.id);
+    try {
+      const summary = repository.upsertExternalProducts(catalog.code, parsed.data.products);
+      const completedRun = repository.completeSyncRun(run.id, 'completed', {
+        created_by: parsed.data.created_by ?? null,
+        mode: parsed.data.mode,
+        ...summary,
+      });
+      res.json({
+        run: completedRun,
+        summary,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? 'Unable to complete catalog sync';
+      const failedRun = repository.completeSyncRun(run.id, 'failed', {
+        error: message,
+      }, message);
+      res.status(400).json({
+        error: message,
+        run: failedRun,
+      });
+    }
   });
 
   router.get('/search', (req, res) => {
@@ -73,13 +135,17 @@ export function createProductEnrichmentRoutes(db: Database.Database): Router {
         gtin: queryString(req.query.gtin),
         upc: queryString(req.query.upc),
         sysco_supc: queryString(req.query.sysco_supc),
+        vendor_item_code: queryString(req.query.vendor_item_code),
         limit: parseOptionalNumber(req.query.limit) ?? 12,
       }),
     });
   });
 
-  router.get('/review-queue', (_req, res) => {
-    res.json(repository.listReviewQueue());
+  router.get('/review-queue', (req, res) => {
+    res.json(repository.listReviewQueue(
+      parseOptionalNumber(req.query.limit) ?? 25,
+      parseOptionalNumber(req.query.venue_id),
+    ));
   });
 
   router.get('/items/:itemId', (req, res) => {

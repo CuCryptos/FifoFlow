@@ -1,12 +1,14 @@
 import type Database from 'better-sqlite3';
 import type {
   ExternalProduct,
+  ExternalProductAllergenClaim,
   ExternalProductCatalog,
   ExternalProductMatch,
   ExternalProductMatchBasis,
   ExternalProductMatchConfidence,
   ExternalProductMatchStatus,
   ExternalProductMatchedBy,
+  ExternalProductSyncRun,
   Item,
   VendorPrice,
 } from '@fifoflow/shared';
@@ -76,6 +78,40 @@ export interface ExternalProductMatchUpsertInput {
   active: number;
 }
 
+export interface ManualExternalProductImportAllergenClaimInput {
+  allergen_code: string;
+  status: ExternalProductAllergenClaim['status'];
+  confidence?: ExternalProductAllergenClaim['confidence'] | null;
+  source_excerpt?: string | null;
+}
+
+export interface ManualExternalProductImportRow {
+  external_key?: string | null;
+  gtin?: string | null;
+  upc?: string | null;
+  vendor_item_code?: string | null;
+  sysco_supc?: string | null;
+  brand_name?: string | null;
+  manufacturer_name?: string | null;
+  product_name: string;
+  pack_text?: string | null;
+  size_text?: string | null;
+  ingredient_statement?: string | null;
+  allergen_statement?: string | null;
+  source_url?: string | null;
+  raw_payload_json?: string | null;
+  allergen_claims?: ManualExternalProductImportAllergenClaimInput[];
+}
+
+export interface ExternalProductCatalogSyncSummary {
+  products_upserted: number;
+  products_created: number;
+  products_updated: number;
+  allergen_claims_upserted: number;
+  allergen_claims_unresolved: number;
+  products: ExternalProductRecord[];
+}
+
 const ITEM_IDENTIFIER_FIELDS = [
   'brand_name',
   'manufacturer_name',
@@ -108,6 +144,44 @@ export class ExternalProductRepository {
       FROM external_product_catalogs
       ORDER BY name ASC
     `).all() as ExternalProductCatalog[];
+  }
+
+  getCatalogByCode(code: string): ExternalProductCatalog | undefined {
+    return this.db.prepare(`
+      SELECT *
+      FROM external_product_catalogs
+      WHERE code = ?
+      LIMIT 1
+    `).get(code) as ExternalProductCatalog | undefined;
+  }
+
+  createSyncRun(catalogId: number): ExternalProductSyncRun {
+    const result = this.db.prepare(`
+      INSERT INTO external_product_sync_runs (catalog_id, status)
+      VALUES (?, 'running')
+    `).run(catalogId);
+    return this.getSyncRun(Number(result.lastInsertRowid)) as ExternalProductSyncRun;
+  }
+
+  getSyncRun(runId: number): ExternalProductSyncRun | undefined {
+    return this.db.prepare(`
+      SELECT *
+      FROM external_product_sync_runs
+      WHERE id = ?
+      LIMIT 1
+    `).get(runId) as ExternalProductSyncRun | undefined;
+  }
+
+  completeSyncRun(runId: number, status: ExternalProductSyncRun['status'], summary: Record<string, unknown>, notes?: string | null): ExternalProductSyncRun | undefined {
+    this.db.prepare(`
+      UPDATE external_product_sync_runs
+      SET status = ?,
+          completed_at = datetime('now'),
+          summary_json = ?,
+          notes = ?
+      WHERE id = ?
+    `).run(status, JSON.stringify(summary), notes ?? null, runId);
+    return this.getSyncRun(runId);
   }
 
   searchExternalProducts(filters: ExternalProductSearchFilters): ExternalProductRecord[] {
@@ -159,6 +233,133 @@ export class ExternalProductRepository {
       ORDER BY p.product_name COLLATE NOCASE ASC
       LIMIT ?
     `).all(...params, limit) as ExternalProductRecord[];
+  }
+
+  upsertExternalProducts(catalogCode: string, rows: ManualExternalProductImportRow[]): ExternalProductCatalogSyncSummary {
+    const catalog = this.getCatalogByCode(catalogCode);
+    if (!catalog) {
+      throw new Error(`Catalog not found: ${catalogCode}`);
+    }
+
+    const insertedIds: number[] = [];
+    const allergenLookup = this.buildAllergenLookup();
+    let productsCreated = 0;
+    let productsUpdated = 0;
+    let claimsUpserted = 0;
+    let claimsUnresolved = 0;
+
+    const transaction = this.db.transaction((inputRows: ManualExternalProductImportRow[]) => {
+      for (const row of inputRows) {
+        const normalizedRow = sanitizeManualImportRow(row);
+        const externalKey = normalizedRow.external_key || buildExternalKey(normalizedRow);
+        const rawPayload = normalizedRow.raw_payload_json ?? JSON.stringify(normalizedRow);
+        const existing = this.db.prepare(`
+          SELECT id
+          FROM external_products
+          WHERE catalog_id = ? AND external_key = ?
+          LIMIT 1
+        `).get(catalog.id, externalKey) as { id: number } | undefined;
+
+        let externalProductId: number;
+        if (existing) {
+          this.db.prepare(`
+            UPDATE external_products
+            SET gtin = ?,
+                upc = ?,
+                vendor_item_code = ?,
+                sysco_supc = ?,
+                brand_name = ?,
+                manufacturer_name = ?,
+                product_name = ?,
+                pack_text = ?,
+                size_text = ?,
+                ingredient_statement = ?,
+                allergen_statement = ?,
+                raw_payload_json = ?,
+                source_url = ?,
+                last_seen_at = datetime('now')
+            WHERE id = ?
+          `).run(
+            normalizedRow.gtin,
+            normalizedRow.upc,
+            normalizedRow.vendor_item_code,
+            normalizedRow.sysco_supc,
+            normalizedRow.brand_name,
+            normalizedRow.manufacturer_name,
+            normalizedRow.product_name,
+            normalizedRow.pack_text,
+            normalizedRow.size_text,
+            normalizedRow.ingredient_statement,
+            normalizedRow.allergen_statement,
+            rawPayload,
+            normalizedRow.source_url,
+            existing.id,
+          );
+          externalProductId = existing.id;
+          productsUpdated += 1;
+        } else {
+          const result = this.db.prepare(`
+            INSERT INTO external_products (
+              catalog_id,
+              external_key,
+              gtin,
+              upc,
+              vendor_item_code,
+              sysco_supc,
+              brand_name,
+              manufacturer_name,
+              product_name,
+              pack_text,
+              size_text,
+              ingredient_statement,
+              allergen_statement,
+              raw_payload_json,
+              source_url,
+              last_seen_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `).run(
+            catalog.id,
+            externalKey,
+            normalizedRow.gtin,
+            normalizedRow.upc,
+            normalizedRow.vendor_item_code,
+            normalizedRow.sysco_supc,
+            normalizedRow.brand_name,
+            normalizedRow.manufacturer_name,
+            normalizedRow.product_name,
+            normalizedRow.pack_text,
+            normalizedRow.size_text,
+            normalizedRow.ingredient_statement,
+            normalizedRow.allergen_statement,
+            rawPayload,
+            normalizedRow.source_url,
+          );
+          externalProductId = Number(result.lastInsertRowid);
+          productsCreated += 1;
+        }
+
+        insertedIds.push(externalProductId);
+        const claimResult = this.replaceExternalProductAllergenClaims(
+          externalProductId,
+          normalizedRow.allergen_claims ?? [],
+          allergenLookup,
+        );
+        claimsUpserted += claimResult.claims_upserted;
+        claimsUnresolved += claimResult.claims_unresolved;
+      }
+    });
+
+    transaction(rows);
+    const products = this.listExternalProductsByIds(insertedIds);
+
+    return {
+      products_upserted: productsCreated + productsUpdated,
+      products_created: productsCreated,
+      products_updated: productsUpdated,
+      allergen_claims_upserted: claimsUpserted,
+      allergen_claims_unresolved: claimsUnresolved,
+      products,
+    };
   }
 
   getItem(itemId: number): Item | undefined {
@@ -360,7 +561,9 @@ export class ExternalProductRepository {
     };
   }
 
-  listReviewQueue(limit = 25): ProductEnrichmentReviewQueue {
+  listReviewQueue(limit = 25, venueId?: number): ProductEnrichmentReviewQueue {
+    const venueFilter = venueId != null ? 'AND venue_id = ?' : '';
+    const venueParams = venueId != null ? [venueId] : [];
     const missingIdentifiers = this.db.prepare(`
       SELECT *
       FROM items
@@ -368,19 +571,22 @@ export class ExternalProductRepository {
         AND COALESCE(upc, '') = ''
         AND COALESCE(sysco_supc, '') = ''
         AND COALESCE(manufacturer_item_code, '') = ''
+        ${venueFilter}
       ORDER BY updated_at DESC, name ASC
       LIMIT ?
-    `).all(limit) as Item[];
+    `).all(...venueParams, limit) as Item[];
 
     const conflictRows = this.db.prepare(`
-      SELECT item_id, COUNT(*) AS active_match_count
-      FROM external_product_matches
-      WHERE active = 1
-      GROUP BY item_id
+      SELECT m.item_id, COUNT(*) AS active_match_count
+      FROM external_product_matches m
+      JOIN items i ON i.id = m.item_id
+      WHERE m.active = 1
+        ${venueId != null ? 'AND i.venue_id = ?' : ''}
+      GROUP BY m.item_id
       HAVING COUNT(*) > 1
-      ORDER BY active_match_count DESC, item_id ASC
+      ORDER BY active_match_count DESC, m.item_id ASC
       LIMIT ?
-    `).all(limit) as Array<{ item_id: number; active_match_count: number }>;
+    `).all(...venueParams, limit) as Array<{ item_id: number; active_match_count: number }>;
 
     const candidateConflicts = conflictRows
       .map((row) => {
@@ -400,13 +606,15 @@ export class ExternalProductRepository {
         m.item_id,
         COUNT(claims.id) AS allergen_claim_count
       FROM external_product_matches m
+      JOIN items i ON i.id = m.item_id
       JOIN external_product_allergen_claims claims ON claims.external_product_id = m.external_product_id
       WHERE m.active = 1
         AND m.match_status IN ('confirmed', 'auto_confirmed')
+        ${venueId != null ? 'AND i.venue_id = ?' : ''}
       GROUP BY m.id, m.item_id
       ORDER BY allergen_claim_count DESC, m.item_id ASC
       LIMIT ?
-    `).all(limit) as Array<{ match_id: number; item_id: number; allergen_claim_count: number }>;
+    `).all(...venueParams, limit) as Array<{ match_id: number; item_id: number; allergen_claim_count: number }>;
 
     const readyToImport = readyRows
       .map((row) => {
@@ -430,6 +638,7 @@ export class ExternalProductRepository {
         OR COALESCE(i.sysco_supc, '') <> ''
         OR COALESCE(i.manufacturer_item_code, '') <> ''
       )
+      ${venueId != null ? 'AND i.venue_id = ?' : ''}
       AND NOT EXISTS (
         SELECT 1
         FROM external_product_matches m
@@ -437,7 +646,7 @@ export class ExternalProductRepository {
       )
       ORDER BY i.updated_at DESC, i.name ASC
       LIMIT ?
-    `).all(limit) as Item[];
+    `).all(...venueParams, limit) as Item[];
 
     return {
       missing_identifiers: missingIdentifiers,
@@ -455,6 +664,90 @@ export class ExternalProductRepository {
       LIMIT 1
     `).get() as { name: string } | undefined;
     return Boolean(row);
+  }
+
+  private listExternalProductsByIds(productIds: number[]): ExternalProductRecord[] {
+    const uniqueIds = [...new Set(productIds)].filter((id) => Number.isInteger(id) && id > 0);
+    if (uniqueIds.length === 0) {
+      return [];
+    }
+
+    return this.db.prepare(`
+      SELECT
+        p.*,
+        c.code AS catalog_code,
+        c.name AS catalog_name
+      FROM external_products p
+      JOIN external_product_catalogs c ON c.id = p.catalog_id
+      WHERE p.id IN (${uniqueIds.map(() => '?').join(', ')})
+      ORDER BY p.product_name COLLATE NOCASE ASC
+    `).all(...uniqueIds) as ExternalProductRecord[];
+  }
+
+  private buildAllergenLookup(): Map<string, number> {
+    const lookup = new Map<string, number>();
+    if (!this.hasAllergenTables()) {
+      return lookup;
+    }
+
+    const rows = this.db.prepare(`
+      SELECT id, code, name
+      FROM allergens
+    `).all() as Array<{ id: number; code: string; name: string }>;
+
+    for (const row of rows) {
+      lookup.set(normalizeAllergenKey(row.code), row.id);
+      lookup.set(normalizeAllergenKey(row.name), row.id);
+    }
+
+    return lookup;
+  }
+
+  private replaceExternalProductAllergenClaims(
+    externalProductId: number,
+    claims: ManualExternalProductImportAllergenClaimInput[],
+    allergenLookup: Map<string, number>,
+  ): { claims_upserted: number; claims_unresolved: number } {
+    this.db.prepare(`
+      DELETE FROM external_product_allergen_claims
+      WHERE external_product_id = ?
+    `).run(externalProductId);
+
+    let claimsUpserted = 0;
+    let claimsUnresolved = 0;
+    const seenAllergens = new Set<number>();
+    for (const claim of claims) {
+      const allergenId = allergenLookup.get(normalizeAllergenKey(claim.allergen_code));
+      if (!allergenId) {
+        claimsUnresolved += 1;
+        continue;
+      }
+      if (seenAllergens.has(allergenId)) {
+        continue;
+      }
+      seenAllergens.add(allergenId);
+      this.db.prepare(`
+        INSERT INTO external_product_allergen_claims (
+          external_product_id,
+          allergen_id,
+          status,
+          confidence,
+          source_excerpt
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run(
+        externalProductId,
+        allergenId,
+        claim.status,
+        claim.confidence ?? 'unverified',
+        claim.source_excerpt ?? null,
+      );
+      claimsUpserted += 1;
+    }
+
+    return {
+      claims_upserted: claimsUpserted,
+      claims_unresolved: claimsUnresolved,
+    };
   }
 }
 
@@ -548,4 +841,57 @@ function hydrateMatchRecord(row: any): ExternalProductMatchRecord {
 
 function escapeLike(value: string): string {
   return value.replace(/[%_]/g, (char) => `\\${char}`);
+}
+
+function sanitizeManualImportRow(row: ManualExternalProductImportRow): ManualExternalProductImportRow {
+  return {
+    external_key: normalizeNullableText(row.external_key),
+    gtin: normalizeNullableText(row.gtin),
+    upc: normalizeNullableText(row.upc),
+    vendor_item_code: normalizeNullableText(row.vendor_item_code),
+    sysco_supc: normalizeNullableText(row.sysco_supc),
+    brand_name: normalizeNullableText(row.brand_name),
+    manufacturer_name: normalizeNullableText(row.manufacturer_name),
+    product_name: row.product_name.trim(),
+    pack_text: normalizeNullableText(row.pack_text),
+    size_text: normalizeNullableText(row.size_text),
+    ingredient_statement: normalizeNullableText(row.ingredient_statement),
+    allergen_statement: normalizeNullableText(row.allergen_statement),
+    source_url: normalizeNullableText(row.source_url),
+    raw_payload_json: normalizeNullableText(row.raw_payload_json),
+    allergen_claims: row.allergen_claims?.map((claim) => ({
+      allergen_code: claim.allergen_code.trim(),
+      status: claim.status,
+      confidence: claim.confidence ?? 'unverified',
+      source_excerpt: normalizeNullableText(claim.source_excerpt),
+    })).filter((claim) => claim.allergen_code.length > 0) ?? [],
+  };
+}
+
+function buildExternalKey(row: ManualExternalProductImportRow): string {
+  return [
+    row.sysco_supc,
+    row.gtin,
+    row.upc,
+    row.vendor_item_code,
+    `${row.product_name}:${row.pack_text ?? ''}:${row.size_text ?? ''}`,
+  ]
+    .map((value) => normalizeNullableText(value))
+    .find((value) => value != null && value.length > 0)
+    ?.toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9:_-]/g, '') ?? `manual-${Date.now()}`;
+}
+
+function normalizeNullableText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeAllergenKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }

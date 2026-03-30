@@ -68,6 +68,7 @@ import type {
   ExternalProduct,
   ExternalProductCatalog,
   ExternalProductMatch,
+  ExternalProductSyncRun,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -509,6 +510,49 @@ export interface ProductEnrichmentReviewQueuePayload {
     allergen_claim_count: number;
   }>;
   unmatched_items: Item[];
+}
+
+export interface ProductEnrichmentManualImportAllergenClaimInput {
+  allergen_code: string;
+  status: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+  confidence?: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown' | null;
+  source_excerpt?: string | null;
+}
+
+export interface ProductEnrichmentManualImportProductInput {
+  external_key?: string | null;
+  gtin?: string | null;
+  upc?: string | null;
+  vendor_item_code?: string | null;
+  sysco_supc?: string | null;
+  brand_name?: string | null;
+  manufacturer_name?: string | null;
+  product_name: string;
+  pack_text?: string | null;
+  size_text?: string | null;
+  ingredient_statement?: string | null;
+  allergen_statement?: string | null;
+  source_url?: string | null;
+  raw_payload_json?: string | null;
+  allergen_claims?: ProductEnrichmentManualImportAllergenClaimInput[];
+}
+
+export interface ProductEnrichmentCatalogSyncInput {
+  mode: 'manual_import';
+  created_by?: string | null;
+  products: ProductEnrichmentManualImportProductInput[];
+}
+
+export interface ProductEnrichmentCatalogSyncPayload {
+  run: ExternalProductSyncRun | undefined;
+  summary: {
+    products_upserted: number;
+    products_created: number;
+    products_updated: number;
+    allergen_claims_upserted: number;
+    allergen_claims_unresolved: number;
+    products: ProductEnrichmentExternalProductPayload[];
+  };
 }
 
 export interface ProductEnrichmentItemIdentifierInput {
@@ -1301,12 +1345,18 @@ export const api = {
   },
   productEnrichment: {
     listCatalogs: () => fetchJson<{ catalogs: ExternalProductCatalog[] }>('/product-enrichment/catalogs'),
+    syncCatalog: (catalogCode: string, data: ProductEnrichmentCatalogSyncInput) =>
+      fetchJson<ProductEnrichmentCatalogSyncPayload>(`/product-enrichment/catalogs/${catalogCode}/sync`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     search: (params?: {
       query?: string;
       catalog?: string;
       gtin?: string;
       upc?: string;
       sysco_supc?: string;
+      vendor_item_code?: string;
       limit?: number;
     }) => {
       const qs = new URLSearchParams();
@@ -1315,6 +1365,7 @@ export const api = {
       if (params?.gtin) qs.set('gtin', params.gtin);
       if (params?.upc) qs.set('upc', params.upc);
       if (params?.sysco_supc) qs.set('sysco_supc', params.sysco_supc);
+      if (params?.vendor_item_code) qs.set('vendor_item_code', params.vendor_item_code);
       if (params?.limit != null) qs.set('limit', String(params.limit));
       const query = qs.toString();
       return fetchJson<{ products: ProductEnrichmentExternalProductPayload[] }>(`/product-enrichment/search${query ? `?${query}` : ''}`);
@@ -1344,8 +1395,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
-    reviewQueue: () =>
-      fetchJson<ProductEnrichmentReviewQueuePayload>('/product-enrichment/review-queue'),
+    reviewQueue: (params?: { venue_id?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id != null) qs.set('venue_id', String(params.venue_id));
+      if (params?.limit != null) qs.set('limit', String(params.limit));
+      const query = qs.toString();
+      return fetchJson<ProductEnrichmentReviewQueuePayload>(`/product-enrichment/review-queue${query ? `?${query}` : ''}`);
+    },
   },
   recipeDrafts: {
     list: () => fetchJson<{ drafts: RecipeDraftSummaryPayload[] }>('/recipe-drafts'),

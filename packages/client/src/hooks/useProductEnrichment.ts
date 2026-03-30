@@ -18,11 +18,27 @@ export function useProductEnrichmentItem(itemId: number) {
   });
 }
 
-export function useProductEnrichmentReviewQueue() {
+export function useProductEnrichmentReviewQueue(venueId?: number) {
   return useQuery({
-    queryKey: ['product-enrichment', 'review-queue'],
-    queryFn: () => api.productEnrichment.reviewQueue(),
+    queryKey: ['product-enrichment', 'review-queue', venueId ?? null],
+    queryFn: () => api.productEnrichment.reviewQueue({ venue_id: venueId }),
     staleTime: 15_000,
+  });
+}
+
+export function useSyncProductEnrichmentCatalog() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { catalogCode: string; data: Parameters<typeof api.productEnrichment.syncCatalog>[1] }) =>
+      api.productEnrichment.syncCatalog(input.catalogCode, input.data),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['product-enrichment', 'catalogs'] }),
+        queryClient.invalidateQueries({ queryKey: ['product-enrichment', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+      ]);
+    },
   });
 }
 

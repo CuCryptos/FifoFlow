@@ -151,4 +151,110 @@ describe('Product enrichment routes', () => {
       }),
     ]);
   });
+
+  it('imports manual catalog rows and scopes the review queue by venue', async () => {
+    const venueA = Number(db.prepare(`
+      INSERT INTO venues (name)
+      VALUES ('Paradise Kitchen')
+    `).run().lastInsertRowid);
+    const venueB = Number(db.prepare(`
+      INSERT INTO venues (name)
+      VALUES ('Maui Grill')
+    `).run().lastInsertRowid);
+    const vendorId = Number(db.prepare(`INSERT INTO vendors (name) VALUES ('Sysco')`).run().lastInsertRowid);
+    const itemA = Number(db.prepare(`
+      INSERT INTO items (name, category, unit, venue_id, sysco_supc)
+      VALUES ('Tamari', 'Other', 'each', ?, '7654321')
+    `).run(venueA).lastInsertRowid);
+    const itemB = Number(db.prepare(`
+      INSERT INTO items (name, category, unit, venue_id)
+      VALUES ('Uncoded Oil', 'Other', 'each', ?)
+    `).run(venueB).lastInsertRowid);
+
+    db.prepare(`
+      INSERT INTO vendor_prices (
+        item_id, vendor_id, vendor_item_name, sysco_supc, order_unit, order_unit_price, is_default
+      ) VALUES (?, ?, 'Tamari Soy Sauce', '7654321', 'case', 32, 1)
+    `).run(itemA, vendorId);
+
+    const syncResponse = await request(app)
+      .post('/api/product-enrichment/catalogs/manual_import/sync')
+      .send({
+        mode: 'manual_import',
+        created_by: 'tester',
+        products: [
+          {
+            product_name: 'Tamari Soy Sauce',
+            sysco_supc: '7654321',
+            brand_name: 'San-J',
+            ingredient_statement: 'Water, soybeans, salt',
+            allergen_statement: 'Contains soy',
+            allergen_claims: [
+              {
+                allergen_code: 'soy',
+                status: 'contains',
+                confidence: 'verified',
+                source_excerpt: 'Contains soy',
+              },
+            ],
+          },
+        ],
+      });
+
+    expect(syncResponse.status).toBe(200);
+    expect(syncResponse.body.summary).toMatchObject({
+      products_upserted: 1,
+      products_created: 1,
+      allergen_claims_upserted: 1,
+      allergen_claims_unresolved: 0,
+    });
+    expect(syncResponse.body.run).toMatchObject({
+      status: 'completed',
+    });
+
+    const searchResponse = await request(app)
+      .get('/api/product-enrichment/search')
+      .query({ sysco_supc: '7654321' });
+    expect(searchResponse.status).toBe(200);
+    expect(searchResponse.body.products).toEqual([
+      expect.objectContaining({
+        product_name: 'Tamari Soy Sauce',
+        catalog_code: 'manual_import',
+      }),
+    ]);
+
+    const matchResponse = await request(app)
+      .post(`/api/product-enrichment/items/${itemA}/match`)
+      .send({ mode: 'auto' });
+    expect(matchResponse.status).toBe(200);
+    expect(matchResponse.body.matches[0]).toMatchObject({
+      item_id: itemA,
+      match_status: 'auto_confirmed',
+      match_basis: 'sysco_supc',
+      external_product: expect.objectContaining({
+        product_name: 'Tamari Soy Sauce',
+      }),
+    });
+
+    const venueQueueResponse = await request(app)
+      .get('/api/product-enrichment/review-queue')
+      .query({ venue_id: venueA });
+    expect(venueQueueResponse.status).toBe(200);
+    expect(venueQueueResponse.body.ready_to_import).toEqual([
+      expect.objectContaining({
+        item: expect.objectContaining({ id: itemA }),
+        allergen_claim_count: 1,
+      }),
+    ]);
+    expect(venueQueueResponse.body.missing_identifiers).toEqual([]);
+
+    const otherVenueQueueResponse = await request(app)
+      .get('/api/product-enrichment/review-queue')
+      .query({ venue_id: venueB });
+    expect(otherVenueQueueResponse.status).toBe(200);
+    expect(otherVenueQueueResponse.body.ready_to_import).toEqual([]);
+    expect(otherVenueQueueResponse.body.missing_identifiers).toEqual([
+      expect.objectContaining({ id: itemB }),
+    ]);
+  });
 });

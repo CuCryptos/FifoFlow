@@ -5,6 +5,7 @@ import { useVenueContext } from '../contexts/VenueContext';
 import { WorkflowEmptyState, WorkflowMetricCard, WorkflowMetricGrid, WorkflowPage, WorkflowPanel, WorkflowStatusPill } from '../components/workflow/WorkflowPrimitives';
 import { AllergenReviewQueue } from '../components/allergens/AllergenReviewQueue';
 import { GuestSafetyQueryPanel } from '../components/allergens/GuestSafetyQueryPanel';
+import { ProductEnrichmentQueue } from '../components/products/ProductEnrichmentQueue';
 import { useAllergenItems, useAllergenReference, useAllergenReviewQueue } from '../hooks/useAllergens';
 
 type ItemStatusFilter = '' | 'contains' | 'may_contain' | 'free_of' | 'unknown';
@@ -176,6 +177,8 @@ export function Allergens() {
 
         <GuestSafetyQueryPanel allergens={allergens} venueId={selectedVenueId} />
       </div>
+
+      <ProductEnrichmentQueue venueId={selectedVenueId} allergens={allergens} />
     </WorkflowPage>
   );
 }
