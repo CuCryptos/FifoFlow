@@ -219,6 +219,48 @@ export function ItemIdentifierEditor({
           No product suggestions yet. Save identifiers and run matching to start building the external product crosswalk.
         </div>
       ) : null}
+
+      {enrichmentQuery.data?.import_audits?.length ? (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-950">Imported claim history</div>
+              <div className="mt-1 text-xs leading-5 text-slate-500">
+                Review when external product claims were imported, what was applied, and what was skipped.
+              </div>
+            </div>
+            <StatusBadge tone="blue">{enrichmentQuery.data.import_audits.length} import{enrichmentQuery.data.import_audits.length === 1 ? '' : 's'}</StatusBadge>
+          </div>
+          <div className="mt-4 space-y-3">
+            {enrichmentQuery.data.import_audits.map((audit) => (
+              <div key={audit.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-950">
+                      {audit.match?.external_product.product_name ?? 'Imported external product claims'}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {formatAuditTimestamp(audit.created_at)}
+                      {audit.created_by ? ` • ${audit.created_by}` : ''}
+                      {audit.match?.external_product.catalog_name ? ` • ${audit.match.external_product.catalog_name}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusBadge tone="green">{audit.summary.imported_rows} applied</StatusBadge>
+                    <StatusBadge tone="blue">{audit.summary.evidence_rows} evidence</StatusBadge>
+                    {audit.summary.skipped_rows > 0 ? <StatusBadge tone="amber">{audit.summary.skipped_rows} skipped</StatusBadge> : null}
+                  </div>
+                </div>
+                <div className="mt-3 text-xs leading-5 text-slate-600">
+                  Mode: {audit.import_mode.replace('_', ' ')}
+                  {audit.summary.imported_allergen_ids.length > 0 ? ` • Imported: ${audit.summary.imported_allergen_ids.join(', ')}` : ''}
+                  {audit.summary.skipped_allergen_ids.length > 0 ? ` • Skipped: ${audit.summary.skipped_allergen_ids.join(', ')}` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -279,4 +321,9 @@ function toneForConfidence(confidence: string): 'slate' | 'green' | 'amber' | 'b
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function formatAuditTimestamp(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }

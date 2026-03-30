@@ -15,6 +15,7 @@ import {
   useSyncProductEnrichmentCatalog,
 } from '../../hooks/useProductEnrichment';
 import { WorkflowEmptyState, WorkflowPanel, WorkflowStatusPill } from '../workflow/WorkflowPrimitives';
+import { useToast } from '../../contexts/ToastContext';
 
 interface AllergenReferenceEntry {
   code: string;
@@ -31,10 +32,12 @@ export function ProductEnrichmentQueue({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   const [lastImportResult, setLastImportResult] = useState<ProductEnrichmentAllergenImportPayload | null>(null);
+  const [selectedMatchIds, setSelectedMatchIds] = useState<number[]>([]);
   const queueQuery = useProductEnrichmentReviewQueue(venueId ?? undefined);
   const catalogsQuery = useProductEnrichmentCatalogs();
   const syncCatalogMutation = useSyncProductEnrichmentCatalog();
   const importAllergensMutation = useImportProductEnrichmentAllergens();
+  const { toast } = useToast();
 
   const allergenLookup = useMemo(() => buildAllergenLookup(allergens), [allergens]);
   const queue = queueQuery.data;
@@ -48,6 +51,9 @@ export function ProductEnrichmentQueue({
   };
 
   const syncSummary = syncCatalogMutation.data?.summary ?? null;
+  const readyEntries = queue?.ready_to_import ?? [];
+  const selectedReadyEntries = readyEntries.filter((entry) => selectedMatchIds.includes(entry.active_match.id));
+  const isBulkImporting = importAllergensMutation.isPending;
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -77,8 +83,10 @@ export function ProductEnrichmentQueue({
         ? ` ${parsed.unresolvedAllergens.length} allergen token${parsed.unresolvedAllergens.length === 1 ? '' : 's'} could not be mapped and were skipped.`
         : '';
       setImportNote(`Imported ${parsed.products.length} product row${parsed.products.length === 1 ? '' : 's'} from ${file.name}.${unresolvedSuffix}`);
+      toast(`Imported ${parsed.products.length} product row${parsed.products.length === 1 ? '' : 's'} into manual catalog.`, 'success');
     } catch (error) {
       setImportNote(error instanceof Error ? error.message : 'Unable to import that file.');
+      toast(error instanceof Error ? error.message : 'Unable to import that file.', 'error');
     }
   };
 
@@ -96,9 +104,60 @@ export function ProductEnrichmentQueue({
       setImportNote(
         `Imported ${result.imported_rows} allergen row${result.imported_rows === 1 ? '' : 's'} and captured ${result.evidence_rows} evidence row${result.evidence_rows === 1 ? '' : 's'}.`,
       );
+      setSelectedMatchIds((current) => current.filter((id) => id !== matchId));
+      toast(`Imported claims for item #${itemId}.`, 'success');
     } catch (error) {
       setImportNote(error instanceof Error ? error.message : 'Unable to import allergen claims.');
+      toast(error instanceof Error ? error.message : 'Unable to import allergen claims.', 'error');
     }
+  };
+
+  const toggleReadySelection = (matchId: number) => {
+    setSelectedMatchIds((current) => (
+      current.includes(matchId)
+        ? current.filter((id) => id !== matchId)
+        : [...current, matchId]
+    ));
+  };
+
+  const handleSelectAllReady = () => {
+    const allMatchIds = readyEntries.map((entry) => entry.active_match.id);
+    setSelectedMatchIds((current) => current.length === allMatchIds.length ? [] : allMatchIds);
+  };
+
+  const handleBulkImport = async () => {
+    if (selectedReadyEntries.length === 0) return;
+    let importedCount = 0;
+    let skippedCount = 0;
+    let lastResult: ProductEnrichmentAllergenImportPayload | null = null;
+
+    for (const entry of selectedReadyEntries) {
+      try {
+        const result = await importAllergensMutation.mutateAsync({
+          itemId: entry.item.id,
+          data: {
+            external_product_match_id: entry.active_match.id,
+            import_mode: 'draft_claims',
+            created_by: 'operator',
+          },
+        });
+        importedCount += result.imported_rows;
+        skippedCount += result.skipped_rows;
+        lastResult = result;
+      } catch (error) {
+        toast(error instanceof Error ? error.message : `Unable to import claims for ${entry.item.name}.`, 'error');
+        return;
+      }
+    }
+
+    setSelectedMatchIds([]);
+    if (lastResult) {
+      setLastImportResult(lastResult);
+    }
+    setImportNote(
+      `Bulk import finished for ${selectedReadyEntries.length} item${selectedReadyEntries.length === 1 ? '' : 's'}: ${importedCount} rows applied, ${skippedCount} skipped.`,
+    );
+    toast(`Bulk imported ${selectedReadyEntries.length} ready item${selectedReadyEntries.length === 1 ? '' : 's'}.`, 'success');
   };
 
   return (
@@ -119,6 +178,25 @@ export function ProductEnrichmentQueue({
             <RefreshCw className={`h-4 w-4 ${queueQuery.isFetching ? 'animate-spin' : ''}`} />
             Refresh queue
           </button>
+          {readyEntries.length > 0 ? (
+            <>
+              <button
+                type="button"
+                onClick={handleSelectAllReady}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                {selectedMatchIds.length === readyEntries.length ? 'Clear ready selection' : 'Select all ready'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkImport()}
+                disabled={selectedReadyEntries.length === 0 || isBulkImporting}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isBulkImporting ? 'Importing selected...' : `Import selected${selectedReadyEntries.length > 0 ? ` (${selectedReadyEntries.length})` : ''}`}
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -237,7 +315,9 @@ export function ProductEnrichmentQueue({
                 key={`ready-${entry.item.id}`}
                 entry={entry}
                 onImport={handleImportClaims}
-                loading={importAllergensMutation.isPending}
+                loading={isBulkImporting}
+                selected={selectedMatchIds.includes(entry.active_match.id)}
+                onToggleSelected={toggleReadySelection}
               />
             ))}
           />
@@ -277,13 +357,26 @@ function ReadyImportCard({
   entry,
   onImport,
   loading,
+  selected,
+  onToggleSelected,
 }: {
   entry: ProductEnrichmentReviewQueuePayload['ready_to_import'][number];
   onImport: (itemId: number, matchId: number) => void | Promise<void>;
   loading: boolean;
+  selected: boolean;
+  onToggleSelected: (matchId: number) => void;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+    <div className={`rounded-3xl border px-4 py-4 ${selected ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'}`}>
+      <label className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelected(entry.active_match.id)}
+          className="h-4 w-4 rounded border-slate-300 text-slate-950"
+        />
+        Select for bulk import
+      </label>
       <Link to={`/allergens/items/${entry.item.id}`} className="block transition hover:text-slate-700">
         <div className="text-sm font-semibold text-slate-950">{entry.item.name}</div>
         <div className="mt-1 text-xs leading-5 text-slate-500">

@@ -48,6 +48,25 @@ export interface ProductEnrichmentItemDetail {
     created_at: string;
     updated_at: string;
   }>;
+  import_audits: Array<{
+    id: number;
+    item_id: number;
+    external_product_match_id: number | null;
+    import_source: 'external_product' | 'uploaded_chart' | 'operator';
+    import_mode: 'draft_claims' | 'direct_apply';
+    summary_json: string;
+    created_by: string | null;
+    created_at: string;
+    summary: {
+      external_product_id: number | null;
+      imported_rows: number;
+      evidence_rows: number;
+      skipped_rows: number;
+      imported_allergen_ids: string[];
+      skipped_allergen_ids: string[];
+    };
+    match: ExternalProductMatchRecord | null;
+  }>;
 }
 
 export interface ProductEnrichmentReviewQueue {
@@ -561,12 +580,33 @@ export class ExternalProductRepository {
           ORDER BY claims.external_product_id ASC, allergen_name ASC
         `).all(...matchProductIds) as ProductEnrichmentItemDetail['allergen_claims']
       : [];
+    const importAuditRows = this.db.prepare(`
+      SELECT *
+      FROM item_allergen_import_audit
+      WHERE item_id = ?
+      ORDER BY created_at DESC, id DESC
+    `).all(itemId) as Array<{
+      id: number;
+      item_id: number;
+      external_product_match_id: number | null;
+      import_source: 'external_product' | 'uploaded_chart' | 'operator';
+      import_mode: 'draft_claims' | 'direct_apply';
+      summary_json: string;
+      created_by: string | null;
+      created_at: string;
+    }>;
+    const importAudits = importAuditRows.map((audit) => ({
+      ...audit,
+      summary: parseAuditSummary(audit.summary_json),
+      match: audit.external_product_match_id ? this.getMatchById(audit.external_product_match_id) ?? null : null,
+    }));
 
     return {
       item,
       vendor_prices: vendorPrices,
       matches,
       allergen_claims: allergenClaims,
+      import_audits: importAudits,
     };
   }
 
@@ -1144,4 +1184,34 @@ function confidenceRank(confidence: string): number {
 
 function buildImportedNote(catalogName: string, productName: string): string {
   return `Imported from ${catalogName} product data for ${productName}`;
+}
+
+function parseAuditSummary(summaryJson: string): {
+  external_product_id: number | null;
+  imported_rows: number;
+  evidence_rows: number;
+  skipped_rows: number;
+  imported_allergen_ids: string[];
+  skipped_allergen_ids: string[];
+} {
+  try {
+    const parsed = JSON.parse(summaryJson) as Record<string, unknown>;
+    return {
+      external_product_id: typeof parsed.external_product_id === 'number' ? parsed.external_product_id : null,
+      imported_rows: typeof parsed.imported_rows === 'number' ? parsed.imported_rows : 0,
+      evidence_rows: typeof parsed.evidence_rows === 'number' ? parsed.evidence_rows : 0,
+      skipped_rows: typeof parsed.skipped_rows === 'number' ? parsed.skipped_rows : 0,
+      imported_allergen_ids: Array.isArray(parsed.imported_allergen_ids) ? parsed.imported_allergen_ids.map(String) : [],
+      skipped_allergen_ids: Array.isArray(parsed.skipped_allergen_ids) ? parsed.skipped_allergen_ids.map(String) : [],
+    };
+  } catch {
+    return {
+      external_product_id: null,
+      imported_rows: 0,
+      evidence_rows: 0,
+      skipped_rows: 0,
+      imported_allergen_ids: [],
+      skipped_allergen_ids: [],
+    };
+  }
 }

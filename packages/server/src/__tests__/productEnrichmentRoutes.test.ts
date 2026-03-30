@@ -195,6 +195,29 @@ describe('Product enrichment routes', () => {
       created_by: 'tester',
     });
 
+    const importedDetailResponse = await request(app).get(`/api/product-enrichment/items/${itemId}`);
+    expect(importedDetailResponse.status).toBe(200);
+    expect(importedDetailResponse.body.import_audits).toEqual([
+      expect.objectContaining({
+        item_id: itemId,
+        external_product_match_id: matchResponse.body.matches[0].id,
+        import_mode: 'draft_claims',
+        created_by: 'tester',
+        summary: expect.objectContaining({
+          imported_rows: 1,
+          evidence_rows: 1,
+          skipped_rows: 0,
+          imported_allergen_ids: [String(soyAllergenId)],
+        }),
+        match: expect.objectContaining({
+          id: matchResponse.body.matches[0].id,
+          external_product: expect.objectContaining({
+            product_name: 'Kikkoman Soy Sauce',
+          }),
+        }),
+      }),
+    ]);
+
     const clearedQueueResponse = await request(app).get('/api/product-enrichment/review-queue');
     expect(clearedQueueResponse.status).toBe(200);
     expect(clearedQueueResponse.body.ready_to_import).toEqual([]);

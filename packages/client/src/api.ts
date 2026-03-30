@@ -495,6 +495,25 @@ export interface ProductEnrichmentItemDetailPayload {
     created_at: string;
     updated_at: string;
   }>;
+  import_audits: Array<{
+    id: number;
+    item_id: number;
+    external_product_match_id: number | null;
+    import_source: 'external_product' | 'uploaded_chart' | 'operator';
+    import_mode: 'draft_claims' | 'direct_apply';
+    summary_json: string;
+    created_by: string | null;
+    created_at: string;
+    summary: {
+      external_product_id: number | null;
+      imported_rows: number;
+      evidence_rows: number;
+      skipped_rows: number;
+      imported_allergen_ids: string[];
+      skipped_allergen_ids: string[];
+    };
+    match?: ProductEnrichmentMatchPayload | null;
+  }>;
 }
 
 export interface ProductEnrichmentReviewQueuePayload {
