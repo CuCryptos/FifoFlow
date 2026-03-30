@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
-import { updateItemSchema, updateVendorPriceSchema } from '@fifoflow/shared';
+import { CATEGORIES, UNITS, updateItemSchema, updateVendorPriceSchema } from '@fifoflow/shared';
 import { ExternalProductMatchService } from '../products/externalProductMatchService.js';
 import { ExternalProductRepository } from '../products/externalProductRepositories.js';
 
@@ -55,12 +55,27 @@ const manualImportProductSchema = z.object({
   gtin: z.string().max(100).nullable().optional(),
   upc: z.string().max(100).nullable().optional(),
   vendor_item_code: z.string().max(100).nullable().optional(),
+  vendor_item_name: z.string().max(200).nullable().optional(),
+  vendor_name: z.string().max(200).nullable().optional(),
+  vendor_pack_text: z.string().max(200).nullable().optional(),
   sysco_supc: z.string().max(100).nullable().optional(),
   brand_name: z.string().max(200).nullable().optional(),
   manufacturer_name: z.string().max(200).nullable().optional(),
   product_name: z.string().min(1).max(250),
   pack_text: z.string().max(200).nullable().optional(),
   size_text: z.string().max(200).nullable().optional(),
+  inventory_item_name: z.string().max(250).nullable().optional(),
+  inventory_category: z.enum(CATEGORIES).nullable().optional(),
+  inventory_unit: z.enum(UNITS).nullable().optional(),
+  order_unit: z.enum(UNITS).nullable().optional(),
+  order_unit_price: z.number().min(0).nullable().optional(),
+  qty_per_unit: z.number().min(0).nullable().optional(),
+  item_size_value: z.number().min(0).nullable().optional(),
+  item_size_unit: z.enum(UNITS).nullable().optional(),
+  venue_id: z.number().int().positive().nullable().optional(),
+  venue_name: z.string().max(200).nullable().optional(),
+  create_item_if_missing: z.boolean().nullable().optional(),
+  make_default_vendor_price: z.boolean().nullable().optional(),
   ingredient_statement: z.string().max(20_000).nullable().optional(),
   allergen_statement: z.string().max(10_000).nullable().optional(),
   source_url: z.string().url().max(1000).nullable().optional(),
@@ -71,6 +86,12 @@ const manualImportProductSchema = z.object({
 const catalogSyncSchema = z.object({
   mode: z.enum(['manual_import'] as const),
   created_by: z.string().max(200).nullable().optional(),
+  default_vendor_name: z.string().max(200).nullable().optional(),
+  default_venue_id: z.number().int().positive().nullable().optional(),
+  default_inventory_category: z.enum(CATEGORIES).nullable().optional(),
+  default_inventory_unit: z.enum(UNITS).nullable().optional(),
+  default_order_unit: z.enum(UNITS).nullable().optional(),
+  map_distributor_rows: z.boolean().optional().default(false),
   products: z.array(manualImportProductSchema).min(1).max(2000),
 });
 
@@ -105,7 +126,14 @@ export function createProductEnrichmentRoutes(db: Database.Database): Router {
 
     const run = repository.createSyncRun(catalog.id);
     try {
-      const summary = repository.upsertExternalProducts(catalog.code, parsed.data.products);
+      const summary = repository.upsertExternalProducts(catalog.code, parsed.data.products, {
+        default_vendor_name: parsed.data.default_vendor_name ?? null,
+        default_venue_id: parsed.data.default_venue_id ?? null,
+        default_inventory_category: parsed.data.default_inventory_category ?? null,
+        default_inventory_unit: parsed.data.default_inventory_unit ?? null,
+        default_order_unit: parsed.data.default_order_unit ?? null,
+        map_distributor_rows: parsed.data.map_distributor_rows ?? false,
+      });
       const completedRun = repository.completeSyncRun(run.id, 'completed', {
         created_by: parsed.data.created_by ?? null,
         mode: parsed.data.mode,

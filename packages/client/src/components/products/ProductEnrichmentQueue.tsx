@@ -34,6 +34,8 @@ export function ProductEnrichmentQueue({
   const [importNote, setImportNote] = useState<string | null>(null);
   const [lastImportResult, setLastImportResult] = useState<ProductEnrichmentAllergenImportPayload | null>(null);
   const [selectedMatchIds, setSelectedMatchIds] = useState<number[]>([]);
+  const [importMode, setImportMode] = useState<'catalog' | 'distributor'>('catalog');
+  const [defaultVendorName, setDefaultVendorName] = useState('');
   const queueQuery = useProductEnrichmentReviewQueue(venueId ?? undefined);
   const catalogsQuery = useProductEnrichmentCatalogs();
   const syncCatalogMutation = useSyncProductEnrichmentCatalog();
@@ -73,6 +75,12 @@ export function ProductEnrichmentQueue({
       const payload: ProductEnrichmentCatalogSyncInput = {
         mode: 'manual_import',
         created_by: 'operator',
+        default_vendor_name: importMode === 'distributor' ? emptyToNull(defaultVendorName) : null,
+        default_venue_id: importMode === 'distributor' ? venueId ?? null : null,
+        default_inventory_category: importMode === 'distributor' ? 'Bar' : null,
+        default_inventory_unit: importMode === 'distributor' ? 'bottle' : null,
+        default_order_unit: importMode === 'distributor' ? 'case' : null,
+        map_distributor_rows: importMode === 'distributor',
         products: parsed.products,
       };
 
@@ -84,12 +92,28 @@ export function ProductEnrichmentQueue({
       const unresolvedSuffix = parsed.unresolvedAllergens.length > 0
         ? ` ${parsed.unresolvedAllergens.length} allergen token${parsed.unresolvedAllergens.length === 1 ? '' : 's'} could not be mapped and were skipped.`
         : '';
-      setImportNote(`Imported ${parsed.products.length} product row${parsed.products.length === 1 ? '' : 's'} from ${file.name}.${unresolvedSuffix}`);
+      setImportNote(
+        importMode === 'distributor'
+          ? `Imported ${parsed.products.length} distributor row${parsed.products.length === 1 ? '' : 's'} from ${file.name}.${unresolvedSuffix}`
+          : `Imported ${parsed.products.length} product row${parsed.products.length === 1 ? '' : 's'} from ${file.name}.${unresolvedSuffix}`,
+      );
       toast(`Imported ${parsed.products.length} product row${parsed.products.length === 1 ? '' : 's'} into manual catalog.`, 'success');
     } catch (error) {
       setImportNote(error instanceof Error ? error.message : 'Unable to import that file.');
       toast(error instanceof Error ? error.message : 'Unable to import that file.', 'error');
     }
+  };
+
+  const handleDownloadTemplate = () => {
+    const csv = buildBarCatalogTemplateCsv();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'fifoflow-bar-catalog-template.csv';
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast('Downloaded bar catalog CSV template.', 'success');
   };
 
   const handleImportClaims = async (itemId: number, matchId: number) => {
@@ -216,6 +240,13 @@ export function ProductEnrichmentQueue({
           ) : null}
           <button
             type="button"
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            Download bar CSV template
+          </button>
+          <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={!manualImportCatalog || syncCatalogMutation.isPending}
@@ -242,9 +273,63 @@ export function ProductEnrichmentQueue({
             <div>
               <div className="text-sm font-semibold text-slate-950">Manual external product import</div>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Upload CSV, TSV, XLSX, or JSON with columns like <code>product_name</code>, <code>gtin</code>, <code>sysco_supc</code>,
-                <code> vendor_item_code</code>, <code>ingredient_statement</code>, and allergen columns such as <code>contains_allergens</code>.
+                Upload CSV, TSV, XLSX, or JSON for branded products or distributor files. Bar-focused imports can create inventory items and vendor-price mappings for liquor, beer, and mixers while they seed the external product catalog.
               </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Import mode</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(['catalog', 'distributor'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setImportMode(mode)}
+                    className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                      importMode === mode
+                        ? 'border-slate-950 bg-slate-950 text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    {mode === 'catalog' ? 'Catalog only' : 'Distributor mapping'}
+                  </button>
+                ))}
+              </div>
+              {importMode === 'distributor' ? (
+                <div className="mt-3">
+                  <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Default distributor</label>
+                  <input
+                    type="text"
+                    value={defaultVendorName}
+                    onChange={(event) => setDefaultVendorName(event.target.value)}
+                    placeholder="Southern Glazer's / Young's Market / Sysco"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+                  <div className="mt-2 text-xs leading-5 text-slate-500">
+                    {venueId != null
+                      ? `Imported inventory rows will default to venue #${venueId} unless the file overrides it.`
+                      : 'Select a venue first if you want imported inventory mappings scoped to one operating unit.'}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Bar CSV columns</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <WorkflowStatusPill tone="slate">product_name</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">brand_name</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">vendor_name / distributor_name</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">vendor_item_name</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">vendor_item_code</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">pack_text</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">order_unit_price</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">qty_per_unit</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">inventory_category</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">inventory_unit</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">size_text or item_size_value/unit</WorkflowStatusPill>
+                <WorkflowStatusPill tone="slate">contains_allergens</WorkflowStatusPill>
+              </div>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -261,6 +346,9 @@ export function ProductEnrichmentQueue({
               <MiniMetric label="Created" value={syncSummary.products_created} />
               <MiniMetric label="Updated" value={syncSummary.products_updated} />
               <MiniMetric label="Claims" value={syncSummary.allergen_claims_upserted} />
+              <MiniMetric label="Items mapped" value={syncSummary.inventory_items_matched ?? 0} tone="blue" />
+              <MiniMetric label="Items created" value={syncSummary.inventory_items_created ?? 0} tone="green" />
+              <MiniMetric label="Vendor prices" value={syncSummary.vendor_prices_upserted ?? 0} tone="amber" />
             </div>
           ) : null}
           {lastImportResult ? (
@@ -590,13 +678,28 @@ function mapImportRow(
     external_key: firstText(row, ['external_key', 'external_id', 'sku']),
     gtin: firstText(row, ['gtin']),
     upc: firstText(row, ['upc']),
-    vendor_item_code: firstText(row, ['vendor_item_code', 'item_code']),
+    vendor_item_code: firstText(row, ['vendor_item_code', 'item_code', 'sku']),
+    vendor_item_name: firstText(row, ['vendor_item_name', 'distributor_item_name', 'supplier_item_name']),
+    vendor_name: firstText(row, ['vendor_name', 'distributor_name', 'supplier', 'distributor']),
+    vendor_pack_text: firstText(row, ['vendor_pack_text', 'distributor_pack_text', 'case_pack']),
     sysco_supc: firstText(row, ['sysco_supc', 'supc']),
     brand_name: firstText(row, ['brand_name', 'brand']),
     manufacturer_name: firstText(row, ['manufacturer_name', 'manufacturer']),
     product_name: productName,
     pack_text: firstText(row, ['pack_text', 'pack', 'vendor_pack_text']),
     size_text: firstText(row, ['size_text', 'size']),
+    inventory_item_name: firstText(row, ['inventory_item_name', 'inventory_name']),
+    inventory_category: firstText(row, ['inventory_category', 'category']) as ProductEnrichmentManualImportProductInput['inventory_category'],
+    inventory_unit: firstText(row, ['inventory_unit', 'unit']) as ProductEnrichmentManualImportProductInput['inventory_unit'],
+    order_unit: firstText(row, ['order_unit', 'purchase_unit']) as ProductEnrichmentManualImportProductInput['order_unit'],
+    order_unit_price: firstNumber(row, ['order_unit_price', 'case_cost', 'cost', 'price']),
+    qty_per_unit: firstNumber(row, ['qty_per_unit', 'case_pack', 'pack_count', 'units_per_case']),
+    item_size_value: firstNumber(row, ['item_size_value', 'size_value', 'bottle_size_value', 'size_ml']),
+    item_size_unit: firstUnit(row, ['item_size_unit', 'size_unit'], row['size_ml']) as ProductEnrichmentManualImportProductInput['item_size_unit'],
+    venue_id: firstInteger(row, ['venue_id', 'location_id']),
+    venue_name: firstText(row, ['venue_name', 'location_name']),
+    create_item_if_missing: firstBoolean(row, ['create_item_if_missing']),
+    make_default_vendor_price: firstBoolean(row, ['make_default_vendor_price', 'default_vendor_price']),
     ingredient_statement: firstText(row, ['ingredient_statement', 'ingredients']),
     allergen_statement: firstText(row, ['allergen_statement']),
     source_url: firstText(row, ['source_url', 'product_url']),
@@ -619,6 +722,35 @@ function firstText(row: Record<string, string>, keys: string[]): string | null {
       return value.trim();
     }
   }
+  return null;
+}
+
+function firstNumber(row: Record<string, string>, keys: string[]): number | null {
+  const value = firstText(row, keys);
+  if (!value) return null;
+  const normalized = value.replace(/[$,]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstBoolean(row: Record<string, string>, keys: string[]): boolean | null {
+  const value = firstText(row, keys);
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n'].includes(normalized)) return false;
+  return null;
+}
+
+function firstInteger(row: Record<string, string>, keys: string[]): number | null {
+  const parsed = firstNumber(row, keys);
+  return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function firstUnit(row: Record<string, string>, keys: string[], fallbackValue?: string): string | null {
+  const explicit = firstText(row, keys);
+  if (explicit) return explicit;
+  if (fallbackValue && fallbackValue.trim().length > 0) return 'ml';
   return null;
 }
 
@@ -664,4 +796,98 @@ function normalizeKey(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+}
+
+function buildBarCatalogTemplateCsv(): string {
+  const headers = [
+    'product_name',
+    'brand_name',
+    'vendor_name',
+    'vendor_item_name',
+    'vendor_item_code',
+    'pack_text',
+    'size_text',
+    'inventory_item_name',
+    'inventory_category',
+    'inventory_unit',
+    'order_unit',
+    'order_unit_price',
+    'qty_per_unit',
+    'item_size_value',
+    'item_size_unit',
+    'gtin',
+    'upc',
+    'sysco_supc',
+    'ingredient_statement',
+    'allergen_statement',
+    'contains_allergens',
+    'may_contain_allergens',
+  ];
+
+  const rows = [
+    [
+      "Tito's Handmade Vodka 1L",
+      "Tito's",
+      "Southern Glazer's",
+      "Tito's Vodka 12/1L",
+      'TITO-1L-12',
+      '12/1 L',
+      '1 L',
+      "Tito's Vodka 1L",
+      'Spirits',
+      'bottle',
+      'case',
+      '288',
+      '12',
+      '1',
+      'L',
+      '',
+      '88352132747',
+      '',
+      'Corn, water',
+      '',
+      '',
+      '',
+    ],
+    [
+      'Fever-Tree Premium Tonic 200ml',
+      'Fever-Tree',
+      "Young's Market",
+      'Fever-Tree Tonic 4/6/200ml',
+      'FT-TONIC-200',
+      '4/6/200 ml',
+      '200 ml',
+      'Fever-Tree Tonic 200ml',
+      'Mixers',
+      'bottle',
+      'case',
+      '34.5',
+      '24',
+      '200',
+      'ml',
+      '',
+      '',
+      '',
+      'Carbonated spring water, sugar, quinine, citric acid, natural flavors',
+      '',
+      '',
+      '',
+    ],
+  ];
+
+  return [headers, ...rows]
+    .map((row) => row.map(csvEscape).join(','))
+    .join('\n');
+}
+
+function csvEscape(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function emptyToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

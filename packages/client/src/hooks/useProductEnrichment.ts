@@ -26,6 +26,15 @@ export function useProductEnrichmentReviewQueue(venueId?: number) {
   });
 }
 
+export function useProductEnrichmentSearch(params?: Parameters<typeof api.productEnrichment.search>[0], enabled = true) {
+  return useQuery({
+    queryKey: ['product-enrichment', 'search', params ?? null],
+    queryFn: () => api.productEnrichment.search(params),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 export function useSyncProductEnrichmentCatalog() {
   const queryClient = useQueryClient();
   return useMutation({

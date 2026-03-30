@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import type {
+  Category,
   ExternalProduct,
   ExternalProductAllergenClaim,
   ExternalProductCatalog,
@@ -10,6 +11,7 @@ import type {
   ExternalProductMatchedBy,
   ExternalProductSyncRun,
   Item,
+  Unit,
   VendorPrice,
 } from '@fifoflow/shared';
 
@@ -109,17 +111,41 @@ export interface ManualExternalProductImportRow {
   gtin?: string | null;
   upc?: string | null;
   vendor_item_code?: string | null;
+  vendor_item_name?: string | null;
+  vendor_name?: string | null;
+  vendor_pack_text?: string | null;
   sysco_supc?: string | null;
   brand_name?: string | null;
   manufacturer_name?: string | null;
   product_name: string;
   pack_text?: string | null;
   size_text?: string | null;
+  inventory_item_name?: string | null;
+  inventory_category?: Category | null;
+  inventory_unit?: Unit | null;
+  order_unit?: Unit | null;
+  order_unit_price?: number | null;
+  qty_per_unit?: number | null;
+  item_size_value?: number | null;
+  item_size_unit?: Unit | null;
+  venue_id?: number | null;
+  venue_name?: string | null;
+  create_item_if_missing?: boolean | null;
+  make_default_vendor_price?: boolean | null;
   ingredient_statement?: string | null;
   allergen_statement?: string | null;
   source_url?: string | null;
   raw_payload_json?: string | null;
   allergen_claims?: ManualExternalProductImportAllergenClaimInput[];
+}
+
+export interface ExternalProductImportDefaults {
+  default_vendor_name?: string | null;
+  default_venue_id?: number | null;
+  default_inventory_category?: Category | null;
+  default_inventory_unit?: Unit | null;
+  default_order_unit?: Unit | null;
+  map_distributor_rows?: boolean;
 }
 
 export interface ExternalProductCatalogSyncSummary {
@@ -128,6 +154,10 @@ export interface ExternalProductCatalogSyncSummary {
   products_updated: number;
   allergen_claims_upserted: number;
   allergen_claims_unresolved: number;
+  inventory_items_created: number;
+  inventory_items_matched: number;
+  vendors_created: number;
+  vendor_prices_upserted: number;
   products: ExternalProductRecord[];
 }
 
@@ -222,6 +252,7 @@ export class ExternalProductRepository {
     const clauses: string[] = [];
     const params: unknown[] = [];
     const limit = Math.max(1, Math.min(filters.limit ?? 12, 50));
+    const queryLike = filters.query ? `%${escapeLike(filters.query)}%` : null;
 
     if (filters.catalog) {
       clauses.push('c.code = ?');
@@ -251,11 +282,27 @@ export class ExternalProductRepository {
         OR COALESCE(p.pack_text, '') LIKE ?
         OR COALESCE(p.size_text, '') LIKE ?
       )`);
-      const like = `%${escapeLike(filters.query)}%`;
-      params.push(like, like, like, like, like);
+      params.push(queryLike, queryLike, queryLike, queryLike, queryLike);
     }
 
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const orderBy = filters.query
+      ? `
+      ORDER BY
+        CASE
+          WHEN COALESCE(p.brand_name, '') LIKE ? THEN 0
+          WHEN p.product_name LIKE ? THEN 1
+          WHEN COALESCE(p.manufacturer_name, '') LIKE ? THEN 2
+          ELSE 3
+        END,
+        COALESCE(p.brand_name, '') COLLATE NOCASE ASC,
+        p.product_name COLLATE NOCASE ASC
+    `
+      : `
+      ORDER BY
+        COALESCE(p.brand_name, '') COLLATE NOCASE ASC,
+        p.product_name COLLATE NOCASE ASC
+    `;
     return this.db.prepare(`
       SELECT
         p.*,
@@ -264,12 +311,16 @@ export class ExternalProductRepository {
       FROM external_products p
       JOIN external_product_catalogs c ON c.id = p.catalog_id
       ${where}
-      ORDER BY p.product_name COLLATE NOCASE ASC
+      ${orderBy}
       LIMIT ?
-    `).all(...params, limit) as ExternalProductRecord[];
+    `).all(...params, ...(filters.query ? [queryLike, queryLike, queryLike] : []), limit) as ExternalProductRecord[];
   }
 
-  upsertExternalProducts(catalogCode: string, rows: ManualExternalProductImportRow[]): ExternalProductCatalogSyncSummary {
+  upsertExternalProducts(
+    catalogCode: string,
+    rows: ManualExternalProductImportRow[],
+    defaults: ExternalProductImportDefaults = {},
+  ): ExternalProductCatalogSyncSummary {
     const catalog = this.getCatalogByCode(catalogCode);
     if (!catalog) {
       throw new Error(`Catalog not found: ${catalogCode}`);
@@ -281,10 +332,14 @@ export class ExternalProductRepository {
     let productsUpdated = 0;
     let claimsUpserted = 0;
     let claimsUnresolved = 0;
+    let inventoryItemsCreated = 0;
+    let inventoryItemsMatched = 0;
+    let vendorsCreated = 0;
+    let vendorPricesUpserted = 0;
 
     const transaction = this.db.transaction((inputRows: ManualExternalProductImportRow[]) => {
       for (const row of inputRows) {
-        const normalizedRow = sanitizeManualImportRow(row);
+        const normalizedRow = sanitizeManualImportRow(row, defaults);
         const externalKey = normalizedRow.external_key || buildExternalKey(normalizedRow);
         const rawPayload = normalizedRow.raw_payload_json ?? JSON.stringify(normalizedRow);
         const existing = this.db.prepare(`
@@ -380,6 +435,14 @@ export class ExternalProductRepository {
         );
         claimsUpserted += claimResult.claims_upserted;
         claimsUnresolved += claimResult.claims_unresolved;
+
+        if (defaults.map_distributor_rows) {
+          const mapping = this.upsertDistributorMapping(catalog.code, externalProductId, normalizedRow);
+          inventoryItemsCreated += mapping.item_created ? 1 : 0;
+          inventoryItemsMatched += mapping.item_id != null ? 1 : 0;
+          vendorsCreated += mapping.vendor_created ? 1 : 0;
+          vendorPricesUpserted += mapping.vendor_price_upserted ? 1 : 0;
+        }
       }
     });
 
@@ -392,8 +455,378 @@ export class ExternalProductRepository {
       products_updated: productsUpdated,
       allergen_claims_upserted: claimsUpserted,
       allergen_claims_unresolved: claimsUnresolved,
+      inventory_items_created: inventoryItemsCreated,
+      inventory_items_matched: inventoryItemsMatched,
+      vendors_created: vendorsCreated,
+      vendor_prices_upserted: vendorPricesUpserted,
       products,
     };
+  }
+
+  private upsertDistributorMapping(
+    catalogCode: string,
+    externalProductId: number,
+    row: ManualExternalProductImportRow,
+  ): {
+    item_id: number | null;
+    item_created: boolean;
+    vendor_created: boolean;
+    vendor_price_upserted: boolean;
+  } {
+    const vendorResolution = this.resolveVendorForImport(row.vendor_name);
+    const venueId = this.resolveVenueForImport(row.venue_id ?? null, row.venue_name ?? null);
+    const itemResolution = this.resolveInventoryItemForImport(row, venueId);
+
+    if (!itemResolution.item_id) {
+      return {
+        item_id: null,
+        item_created: false,
+        vendor_created: vendorResolution.created,
+        vendor_price_upserted: false,
+      };
+    }
+
+    const vendorPriceId = vendorResolution.vendor_id != null
+      ? this.upsertVendorPriceForImportedRow(itemResolution.item_id, vendorResolution.vendor_id, catalogCode, row)
+      : null;
+
+    const matchBasis = deriveImportedMatchBasis(row);
+    const confidence: ExternalProductMatchConfidence = matchBasis === 'operator' ? 'medium' : 'high';
+    const status: ExternalProductMatchStatus = matchBasis === 'operator' ? 'confirmed' : 'auto_confirmed';
+
+    this.upsertMatch({
+      item_id: itemResolution.item_id,
+      vendor_price_id: vendorPriceId,
+      external_product_id: externalProductId,
+      match_status: status,
+      match_basis: matchBasis,
+      match_confidence: confidence,
+      match_score: matchBasis === 'operator' ? 0.82 : 1,
+      matched_by: 'system',
+      notes: vendorPriceId != null
+        ? 'Mapped from distributor catalog import'
+        : 'Mapped from distributor catalog import without vendor price row',
+      active: 1,
+    });
+    this.updateItemMatchSnapshot(itemResolution.item_id, confidence);
+
+    return {
+      item_id: itemResolution.item_id,
+      item_created: itemResolution.created,
+      vendor_created: vendorResolution.created,
+      vendor_price_upserted: vendorPriceId != null,
+    };
+  }
+
+  private resolveVendorForImport(vendorName: string | null | undefined): { vendor_id: number | null; created: boolean } {
+    const normalizedName = normalizeNullableText(vendorName);
+    if (!normalizedName) {
+      return { vendor_id: null, created: false };
+    }
+
+    const existing = this.db.prepare(`
+      SELECT id
+      FROM vendors
+      WHERE LOWER(name) = LOWER(?)
+      LIMIT 1
+    `).get(normalizedName) as { id: number } | undefined;
+
+    if (existing) {
+      return { vendor_id: existing.id, created: false };
+    }
+
+    const result = this.db.prepare(`
+      INSERT INTO vendors (name)
+      VALUES (?)
+    `).run(normalizedName);
+
+    return { vendor_id: Number(result.lastInsertRowid), created: true };
+  }
+
+  private resolveVenueForImport(venueId: number | null, venueName: string | null): number | null {
+    if (venueId != null) {
+      return venueId;
+    }
+
+    const normalizedName = normalizeNullableText(venueName);
+    if (!normalizedName) {
+      return null;
+    }
+
+    const existing = this.db.prepare(`
+      SELECT id
+      FROM venues
+      WHERE LOWER(name) = LOWER(?)
+      LIMIT 1
+    `).get(normalizedName) as { id: number } | undefined;
+
+    if (existing) {
+      return existing.id;
+    }
+
+    const result = this.db.prepare(`
+      INSERT INTO venues (name)
+      VALUES (?)
+    `).run(normalizedName);
+
+    return Number(result.lastInsertRowid);
+  }
+
+  private resolveInventoryItemForImport(
+    row: ManualExternalProductImportRow,
+    venueId: number | null,
+  ): { item_id: number | null; created: boolean } {
+    const exactByIdentifiers = this.findItemByImportedIdentifiers(row, venueId);
+    if (exactByIdentifiers) {
+      this.db.prepare(`
+        UPDATE items
+        SET brand_name = COALESCE(?, brand_name),
+            manufacturer_name = COALESCE(?, manufacturer_name),
+            gtin = COALESCE(?, gtin),
+            upc = COALESCE(?, upc),
+            sysco_supc = COALESCE(?, sysco_supc),
+            manufacturer_item_code = COALESCE(?, manufacturer_item_code)
+        WHERE id = ?
+      `).run(
+        row.brand_name ?? null,
+        row.manufacturer_name ?? null,
+        row.gtin ?? null,
+        row.upc ?? null,
+        row.sysco_supc ?? null,
+        row.vendor_item_code ?? null,
+        exactByIdentifiers.id,
+      );
+      return { item_id: exactByIdentifiers.id, created: false };
+    }
+
+    const inventoryName = row.inventory_item_name ?? row.product_name;
+    const nameMatch = this.db.prepare(`
+      SELECT id
+      FROM items
+      WHERE LOWER(name) = LOWER(?)
+        AND (? IS NULL OR venue_id = ?)
+      ORDER BY id ASC
+      LIMIT 1
+    `).get(inventoryName, venueId, venueId) as { id: number } | undefined;
+    if (nameMatch) {
+      this.db.prepare(`
+        UPDATE items
+        SET brand_name = COALESCE(?, brand_name),
+            manufacturer_name = COALESCE(?, manufacturer_name),
+            gtin = COALESCE(?, gtin),
+            upc = COALESCE(?, upc),
+            sysco_supc = COALESCE(?, sysco_supc),
+            manufacturer_item_code = COALESCE(?, manufacturer_item_code)
+        WHERE id = ?
+      `).run(
+        row.brand_name ?? null,
+        row.manufacturer_name ?? null,
+        row.gtin ?? null,
+        row.upc ?? null,
+        row.sysco_supc ?? null,
+        row.vendor_item_code ?? null,
+        nameMatch.id,
+      );
+      return { item_id: nameMatch.id, created: false };
+    }
+
+    if (row.create_item_if_missing === false) {
+      return { item_id: null, created: false };
+    }
+
+    const inferredUnit = row.inventory_unit ?? inferInventoryUnit(row);
+    const inferredCategory = row.inventory_category ?? inferInventoryCategory(row);
+    const itemSizeUnit = row.item_size_unit ?? inferItemSizeUnit(row);
+    const itemSizeValue = row.item_size_value ?? inferItemSizeValue(row);
+    const orderUnit = row.order_unit ?? inferOrderUnit(row);
+
+    const result = this.db.prepare(`
+      INSERT INTO items (
+        name,
+        category,
+        unit,
+        order_unit,
+        order_unit_price,
+        qty_per_unit,
+        item_size_value,
+        item_size_unit,
+        item_size,
+        venue_id,
+        brand_name,
+        manufacturer_name,
+        gtin,
+        upc,
+        sysco_supc,
+        manufacturer_item_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      inventoryName,
+      inferredCategory,
+      inferredUnit,
+      orderUnit,
+      row.order_unit_price ?? null,
+      row.qty_per_unit ?? null,
+      itemSizeValue,
+      itemSizeUnit,
+      itemSizeValue != null && itemSizeUnit ? `${itemSizeValue} ${itemSizeUnit}` : normalizeNullableText(row.size_text),
+      venueId,
+      row.brand_name ?? null,
+      row.manufacturer_name ?? null,
+      row.gtin ?? null,
+      row.upc ?? null,
+      row.sysco_supc ?? null,
+      row.vendor_item_code ?? null,
+    );
+
+    return { item_id: Number(result.lastInsertRowid), created: true };
+  }
+
+  private findItemByImportedIdentifiers(
+    row: ManualExternalProductImportRow,
+    venueId: number | null,
+  ): { id: number } | undefined {
+    const identifiers: Array<[string, string | null | undefined]> = [
+      ['sysco_supc', row.sysco_supc],
+      ['gtin', row.gtin],
+      ['upc', row.upc],
+      ['manufacturer_item_code', row.vendor_item_code],
+    ];
+
+    for (const [column, value] of identifiers) {
+      const trimmed = normalizeNullableText(value);
+      if (!trimmed) continue;
+      const match = this.db.prepare(`
+        SELECT id
+        FROM items
+        WHERE ${column} = ?
+          AND (? IS NULL OR venue_id = ?)
+        ORDER BY id ASC
+        LIMIT 1
+      `).get(trimmed, venueId, venueId) as { id: number } | undefined;
+      if (match) {
+        return match;
+      }
+    }
+
+    return undefined;
+  }
+
+  private upsertVendorPriceForImportedRow(
+    itemId: number,
+    vendorId: number,
+    catalogCode: string,
+    row: ManualExternalProductImportRow,
+  ): number | null {
+    const effectiveVendorItemName = row.vendor_item_name ?? row.product_name;
+    const effectiveOrderUnit = row.order_unit ?? inferOrderUnit(row);
+    const effectivePackText = row.vendor_pack_text ?? row.pack_text ?? null;
+    if (row.order_unit_price == null) {
+      return null;
+    }
+
+    const existing = this.db.prepare(`
+      SELECT id
+      FROM vendor_prices
+      WHERE item_id = ?
+        AND vendor_id = ?
+        AND (
+          (? IS NOT NULL AND COALESCE(sysco_supc, '') = ?)
+          OR (? IS NOT NULL AND COALESCE(vendor_item_code, '') = ?)
+          OR LOWER(COALESCE(vendor_item_name, '')) = LOWER(?)
+        )
+      ORDER BY is_default DESC, id ASC
+      LIMIT 1
+    `).get(
+      itemId,
+      vendorId,
+      row.sysco_supc ?? null,
+      row.sysco_supc ?? null,
+      row.vendor_item_code ?? null,
+      row.vendor_item_code ?? null,
+      effectiveVendorItemName,
+    ) as { id: number } | undefined;
+
+    if (existing) {
+      this.db.prepare(`
+        UPDATE vendor_prices
+        SET vendor_item_name = ?,
+            vendor_item_code = ?,
+            vendor_pack_text = ?,
+            order_unit = ?,
+            order_unit_price = ?,
+            qty_per_unit = ?,
+            gtin = ?,
+            upc = ?,
+            sysco_supc = ?,
+            brand_name = ?,
+            manufacturer_name = ?,
+            source_catalog = ?,
+            is_default = CASE WHEN ? = 1 THEN 1 ELSE is_default END
+        WHERE id = ?
+      `).run(
+        effectiveVendorItemName,
+        row.vendor_item_code ?? null,
+        effectivePackText,
+        effectiveOrderUnit,
+        row.order_unit_price,
+        row.qty_per_unit ?? null,
+        row.gtin ?? null,
+        row.upc ?? null,
+        row.sysco_supc ?? null,
+        row.brand_name ?? null,
+        row.manufacturer_name ?? null,
+        catalogCode,
+        row.make_default_vendor_price === false ? 0 : 1,
+        existing.id,
+      );
+
+      if (row.make_default_vendor_price !== false) {
+        this.db.prepare(`UPDATE vendor_prices SET is_default = 0 WHERE item_id = ? AND id <> ?`).run(itemId, existing.id);
+      }
+      return existing.id;
+    }
+
+    if (row.make_default_vendor_price !== false) {
+      this.db.prepare(`UPDATE vendor_prices SET is_default = 0 WHERE item_id = ?`).run(itemId);
+    }
+
+    const result = this.db.prepare(`
+      INSERT INTO vendor_prices (
+        item_id,
+        vendor_id,
+        vendor_item_name,
+        vendor_item_code,
+        vendor_pack_text,
+        order_unit,
+        order_unit_price,
+        qty_per_unit,
+        gtin,
+        upc,
+        sysco_supc,
+        brand_name,
+        manufacturer_name,
+        source_catalog,
+        is_default
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      itemId,
+      vendorId,
+      effectiveVendorItemName,
+      row.vendor_item_code ?? null,
+      effectivePackText,
+      effectiveOrderUnit,
+      row.order_unit_price,
+      row.qty_per_unit ?? null,
+      row.gtin ?? null,
+      row.upc ?? null,
+      row.sysco_supc ?? null,
+      row.brand_name ?? null,
+      row.manufacturer_name ?? null,
+      catalogCode,
+      row.make_default_vendor_price === false ? 0 : 1,
+    );
+
+    return Number(result.lastInsertRowid);
   }
 
   getItem(itemId: number): Item | undefined {
@@ -1100,18 +1533,36 @@ function escapeLike(value: string): string {
   return value.replace(/[%_]/g, (char) => `\\${char}`);
 }
 
-function sanitizeManualImportRow(row: ManualExternalProductImportRow): ManualExternalProductImportRow {
+function sanitizeManualImportRow(
+  row: ManualExternalProductImportRow,
+  defaults: ExternalProductImportDefaults = {},
+): ManualExternalProductImportRow {
   return {
     external_key: normalizeNullableText(row.external_key),
     gtin: normalizeNullableText(row.gtin),
     upc: normalizeNullableText(row.upc),
     vendor_item_code: normalizeNullableText(row.vendor_item_code),
+    vendor_item_name: normalizeNullableText(row.vendor_item_name),
+    vendor_name: normalizeNullableText(row.vendor_name ?? defaults.default_vendor_name),
+    vendor_pack_text: normalizeNullableText(row.vendor_pack_text),
     sysco_supc: normalizeNullableText(row.sysco_supc),
     brand_name: normalizeNullableText(row.brand_name),
     manufacturer_name: normalizeNullableText(row.manufacturer_name),
     product_name: row.product_name.trim(),
     pack_text: normalizeNullableText(row.pack_text),
     size_text: normalizeNullableText(row.size_text),
+    inventory_item_name: normalizeNullableText(row.inventory_item_name),
+    inventory_category: row.inventory_category ?? defaults.default_inventory_category ?? null,
+    inventory_unit: row.inventory_unit ?? defaults.default_inventory_unit ?? null,
+    order_unit: row.order_unit ?? defaults.default_order_unit ?? null,
+    order_unit_price: row.order_unit_price ?? null,
+    qty_per_unit: row.qty_per_unit ?? null,
+    item_size_value: row.item_size_value ?? null,
+    item_size_unit: row.item_size_unit ?? null,
+    venue_id: row.venue_id ?? defaults.default_venue_id ?? null,
+    venue_name: normalizeNullableText(row.venue_name),
+    create_item_if_missing: row.create_item_if_missing ?? true,
+    make_default_vendor_price: row.make_default_vendor_price ?? true,
     ingredient_statement: normalizeNullableText(row.ingredient_statement),
     allergen_statement: normalizeNullableText(row.allergen_statement),
     source_url: normalizeNullableText(row.source_url),
@@ -1131,6 +1582,7 @@ function buildExternalKey(row: ManualExternalProductImportRow): string {
     row.gtin,
     row.upc,
     row.vendor_item_code,
+    row.vendor_item_name,
     `${row.product_name}:${row.pack_text ?? ''}:${row.size_text ?? ''}`,
   ]
     .map((value) => normalizeNullableText(value))
@@ -1143,6 +1595,80 @@ function buildExternalKey(row: ManualExternalProductImportRow): string {
 function normalizeNullableText(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function deriveImportedMatchBasis(row: ManualExternalProductImportRow): ExternalProductMatchBasis {
+  if (row.sysco_supc) return 'sysco_supc';
+  if (row.gtin) return 'gtin';
+  if (row.upc) return 'upc';
+  if (row.vendor_item_code) return 'vendor_item_code';
+  return 'operator';
+}
+
+function inferInventoryCategory(row: ManualExternalProductImportRow): Category {
+  const haystack = [
+    row.inventory_category,
+    row.brand_name,
+    row.product_name,
+    row.pack_text,
+    row.vendor_item_name,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/(vodka|gin|rum|tequila|whiskey|whisky|bourbon|liqueur|mezcal|cordial|amaro|cognac|brandy)/.test(haystack)) {
+    return 'Spirits';
+  }
+  if (/(beer|ipa|lager|ale|stout|porter|pilsner|seltzer)/.test(haystack)) {
+    return 'Beer';
+  }
+  if (/(wine|cabernet|pinot|sauvignon|chardonnay|merlot|prosecco|champagne|rose)/.test(haystack)) {
+    return 'Wine';
+  }
+  if (/(mixer|tonic|soda|cola|ginger beer|ginger ale|juice|syrup|bitters|mix)/.test(haystack)) {
+    return 'Mixers';
+  }
+  return 'Bar';
+}
+
+function inferInventoryUnit(row: ManualExternalProductImportRow): Unit {
+  const haystack = [row.product_name, row.pack_text, row.size_text, row.vendor_item_name].filter(Boolean).join(' ').toLowerCase();
+  if (/\bcan\b|\bcans\b/.test(haystack)) return 'can';
+  if (/\bbottle\b|\bbtls?\b/.test(haystack)) return 'bottle';
+  if (/\bcase\b|\bcs\b|\d+\s*\/\s*\d+/.test(haystack)) return 'bottle';
+  return 'each';
+}
+
+function inferOrderUnit(row: ManualExternalProductImportRow): Unit | null {
+  const haystack = [row.pack_text, row.vendor_pack_text, row.product_name].filter(Boolean).join(' ').toLowerCase();
+  if (/\bcase\b|\bcs\b|\d+\s*\/\s*\d+/.test(haystack)) return 'case';
+  if (/\bpack\b/.test(haystack)) return 'pack';
+  if (/\bbox\b/.test(haystack)) return 'box';
+  return null;
+}
+
+function inferItemSizeValue(row: ManualExternalProductImportRow): number | null {
+  const parsed = parseSizeText(row.size_text ?? row.product_name);
+  return parsed?.value ?? null;
+}
+
+function inferItemSizeUnit(row: ManualExternalProductImportRow): Unit | null {
+  const parsed = parseSizeText(row.size_text ?? row.product_name);
+  return parsed?.unit ?? null;
+}
+
+function parseSizeText(input: string | null | undefined): { value: number; unit: Unit } | null {
+  const value = normalizeNullableText(input);
+  if (!value) return null;
+  const match = value.match(/(\d+(?:\.\d+)?)\s*(ml|l|fl\s?oz|oz)\b/i);
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  const rawUnit = match[2].toLowerCase().replace(/\s+/g, ' ');
+  if (!Number.isFinite(amount)) return null;
+
+  if (rawUnit === 'ml') return { value: amount, unit: 'ml' };
+  if (rawUnit === 'l') return { value: amount, unit: 'L' };
+  if (rawUnit === 'fl oz') return { value: amount, unit: 'fl oz' };
+  return { value: amount, unit: 'oz' };
 }
 
 function normalizeAllergenKey(value: string): string {

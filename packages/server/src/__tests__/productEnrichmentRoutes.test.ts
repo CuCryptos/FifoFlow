@@ -392,4 +392,112 @@ describe('Product enrichment routes', () => {
     `).get(syscoProductId);
     expect(stillPresentSysco).toBeDefined();
   });
+
+  it('maps distributor bar imports into inventory items and vendor prices', async () => {
+    const venueId = Number(db.prepare(`
+      INSERT INTO venues (name)
+      VALUES ('Paradise Kitchen')
+    `).run().lastInsertRowid);
+
+    const syncResponse = await request(app)
+      .post('/api/product-enrichment/catalogs/manual_import/sync')
+      .send({
+        mode: 'manual_import',
+        created_by: 'tester',
+        default_vendor_name: "Southern Glazer's",
+        default_venue_id: venueId,
+        default_inventory_category: 'Bar',
+        default_inventory_unit: 'bottle',
+        default_order_unit: 'case',
+        map_distributor_rows: true,
+        products: [
+          {
+            product_name: "Tito's Handmade Vodka 1L",
+            brand_name: "Tito's",
+            vendor_item_name: "Tito's Vodka 12/1L",
+            vendor_item_code: 'TITO-1L-12',
+            pack_text: '12/1 L',
+            size_text: '1 L',
+            inventory_item_name: "Tito's Vodka 1L",
+            inventory_category: 'Spirits',
+            inventory_unit: 'bottle',
+            order_unit: 'case',
+            order_unit_price: 288,
+            qty_per_unit: 12,
+            item_size_value: 1,
+            item_size_unit: 'L',
+            allergen_claims: [],
+          },
+        ],
+      });
+
+    expect(syncResponse.status).toBe(200);
+    expect(syncResponse.body.summary).toMatchObject({
+      products_upserted: 1,
+      inventory_items_created: 1,
+      inventory_items_matched: 1,
+      vendors_created: 1,
+      vendor_prices_upserted: 1,
+    });
+
+    const item = db.prepare(`
+      SELECT *
+      FROM items
+      WHERE name = ?
+      LIMIT 1
+    `).get("Tito's Vodka 1L") as any;
+    expect(item).toMatchObject({
+      category: 'Spirits',
+      unit: 'bottle',
+      order_unit: 'case',
+      order_unit_price: 288,
+      qty_per_unit: 12,
+      item_size_value: 1,
+      item_size_unit: 'L',
+      brand_name: "Tito's",
+      manufacturer_item_code: 'TITO-1L-12',
+      venue_id: venueId,
+    });
+
+    const vendor = db.prepare(`
+      SELECT *
+      FROM vendors
+      WHERE name = ?
+      LIMIT 1
+    `).get("Southern Glazer's") as any;
+    expect(vendor).toBeTruthy();
+
+    const vendorPrice = db.prepare(`
+      SELECT *
+      FROM vendor_prices
+      WHERE item_id = ?
+      LIMIT 1
+    `).get(item.id) as any;
+    expect(vendorPrice).toMatchObject({
+      vendor_id: vendor.id,
+      vendor_item_name: "Tito's Vodka 12/1L",
+      vendor_item_code: 'TITO-1L-12',
+      vendor_pack_text: '12/1 L',
+      order_unit: 'case',
+      order_unit_price: 288,
+      qty_per_unit: 12,
+      brand_name: "Tito's",
+      source_catalog: 'manual_import',
+      is_default: 1,
+    });
+
+    const match = db.prepare(`
+      SELECT *
+      FROM external_product_matches
+      WHERE item_id = ?
+      LIMIT 1
+    `).get(item.id) as any;
+    expect(match).toMatchObject({
+      item_id: item.id,
+      vendor_price_id: vendorPrice.id,
+      match_status: 'auto_confirmed',
+      match_basis: 'vendor_item_code',
+      match_confidence: 'high',
+    });
+  });
 });

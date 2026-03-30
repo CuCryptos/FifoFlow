@@ -543,12 +543,27 @@ export interface ProductEnrichmentManualImportProductInput {
   gtin?: string | null;
   upc?: string | null;
   vendor_item_code?: string | null;
+  vendor_item_name?: string | null;
+  vendor_name?: string | null;
+  vendor_pack_text?: string | null;
   sysco_supc?: string | null;
   brand_name?: string | null;
   manufacturer_name?: string | null;
   product_name: string;
   pack_text?: string | null;
   size_text?: string | null;
+  inventory_item_name?: string | null;
+  inventory_category?: Item['category'] | null;
+  inventory_unit?: Item['unit'] | null;
+  order_unit?: Item['unit'] | null;
+  order_unit_price?: number | null;
+  qty_per_unit?: number | null;
+  item_size_value?: number | null;
+  item_size_unit?: Item['unit'] | null;
+  venue_id?: number | null;
+  venue_name?: string | null;
+  create_item_if_missing?: boolean | null;
+  make_default_vendor_price?: boolean | null;
   ingredient_statement?: string | null;
   allergen_statement?: string | null;
   source_url?: string | null;
@@ -559,6 +574,12 @@ export interface ProductEnrichmentManualImportProductInput {
 export interface ProductEnrichmentCatalogSyncInput {
   mode: 'manual_import';
   created_by?: string | null;
+  default_vendor_name?: string | null;
+  default_venue_id?: number | null;
+  default_inventory_category?: Item['category'] | null;
+  default_inventory_unit?: Item['unit'] | null;
+  default_order_unit?: Item['unit'] | null;
+  map_distributor_rows?: boolean;
   products: ProductEnrichmentManualImportProductInput[];
 }
 
@@ -570,6 +591,10 @@ export interface ProductEnrichmentCatalogSyncPayload {
     products_updated: number;
     allergen_claims_upserted: number;
     allergen_claims_unresolved: number;
+    inventory_items_created: number;
+    inventory_items_matched: number;
+    vendors_created: number;
+    vendor_prices_upserted: number;
     products: ProductEnrichmentExternalProductPayload[];
   };
 }

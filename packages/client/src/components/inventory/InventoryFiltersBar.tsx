@@ -65,7 +65,7 @@ export function InventoryFiltersBar({
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Search</span>
           <input
             type="text"
-            placeholder="Find an item or operator keyword"
+            placeholder="Find an item, brand, manufacturer, or vendor product"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"

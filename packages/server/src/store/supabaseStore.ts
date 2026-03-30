@@ -190,7 +190,11 @@ export class SupabaseInventoryStore implements InventoryStore {
     params.set('select', '*');
     params.set('order', 'name.asc');
     if (filters?.category) params.set('category', `eq.${filters.category}`);
-    if (filters?.search) params.set('name', `ilike.*${filters.search}*`);
+    if (filters?.search) {
+      const escaped = filters.search.replace(/,/g, ' ');
+      params.set('or', `name.ilike.*${escaped}*,brand_name.ilike.*${escaped}*,manufacturer_name.ilike.*${escaped}*`);
+    }
+    if (filters?.venueId !== undefined) params.set('venue_id', `eq.${filters.venueId}`);
     return this.fetchJson<Item[]>('items', params);
   }
 

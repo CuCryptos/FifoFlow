@@ -103,21 +103,52 @@ export class SqliteInventoryStore implements InventoryStore {
   async listItems(filters?: ItemListFilters): Promise<Item[]> {
     let sql = 'SELECT * FROM items WHERE 1=1';
     const params: unknown[] = [];
+    let orderSql = ' ORDER BY name ASC';
 
     if (filters?.category) {
       sql += ' AND category = ?';
       params.push(filters.category);
     }
     if (filters?.search) {
-      sql += ' AND name LIKE ?';
-      params.push(`%${filters.search}%`);
+      sql += ` AND (
+        name LIKE ?
+        OR COALESCE(brand_name, '') LIKE ?
+        OR COALESCE(manufacturer_name, '') LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM vendor_prices vp
+          WHERE vp.item_id = items.id
+            AND (
+              COALESCE(vp.vendor_item_name, '') LIKE ?
+              OR COALESCE(vp.brand_name, '') LIKE ?
+              OR COALESCE(vp.manufacturer_name, '') LIKE ?
+            )
+        )
+      )`;
+      const like = `%${filters.search}%`;
+      params.push(like, like, like, like, like, like);
+      orderSql = `
+        ORDER BY
+          CASE
+            WHEN COALESCE(brand_name, '') LIKE ? THEN 0
+            WHEN name LIKE ? THEN 1
+            WHEN COALESCE(manufacturer_name, '') LIKE ? THEN 2
+            ELSE 3
+          END,
+          COALESCE(brand_name, '') COLLATE NOCASE ASC,
+          name COLLATE NOCASE ASC
+      `;
     }
     if (filters?.venueId !== undefined) {
       sql += ' AND venue_id = ?';
       params.push(filters.venueId);
     }
 
-    sql += ' ORDER BY name ASC';
+    sql += orderSql;
+    if (filters?.search) {
+      const like = `%${filters.search}%`;
+      params.push(like, like, like);
+    }
     return this.db.prepare(sql).all(...params) as Item[];
   }
 
