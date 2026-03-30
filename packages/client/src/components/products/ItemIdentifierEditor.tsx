@@ -18,6 +18,7 @@ type IdentifierDraft = {
 };
 
 type AuditFilter = 'recent' | 'with_skips' | 'all';
+type AuditDateRange = '30d' | '90d' | '365d' | 'all_time';
 
 function buildDraft(item: Partial<Item> & Pick<Item, 'id' | 'name'>): IdentifierDraft {
   return {
@@ -46,6 +47,7 @@ export function ItemIdentifierEditor({
   const { toast } = useToast();
   const [draft, setDraft] = useState<IdentifierDraft>(() => buildDraft(item));
   const [auditFilter, setAuditFilter] = useState<AuditFilter>('recent');
+  const [auditDateRange, setAuditDateRange] = useState<AuditDateRange>('all_time');
 
   useEffect(() => {
     setDraft(buildDraft(enrichmentQuery.data?.item ?? item));
@@ -61,14 +63,23 @@ export function ItemIdentifierEditor({
   const isDirty = Object.entries(draft).some(([key, value]) => value !== ((currentItem as any)[key] ?? ''));
   const topMatch = matches[0] ?? null;
   const visibleImportAudits = useMemo(() => {
+    let filtered = importAudits;
+    if (auditDateRange !== 'all_time') {
+      const rangeDays = auditDateRange === '30d' ? 30 : auditDateRange === '90d' ? 90 : 365;
+      const cutoff = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((audit) => {
+        const timestamp = Date.parse(audit.created_at);
+        return Number.isFinite(timestamp) && timestamp >= cutoff;
+      });
+    }
     if (auditFilter === 'with_skips') {
-      return importAudits.filter((audit) => audit.summary.skipped_rows > 0);
+      filtered = filtered.filter((audit) => audit.summary.skipped_rows > 0);
     }
     if (auditFilter === 'recent') {
-      return importAudits.slice(0, 3);
+      return filtered.slice(0, 3);
     }
-    return importAudits;
-  }, [auditFilter, importAudits]);
+    return filtered;
+  }, [auditDateRange, auditFilter, importAudits]);
 
   const handleSave = () => {
     updateIdentifiers.mutate(
@@ -244,6 +255,19 @@ export function ItemIdentifierEditor({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="blue">{importAudits.length} import{importAudits.length === 1 ? '' : 's'}</StatusBadge>
+              <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">
+                <span>Date range</span>
+                <select
+                  value={auditDateRange}
+                  onChange={(event) => setAuditDateRange(event.target.value as AuditDateRange)}
+                  className="bg-transparent text-xs font-semibold text-slate-700 outline-none"
+                >
+                  <option value="30d">Last 30 days</option>
+                  <option value="90d">Last 90 days</option>
+                  <option value="365d">Last year</option>
+                  <option value="all_time">All dates</option>
+                </select>
+              </label>
               <div className="flex flex-wrap gap-2">
                 <FilterChip
                   active={auditFilter === 'recent'}

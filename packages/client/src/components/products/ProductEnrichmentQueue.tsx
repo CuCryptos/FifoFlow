@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Database, FileUp, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
+import { Database, FileUp, RefreshCw, ShieldAlert, Tag, Trash2 } from 'lucide-react';
 import type {
   ProductEnrichmentCatalogSyncInput,
   ProductEnrichmentAllergenImportPayload,
@@ -11,6 +11,7 @@ import type {
 import {
   useImportProductEnrichmentAllergens,
   useProductEnrichmentCatalogs,
+  useDeleteProductEnrichmentProduct,
   useProductEnrichmentReviewQueue,
   useSyncProductEnrichmentCatalog,
 } from '../../hooks/useProductEnrichment';
@@ -37,6 +38,7 @@ export function ProductEnrichmentQueue({
   const catalogsQuery = useProductEnrichmentCatalogs();
   const syncCatalogMutation = useSyncProductEnrichmentCatalog();
   const importAllergensMutation = useImportProductEnrichmentAllergens();
+  const deleteProductMutation = useDeleteProductEnrichmentProduct();
   const { toast } = useToast();
 
   const allergenLookup = useMemo(() => buildAllergenLookup(allergens), [allergens]);
@@ -158,6 +160,21 @@ export function ProductEnrichmentQueue({
       `Bulk import finished for ${selectedReadyEntries.length} item${selectedReadyEntries.length === 1 ? '' : 's'}: ${importedCount} rows applied, ${skippedCount} skipped.`,
     );
     toast(`Bulk imported ${selectedReadyEntries.length} ready item${selectedReadyEntries.length === 1 ? '' : 's'}.`, 'success');
+  };
+
+  const handleDeleteManualProduct = async (productId: number, productName: string, matchId?: number) => {
+    try {
+      await deleteProductMutation.mutateAsync(productId);
+      setImportNote(`Deleted manual-import product "${productName}".`);
+      if (matchId != null) {
+        setSelectedMatchIds((current) => current.filter((id) => id !== matchId));
+      }
+      toast(`Deleted ${productName}.`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete that manual-import product.';
+      setImportNote(message);
+      toast(message, 'error');
+    }
   };
 
   return (
@@ -318,6 +335,8 @@ export function ProductEnrichmentQueue({
                 loading={isBulkImporting}
                 selected={selectedMatchIds.includes(entry.active_match.id)}
                 onToggleSelected={toggleReadySelection}
+                onDeleteManualProduct={handleDeleteManualProduct}
+                deleteLoadingProductId={deleteProductMutation.isPending ? deleteProductMutation.variables ?? null : null}
               />
             ))}
           />
@@ -359,13 +378,21 @@ function ReadyImportCard({
   loading,
   selected,
   onToggleSelected,
+  onDeleteManualProduct,
+  deleteLoadingProductId,
 }: {
   entry: ProductEnrichmentReviewQueuePayload['ready_to_import'][number];
   onImport: (itemId: number, matchId: number) => void | Promise<void>;
   loading: boolean;
   selected: boolean;
   onToggleSelected: (matchId: number) => void;
+  onDeleteManualProduct: (productId: number, productName: string, matchId?: number) => void | Promise<void>;
+  deleteLoadingProductId: number | null;
 }) {
+  const product = entry.active_match.external_product;
+  const canDeleteManualImport = product.catalog_code === 'manual_import';
+  const isDeleting = deleteLoadingProductId === product.id;
+
   return (
     <div className={`rounded-3xl border px-4 py-4 ${selected ? 'border-emerald-300 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'}`}>
       <label className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -391,7 +418,7 @@ function ReadyImportCard({
         <button
           type="button"
           onClick={() => void onImport(entry.item.id, entry.active_match.id)}
-          disabled={loading}
+          disabled={loading || isDeleting}
           className="inline-flex items-center rounded-full bg-slate-950 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? 'Importing…' : 'Import claims'}
@@ -402,6 +429,17 @@ function ReadyImportCard({
         >
           Review item
         </Link>
+        {canDeleteManualImport ? (
+          <button
+            type="button"
+            onClick={() => void onDeleteManualProduct(product.id, product.product_name, entry.active_match.id)}
+            disabled={loading || isDeleting}
+            className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {isDeleting ? 'Deleting…' : 'Delete manual product'}
+          </button>
+        ) : null}
       </div>
     </div>
   );

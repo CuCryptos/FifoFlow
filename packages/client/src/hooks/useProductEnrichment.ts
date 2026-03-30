@@ -106,3 +106,18 @@ export function useImportProductEnrichmentAllergens() {
     },
   });
 }
+
+export function useDeleteProductEnrichmentProduct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (productId: number) => api.productEnrichment.deleteProduct(productId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['product-enrichment', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['product-enrichment', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['items'] }),
+      ]);
+    },
+  });
+}
