@@ -514,4 +514,40 @@ describe('Recipe intelligence routes', () => {
     expect(sessionDetailAfterCaptureDelete.status).toBe(200);
     expect(sessionDetailAfterCaptureDelete.body.prep_sheet_captures).toEqual([]);
   });
+
+  it('deletes capture input records for conversation-generated sessions', async () => {
+    const conversationResponse = await request(app)
+      .post('/api/recipe-intelligence/conversation-drafts')
+      .send({
+        venue_id: 1,
+        session_name: 'Cleanup Batch',
+        created_by: 'chef',
+        entries: [
+          { name: 'Miso Butterfish', description: 'Butterfish with miso glaze' },
+          { name: 'Grilled Short Ribs', description: 'Short ribs with sesame slaw' },
+        ],
+      });
+
+    expect(conversationResponse.status).toBe(201);
+
+    const sessionId = conversationResponse.body.session.id;
+    const detailResponse = await request(app).get(`/api/recipe-intelligence/sessions/${sessionId}`);
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body.inputs).toHaveLength(2);
+
+    const deleteResponse = await request(app)
+      .delete(`/api/recipe-intelligence/inputs/${detailResponse.body.inputs[0].id}`);
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body).toEqual({
+      removed: true,
+      input_id: detailResponse.body.inputs[0].id,
+      recipe_capture_session_id: sessionId,
+    });
+
+    const afterDeleteDetail = await request(app).get(`/api/recipe-intelligence/sessions/${sessionId}`);
+    expect(afterDeleteDetail.status).toBe(200);
+    expect(afterDeleteDetail.body.inputs).toHaveLength(1);
+    expect(afterDeleteDetail.body.inputs[0].id).toBe(detailResponse.body.inputs[1].id);
+  });
 });

@@ -524,6 +524,20 @@ export class SQLiteRecipeBuilderRepository implements RecipeBuilderSource, Recip
     return rows.map(mapCaptureInputRow);
   }
 
+  async getCaptureInput(inputId: number | string): Promise<RecipeCaptureInput | null> {
+    const row = this.db.prepare(
+      'SELECT * FROM recipe_capture_inputs WHERE id = ? LIMIT 1',
+    ).get(inputId) as CaptureInputRow | undefined;
+    return row ? mapCaptureInputRow(row) : null;
+  }
+
+  async deleteCaptureInput(inputId: number | string): Promise<boolean> {
+    const result = this.db.prepare(
+      'DELETE FROM recipe_capture_inputs WHERE id = ?',
+    ).run(inputId);
+    return result.changes > 0;
+  }
+
   async listDraftRecipesByCaptureSession(sessionId: number | string): Promise<RecipeBuilderDraftRecipe[]> {
     const rows = this.db.prepare(
       `

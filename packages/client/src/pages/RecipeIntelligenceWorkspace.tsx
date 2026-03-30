@@ -4,6 +4,9 @@ import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
 import {
   useCreateConversationDrafts,
+  useDeleteRecipeIntelligenceCaptureInput,
+  useDeleteRecipeIntelligencePrepSheetCapture,
+  useDeleteRecipeIntelligenceSession,
   useRecipeDraftSourceIntelligence,
   useRecipeIntelligenceSession,
   useRecipeIntelligenceSessions,
@@ -41,6 +44,9 @@ export function RecipeIntelligenceWorkspace() {
   const createConversationDrafts = useCreateConversationDrafts();
   const uploadPhotoDrafts = useUploadPhotoDrafts();
   const uploadPrepSheetCapture = useUploadPrepSheetCapture();
+  const deleteSession = useDeleteRecipeIntelligenceSession();
+  const deleteCaptureInput = useDeleteRecipeIntelligenceCaptureInput();
+  const deletePrepSheetCapture = useDeleteRecipeIntelligencePrepSheetCapture();
 
   const sessions = sessionsQuery.data ?? [];
   const selectedSession = selectedSessionQuery.data ?? null;
@@ -54,6 +60,16 @@ export function RecipeIntelligenceWorkspace() {
       setSelectedSessionId(Number(sessions[0].id));
     }
   }, [sessions, selectedSessionId]);
+
+  useEffect(() => {
+    if (selectedDraftId == null || !selectedSession) {
+      return;
+    }
+    const draftStillExists = selectedSession.drafts.some((draft) => Number(draft.id) === selectedDraftId);
+    if (!draftStillExists) {
+      setSelectedDraftId(null);
+    }
+  }, [selectedDraftId, selectedSession]);
 
   const sortedDrafts = useMemo(
     () => (selectedSession?.drafts ?? []).slice().sort((a, b) => Number(b.id) - Number(a.id)),
@@ -156,6 +172,37 @@ export function RecipeIntelligenceWorkspace() {
       toast(`Created ${result.drafts.length} prep draft${result.drafts.length === 1 ? '' : 's'} from prep sheet capture.`);
     } catch (error: any) {
       toast(error.message ?? 'Failed to create prep sheet capture.');
+    }
+  }
+
+  async function handleDeleteSession(sessionId: number) {
+    try {
+      await deleteSession.mutateAsync(sessionId);
+      if (selectedSessionId === sessionId) {
+        setSelectedSessionId(null);
+        setSelectedDraftId(null);
+      }
+      toast('Capture session deleted. Drafts were left intact.');
+    } catch (error: any) {
+      toast(error.message ?? 'Failed to delete capture session.');
+    }
+  }
+
+  async function handleDeleteCaptureInput(inputId: number) {
+    try {
+      await deleteCaptureInput.mutateAsync(inputId);
+      toast('Capture input deleted.');
+    } catch (error: any) {
+      toast(error.message ?? 'Failed to delete capture input.');
+    }
+  }
+
+  async function handleDeletePrepCapture(captureId: number) {
+    try {
+      await deletePrepSheetCapture.mutateAsync(captureId);
+      toast('Prep sheet capture deleted.');
+    } catch (error: any) {
+      toast(error.message ?? 'Failed to delete prep sheet capture.');
     }
   }
 
@@ -452,22 +499,78 @@ export function RecipeIntelligenceWorkspace() {
                 />
               ) : (
                 <div className="space-y-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Selected Session</div>
+                      <div className="mt-1 text-lg font-semibold text-slate-950">
+                        {selectedSession.session.name || `Session #${selectedSession.session.id}`}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        {selectedSession.session.capture_mode.replace(/_/g, ' ')} • led by {selectedSession.session.led_by || 'unknown operator'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSession(Number(selectedSession.session.id))}
+                      disabled={deleteSession.isPending}
+                      className="rounded-full border border-rose-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-rose-700 transition hover:border-rose-400 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deleteSession.isPending ? 'Deleting…' : 'Delete Session'}
+                    </button>
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-4">
                     <Metric label="Inputs" value={selectedSession.session.total_inputs} />
                     <Metric label="Drafts" value={selectedSession.session.total_drafts_created} />
                     <Metric label="Ready" value={selectedSession.session.total_needs_review} />
                     <Metric label="Time Saved" value={`${selectedSession.session.estimated_time_saved_minutes} min`} />
                   </div>
+                  {selectedSession.inputs.length > 0 ? (
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Capture Inputs</div>
+                      <div className="mt-3 space-y-2">
+                        {selectedSession.inputs.map((input) => (
+                          <div key={input.id} className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                            <div>
+                              <div className="font-semibold text-slate-950">
+                                {input.source_file_name || input.source_text?.split(':')[0] || `Capture input #${input.id}`}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {input.input_type.replace(/_/g, ' ')} • {input.parse_status.toLowerCase()} • input #{input.id}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCaptureInput(Number(input.id))}
+                              disabled={deleteCaptureInput.isPending}
+                              className="rounded-full border border-rose-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700 transition hover:border-rose-400 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deleteCaptureInput.isPending ? 'Deleting…' : 'Delete Capture'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {selectedSession.prep_sheet_captures.length > 0 ? (
                     <div className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-4">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">Prep Sheet Captures</div>
                       <div className="mt-3 space-y-2">
                         {selectedSession.prep_sheet_captures.map((capture) => (
-                          <div key={capture.id} className="rounded-2xl border border-blue-200 bg-white px-3 py-3 text-sm text-slate-700">
-                            <div className="font-semibold text-slate-950">{capture.source_file_name}</div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              {capture.capture_date} • {capture.processed ? 'processed' : 'pending'} • session #{capture.recipe_capture_session_id}
+                          <div key={capture.id} className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-white px-3 py-3 text-sm text-slate-700">
+                            <div>
+                              <div className="font-semibold text-slate-950">{capture.source_file_name}</div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {capture.capture_date} • {capture.processed ? 'processed' : 'pending'} • session #{capture.recipe_capture_session_id}
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePrepCapture(Number(capture.id))}
+                              disabled={deletePrepSheetCapture.isPending}
+                              className="rounded-full border border-rose-300 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700 transition hover:border-rose-400 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletePrepSheetCapture.isPending ? 'Deleting…' : 'Delete Capture'}
+                            </button>
                           </div>
                         ))}
                       </div>

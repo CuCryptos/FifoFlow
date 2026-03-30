@@ -41,6 +41,28 @@ export function useCreateRecipeBlitzSession() {
   });
 }
 
+export function useDeleteRecipeIntelligenceSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: number) => api.recipeIntelligence.deleteSession(sessionId),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
+      qc.removeQueries({ queryKey: ['recipe-intelligence', 'sessions', result.session_id] });
+    },
+  });
+}
+
+export function useDeleteRecipeIntelligenceCaptureInput() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (inputId: number) => api.recipeIntelligence.deleteCaptureInput(inputId),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions', result.recipe_capture_session_id] });
+    },
+  });
+}
+
 export function useRecipeDraftSourceIntelligence(draftId: number, venueId?: number | null) {
   return useQuery({
     queryKey: ['recipe-intelligence', 'draft-source', draftId, venueId ?? null],
@@ -90,6 +112,16 @@ export function useUploadPrepSheetCapture() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
       qc.invalidateQueries({ queryKey: ['recipe-drafts'] });
+    },
+  });
+}
+
+export function useDeleteRecipeIntelligencePrepSheetCapture() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (captureId: number) => api.recipeIntelligence.deletePrepSheetCapture(captureId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recipe-intelligence', 'sessions'] });
     },
   });
 }

@@ -437,6 +437,29 @@ export function createRecipeIntelligenceRoutes(
     });
   });
 
+  router.delete('/inputs/:inputId', async (req, res) => {
+    const inputId = parseRequiredPositiveInteger(req.params.inputId);
+    if (inputId == null) {
+      res.status(400).json({ error: 'Invalid capture input id' });
+      return;
+    }
+
+    const input = await repository.getCaptureInput(inputId);
+    if (!input) {
+      res.status(404).json({ error: 'Capture input not found' });
+      return;
+    }
+
+    await repository.deleteCaptureInput(inputId);
+    await repository.refreshCaptureSessionStats(input.recipe_capture_session_id);
+
+    res.json({
+      removed: true,
+      input_id: inputId,
+      recipe_capture_session_id: input.recipe_capture_session_id,
+    });
+  });
+
   router.get('/drafts/:draftId/source', async (req, res) => {
     const draftId = parseRequiredPositiveInteger(req.params.draftId);
     if (draftId == null) {

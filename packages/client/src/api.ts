@@ -903,6 +903,22 @@ export interface RecipeIntelligenceRecipeAliasPayload {
   aliases: RecipeAlias[];
 }
 
+export interface RecipeIntelligenceDeleteSessionPayload {
+  removed: true;
+  session_id: number;
+}
+
+export interface RecipeIntelligenceDeleteCaptureInputPayload {
+  removed: true;
+  input_id: number;
+  recipe_capture_session_id: number;
+}
+
+export interface RecipeIntelligenceDeletePrepSheetCapturePayload {
+  removed: true;
+  capture_id: number;
+}
+
 export interface PackFreshnessEntryPayload {
   pack_key: string;
   label: string;
@@ -1253,6 +1269,14 @@ export const api = {
       }),
     getSession: (sessionId: number) =>
       fetchJson<RecipeIntelligenceSessionDetailPayload>(`/recipe-intelligence/sessions/${sessionId}`),
+    deleteSession: (sessionId: number) =>
+      fetchJson<RecipeIntelligenceDeleteSessionPayload>(`/recipe-intelligence/sessions/${sessionId}`, {
+        method: 'DELETE',
+      }),
+    deleteCaptureInput: (inputId: number) =>
+      fetchJson<RecipeIntelligenceDeleteCaptureInputPayload>(`/recipe-intelligence/inputs/${inputId}`, {
+        method: 'DELETE',
+      }),
     getDraftSource: (draftId: number, params?: { venue_id?: number | null }) => {
       const qs = new URLSearchParams();
       if (params?.venue_id != null && params.venue_id > 0) {
@@ -1331,6 +1355,10 @@ export const api = {
       }
       return res.json() as Promise<RecipeIntelligencePrepSheetPayload>;
     },
+    deletePrepSheetCapture: (captureId: number) =>
+      fetchJson<RecipeIntelligenceDeletePrepSheetCapturePayload>(`/recipe-intelligence/prep-sheet-captures/${captureId}`, {
+        method: 'DELETE',
+      }),
     listItemAliases: (itemId: number) =>
       fetchJson<RecipeIntelligenceItemAliasPayload>(`/recipe-intelligence/items/${itemId}/aliases`),
     createInferenceRun: (data: CreateRecipeInferenceRunInput) =>
