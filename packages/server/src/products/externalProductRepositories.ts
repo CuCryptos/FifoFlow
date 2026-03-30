@@ -140,6 +140,12 @@ export interface ProductEnrichmentAllergenImportResult {
   audit_id: number;
 }
 
+export interface DeletedManualImportProductResult {
+  id: number;
+  product_name: string;
+  catalog_code: string;
+}
+
 const ITEM_IDENTIFIER_FIELDS = [
   'brand_name',
   'manufacturer_name',
@@ -548,6 +554,34 @@ export class ExternalProductRepository {
 
   listMatchesForItem(itemId: number): ExternalProductMatchRecord[] {
     return this.db.prepare(matchSelectSql('WHERE m.item_id = ?')).all(itemId).map(hydrateMatchRecord);
+  }
+
+  deleteManualImportProduct(productId: number): DeletedManualImportProductResult | undefined {
+    const product = this.db.prepare(`
+      SELECT
+        p.id,
+        p.product_name,
+        c.code AS catalog_code
+      FROM external_products p
+      JOIN external_product_catalogs c ON c.id = p.catalog_id
+      WHERE p.id = ?
+      LIMIT 1
+    `).get(productId) as DeletedManualImportProductResult | undefined;
+
+    if (!product) {
+      return undefined;
+    }
+
+    if (product.catalog_code !== 'manual_import') {
+      throw new Error('Only manual_import products can be deleted');
+    }
+
+    this.db.prepare(`
+      DELETE FROM external_products
+      WHERE id = ?
+    `).run(productId);
+
+    return product;
   }
 
   updateItemMatchSnapshot(itemId: number, confidence: ExternalProductMatchConfidence | null): void {

@@ -574,6 +574,15 @@ export interface ProductEnrichmentCatalogSyncPayload {
   };
 }
 
+export interface ProductEnrichmentDeleteProductPayload {
+  deleted: true;
+  product: {
+    id: number;
+    product_name: string;
+    catalog_code: string;
+  };
+}
+
 export interface ProductEnrichmentAllergenImportInput {
   external_product_match_id: number;
   import_mode: 'draft_claims' | 'direct_apply';
@@ -1406,6 +1415,10 @@ export const api = {
     },
     getItem: (itemId: number) =>
       fetchJson<ProductEnrichmentItemDetailPayload>(`/product-enrichment/items/${itemId}`),
+    deleteProduct: (productId: number) =>
+      fetchJson<ProductEnrichmentDeleteProductPayload>(`/product-enrichment/products/${productId}`, {
+        method: 'DELETE',
+      }),
     updateItemIdentifiers: (itemId: number, data: ProductEnrichmentItemIdentifierInput) =>
       fetchJson<{ item: Item }>(`/product-enrichment/items/${itemId}/identifiers`, {
         method: 'PUT',

@@ -328,4 +328,68 @@ describe('Product enrichment routes', () => {
       expect.objectContaining({ id: itemB }),
     ]);
   });
+
+  it('deletes manual import products and blocks non-manual catalog deletion', async () => {
+    const manualCatalogId = (db.prepare(`
+      SELECT id
+      FROM external_product_catalogs
+      WHERE code = 'manual_import'
+      LIMIT 1
+    `).get() as { id: number }).id;
+    const syscoCatalogId = (db.prepare(`
+      SELECT id
+      FROM external_product_catalogs
+      WHERE code = 'sysco'
+      LIMIT 1
+    `).get() as { id: number }).id;
+
+    const manualProductId = Number(db.prepare(`
+      INSERT INTO external_products (
+        catalog_id,
+        external_key,
+        product_name
+      ) VALUES (?, 'manual-1', 'Manual Cleanup Target')
+    `).run(manualCatalogId).lastInsertRowid);
+
+    const syscoProductId = Number(db.prepare(`
+      INSERT INTO external_products (
+        catalog_id,
+        external_key,
+        product_name
+      ) VALUES (?, 'sysco-1', 'Sysco Product')
+    `).run(syscoCatalogId).lastInsertRowid);
+
+    const deleteManualResponse = await request(app).delete(`/api/product-enrichment/products/${manualProductId}`);
+    expect(deleteManualResponse.status).toBe(200);
+    expect(deleteManualResponse.body).toMatchObject({
+      deleted: true,
+      product: {
+        id: manualProductId,
+        product_name: 'Manual Cleanup Target',
+        catalog_code: 'manual_import',
+      },
+    });
+
+    const missingManualProduct = db.prepare(`
+      SELECT id
+      FROM external_products
+      WHERE id = ?
+      LIMIT 1
+    `).get(manualProductId);
+    expect(missingManualProduct).toBeUndefined();
+
+    const deleteSyscoResponse = await request(app).delete(`/api/product-enrichment/products/${syscoProductId}`);
+    expect(deleteSyscoResponse.status).toBe(409);
+    expect(deleteSyscoResponse.body).toMatchObject({
+      error: 'Only manual_import products can be deleted',
+    });
+
+    const stillPresentSysco = db.prepare(`
+      SELECT id
+      FROM external_products
+      WHERE id = ?
+      LIMIT 1
+    `).get(syscoProductId);
+    expect(stillPresentSysco).toBeDefined();
+  });
 });

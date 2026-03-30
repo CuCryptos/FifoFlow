@@ -164,6 +164,31 @@ export function createProductEnrichmentRoutes(db: Database.Database): Router {
     res.json(detail);
   });
 
+  router.delete('/products/:productId', (req, res) => {
+    const productId = parseRequiredNumber(req.params.productId);
+    if (productId == null) {
+      res.status(400).json({ error: 'Invalid product id' });
+      return;
+    }
+
+    try {
+      const product = repository.deleteManualImportProduct(productId);
+      if (!product) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+
+      res.json({ deleted: true, product });
+    } catch (error: any) {
+      const message = error?.message ?? 'Unable to delete product';
+      if (message.includes('Only manual_import products')) {
+        res.status(409).json({ error: message });
+        return;
+      }
+      res.status(400).json({ error: message });
+    }
+  });
+
   router.put('/items/:itemId/identifiers', (req, res) => {
     const itemId = parseRequiredNumber(req.params.itemId);
     if (itemId == null) {
