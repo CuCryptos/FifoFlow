@@ -27,6 +27,14 @@ export interface Item {
   venue_id: number | null;
   storage_area_id: number | null;
   sale_price: number | null;
+  brand_name: string | null;
+  manufacturer_name: string | null;
+  gtin: string | null;
+  upc: string | null;
+  sysco_supc: string | null;
+  manufacturer_item_code: string | null;
+  external_product_confidence: ExternalProductMatchConfidence | null;
+  external_product_last_matched_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -161,6 +169,15 @@ export interface Vendor {
   updated_at: string;
 }
 
+export type ExternalProductCatalogSourceType = 'sysco' | 'usda_fdc' | 'gdsn' | 'manual_import';
+export type ExternalProductMatchStatus = 'suggested' | 'confirmed' | 'rejected' | 'auto_confirmed';
+export type ExternalProductMatchBasis = 'gtin' | 'upc' | 'sysco_supc' | 'vendor_item_code' | 'name_pack' | 'operator';
+export type ExternalProductMatchConfidence = 'high' | 'medium' | 'low';
+export type ExternalProductMatchedBy = 'system' | 'operator';
+export type ExternalProductSyncRunStatus = 'running' | 'completed' | 'failed';
+export type ItemAllergenImportSource = 'external_product' | 'uploaded_chart' | 'operator';
+export type ItemAllergenImportMode = 'draft_claims' | 'direct_apply';
+
 export type AllergenCategory = 'fda_major_9' | 'extended' | 'custom';
 export type AllergenStatus = 'contains' | 'may_contain' | 'free_of' | 'unknown';
 export type AllergenConfidence = 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
@@ -263,12 +280,100 @@ export interface VendorPrice {
   vendor_id: number;
   vendor_name?: string;
   vendor_item_name: string | null;
+  vendor_item_code: string | null;
+  vendor_pack_text: string | null;
   order_unit: Unit | null;
   order_unit_price: number;
   qty_per_unit: number | null;
+  gtin: string | null;
+  upc: string | null;
+  sysco_supc: string | null;
+  brand_name: string | null;
+  manufacturer_name: string | null;
+  source_catalog: string | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ExternalProductCatalog {
+  id: number;
+  code: string;
+  name: string;
+  source_type: ExternalProductCatalogSourceType;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExternalProduct {
+  id: number;
+  catalog_id: number;
+  external_key: string;
+  gtin: string | null;
+  upc: string | null;
+  vendor_item_code: string | null;
+  sysco_supc: string | null;
+  brand_name: string | null;
+  manufacturer_name: string | null;
+  product_name: string;
+  pack_text: string | null;
+  size_text: string | null;
+  ingredient_statement: string | null;
+  allergen_statement: string | null;
+  nutrition_json: string;
+  raw_payload_json: string;
+  source_url: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExternalProductMatch {
+  id: number;
+  item_id: number;
+  vendor_price_id: number | null;
+  external_product_id: number;
+  match_status: ExternalProductMatchStatus;
+  match_basis: ExternalProductMatchBasis;
+  match_confidence: ExternalProductMatchConfidence;
+  match_score: number | null;
+  matched_by: ExternalProductMatchedBy;
+  notes: string | null;
+  active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExternalProductAllergenClaim {
+  id: number;
+  external_product_id: number;
+  allergen_id: number;
+  status: AllergenStatus;
+  confidence: AllergenConfidence;
+  source_excerpt: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExternalProductSyncRun {
+  id: number;
+  catalog_id: number;
+  status: ExternalProductSyncRunStatus;
+  started_at: string;
+  completed_at: string | null;
+  summary_json: string;
+  notes: string | null;
+}
+
+export interface ItemAllergenImportAudit {
+  id: number;
+  item_id: number;
+  external_product_match_id: number | null;
+  import_source: ItemAllergenImportSource;
+  import_mode: ItemAllergenImportMode;
+  summary_json: string;
+  created_by: string | null;
+  created_at: string;
 }
 
 export type OrderStatus = 'draft' | 'sent';

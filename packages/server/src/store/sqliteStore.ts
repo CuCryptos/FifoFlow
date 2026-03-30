@@ -155,6 +155,16 @@ export class SqliteInventoryStore implements InventoryStore {
       item_size = null,
       reorder_level = null,
       reorder_qty = null,
+      vendor_id = null,
+      venue_id = null,
+      storage_area_id = null,
+      sale_price = null,
+      brand_name = null,
+      manufacturer_name = null,
+      gtin = null,
+      upc = null,
+      sysco_supc = null,
+      manufacturer_item_code = null,
     } = input;
 
     const itemSizeText = item_size ?? (
@@ -174,8 +184,18 @@ export class SqliteInventoryStore implements InventoryStore {
         item_size_unit,
         item_size,
         reorder_level,
-        reorder_qty
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        reorder_qty,
+        vendor_id,
+        venue_id,
+        storage_area_id,
+        sale_price,
+        brand_name,
+        manufacturer_name,
+        gtin,
+        upc,
+        sysco_supc,
+        manufacturer_item_code
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       name,
       category,
@@ -189,6 +209,16 @@ export class SqliteInventoryStore implements InventoryStore {
       itemSizeText,
       reorder_level,
       reorder_qty,
+      vendor_id,
+      venue_id,
+      storage_area_id,
+      sale_price,
+      brand_name,
+      manufacturer_name,
+      gtin,
+      upc,
+      sysco_supc,
+      manufacturer_item_code,
     );
 
     return this.db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid) as Item;
@@ -738,9 +768,27 @@ export class SqliteInventoryStore implements InventoryStore {
           ).get(targetId, vp.vendor_id, vp.vendor_item_name) as { id: number } | undefined;
           if (!existing) {
             this.db.prepare(
-              `INSERT INTO vendor_prices (item_id, vendor_id, vendor_item_name, order_unit, order_unit_price, qty_per_unit, is_default)
-               VALUES (?, ?, ?, ?, ?, ?, 0)`
-            ).run(targetId, vp.vendor_id, vp.vendor_item_name ?? source.name, vp.order_unit, vp.order_unit_price, vp.qty_per_unit);
+              `INSERT INTO vendor_prices (
+                item_id, vendor_id, vendor_item_name, vendor_item_code, vendor_pack_text,
+                order_unit, order_unit_price, qty_per_unit, gtin, upc, sysco_supc,
+                brand_name, manufacturer_name, source_catalog, is_default
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
+            ).run(
+              targetId,
+              vp.vendor_id,
+              vp.vendor_item_name ?? source.name,
+              vp.vendor_item_code ?? null,
+              vp.vendor_pack_text ?? null,
+              vp.order_unit,
+              vp.order_unit_price,
+              vp.qty_per_unit,
+              vp.gtin ?? null,
+              vp.upc ?? null,
+              vp.sysco_supc ?? null,
+              vp.brand_name ?? null,
+              vp.manufacturer_name ?? null,
+              vp.source_catalog ?? null,
+            );
             vendorPricesCreated++;
           }
         }
@@ -752,9 +800,27 @@ export class SqliteInventoryStore implements InventoryStore {
           ).get(targetId, source.vendor_id, source.name) as { id: number } | undefined;
           if (!alreadyExists) {
             this.db.prepare(
-              `INSERT INTO vendor_prices (item_id, vendor_id, vendor_item_name, order_unit, order_unit_price, qty_per_unit, is_default)
-               VALUES (?, ?, ?, ?, ?, ?, 0)`
-            ).run(targetId, source.vendor_id, source.name, source.order_unit, source.order_unit_price, source.qty_per_unit);
+              `INSERT INTO vendor_prices (
+                item_id, vendor_id, vendor_item_name, vendor_item_code, vendor_pack_text,
+                order_unit, order_unit_price, qty_per_unit, gtin, upc, sysco_supc,
+                brand_name, manufacturer_name, source_catalog, is_default
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
+            ).run(
+              targetId,
+              source.vendor_id,
+              source.name,
+              source.manufacturer_item_code ?? null,
+              null,
+              source.order_unit,
+              source.order_unit_price,
+              source.qty_per_unit,
+              source.gtin ?? null,
+              source.upc ?? null,
+              source.sysco_supc ?? null,
+              source.brand_name ?? null,
+              source.manufacturer_name ?? null,
+              null,
+            );
             vendorPricesCreated++;
           }
         }
@@ -965,15 +1031,26 @@ export class SqliteInventoryStore implements InventoryStore {
       }
 
       const result = this.db.prepare(
-        `INSERT INTO vendor_prices (item_id, vendor_id, vendor_item_name, order_unit, order_unit_price, qty_per_unit, is_default)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO vendor_prices (
+          item_id, vendor_id, vendor_item_name, vendor_item_code, vendor_pack_text,
+          order_unit, order_unit_price, qty_per_unit, gtin, upc, sysco_supc,
+          brand_name, manufacturer_name, source_catalog, is_default
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         itemId,
         input.vendor_id,
         input.vendor_item_name ?? null,
+        input.vendor_item_code ?? null,
+        input.vendor_pack_text ?? null,
         input.order_unit ?? null,
         input.order_unit_price,
         input.qty_per_unit ?? null,
+        input.gtin ?? null,
+        input.upc ?? null,
+        input.sysco_supc ?? null,
+        input.brand_name ?? null,
+        input.manufacturer_name ?? null,
+        input.source_catalog ?? null,
         input.is_default ? 1 : 0,
       );
 
@@ -983,6 +1060,12 @@ export class SqliteInventoryStore implements InventoryStore {
           order_unit: input.order_unit ?? null,
           order_unit_price: input.order_unit_price,
           qty_per_unit: input.qty_per_unit ?? null,
+          brand_name: input.brand_name ?? null,
+          manufacturer_name: input.manufacturer_name ?? null,
+          gtin: input.gtin ?? null,
+          upc: input.upc ?? null,
+          sysco_supc: input.sysco_supc ?? null,
+          manufacturer_item_code: input.vendor_item_code ?? null,
         });
       }
 
@@ -1020,6 +1103,12 @@ export class SqliteInventoryStore implements InventoryStore {
           order_unit: updated.order_unit,
           order_unit_price: updated.order_unit_price,
           qty_per_unit: updated.qty_per_unit,
+          brand_name: updated.brand_name ?? null,
+          manufacturer_name: updated.manufacturer_name ?? null,
+          gtin: updated.gtin ?? null,
+          upc: updated.upc ?? null,
+          sysco_supc: updated.sysco_supc ?? null,
+          manufacturer_item_code: updated.vendor_item_code ?? null,
         });
       }
 
@@ -1053,10 +1142,31 @@ export class SqliteInventoryStore implements InventoryStore {
     order_unit: string | null;
     order_unit_price: number;
     qty_per_unit: number | null;
+    brand_name: string | null;
+    manufacturer_name: string | null;
+    gtin: string | null;
+    upc: string | null;
+    sysco_supc: string | null;
+    manufacturer_item_code: string | null;
   }): void {
     this.db.prepare(
-      'UPDATE items SET vendor_id = ?, order_unit = ?, order_unit_price = ?, qty_per_unit = ? WHERE id = ?'
-    ).run(fields.vendor_id, fields.order_unit, fields.order_unit_price, fields.qty_per_unit, itemId);
+      `UPDATE items
+       SET vendor_id = ?, order_unit = ?, order_unit_price = ?, qty_per_unit = ?,
+           brand_name = ?, manufacturer_name = ?, gtin = ?, upc = ?, sysco_supc = ?, manufacturer_item_code = ?
+       WHERE id = ?`
+    ).run(
+      fields.vendor_id,
+      fields.order_unit,
+      fields.order_unit_price,
+      fields.qty_per_unit,
+      fields.brand_name,
+      fields.manufacturer_name,
+      fields.gtin,
+      fields.upc,
+      fields.sysco_supc,
+      fields.manufacturer_item_code,
+      itemId,
+    );
   }
 
   // ── Venues ──────────────────────────────────────────────────

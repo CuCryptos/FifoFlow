@@ -18,6 +18,12 @@ export const createItemSchema = z.object({
   venue_id: z.number().int().positive().nullable().optional(),
   storage_area_id: z.number().int().positive().nullable().optional(),
   sale_price: z.number().min(0).nullable().optional(),
+  brand_name: z.string().max(200).nullable().optional(),
+  manufacturer_name: z.string().max(200).nullable().optional(),
+  gtin: z.string().max(64).nullable().optional(),
+  upc: z.string().max(64).nullable().optional(),
+  sysco_supc: z.string().max(64).nullable().optional(),
+  manufacturer_item_code: z.string().max(128).nullable().optional(),
 });
 
 export const updateItemSchema = z.object({
@@ -38,6 +44,12 @@ export const updateItemSchema = z.object({
   venue_id: z.number().int().positive().nullable().optional(),
   storage_area_id: z.number().int().positive().nullable().optional(),
   sale_price: z.number().min(0).nullable().optional(),
+  brand_name: z.string().max(200).nullable().optional(),
+  manufacturer_name: z.string().max(200).nullable().optional(),
+  gtin: z.string().max(64).nullable().optional(),
+  upc: z.string().max(64).nullable().optional(),
+  sysco_supc: z.string().max(64).nullable().optional(),
+  manufacturer_item_code: z.string().max(128).nullable().optional(),
 });
 
 export const createTransactionSchema = z.object({
@@ -181,17 +193,33 @@ export const updateOrderStatusSchema = z.object({
 export const createVendorPriceSchema = z.object({
   vendor_id: z.number().int().positive(),
   vendor_item_name: z.string().max(200).nullable().optional(),
+  vendor_item_code: z.string().max(128).nullable().optional(),
+  vendor_pack_text: z.string().max(200).nullable().optional(),
   order_unit: z.enum(UNITS).nullable().optional(),
   order_unit_price: z.number().min(0),
   qty_per_unit: z.number().min(0).nullable().optional(),
+  gtin: z.string().max(64).nullable().optional(),
+  upc: z.string().max(64).nullable().optional(),
+  sysco_supc: z.string().max(64).nullable().optional(),
+  brand_name: z.string().max(200).nullable().optional(),
+  manufacturer_name: z.string().max(200).nullable().optional(),
+  source_catalog: z.string().max(100).nullable().optional(),
   is_default: z.boolean().optional().default(false),
 });
 
 export const updateVendorPriceSchema = z.object({
   vendor_item_name: z.string().max(200).nullable().optional(),
+  vendor_item_code: z.string().max(128).nullable().optional(),
+  vendor_pack_text: z.string().max(200).nullable().optional(),
   order_unit: z.enum(UNITS).nullable().optional(),
   order_unit_price: z.number().min(0).optional(),
   qty_per_unit: z.number().min(0).nullable().optional(),
+  gtin: z.string().max(64).nullable().optional(),
+  upc: z.string().max(64).nullable().optional(),
+  sysco_supc: z.string().max(64).nullable().optional(),
+  brand_name: z.string().max(200).nullable().optional(),
+  manufacturer_name: z.string().max(200).nullable().optional(),
+  source_catalog: z.string().max(100).nullable().optional(),
   is_default: z.boolean().optional(),
 });
 
@@ -220,6 +248,14 @@ const RECIPE_REVIEW_PRIORITIES = ['low', 'normal', 'high'] as const;
 const RECIPE_INFERENCE_RUN_STATUSES = ['PENDING', 'COMPLETED', 'FAILED'] as const;
 const ITEM_ALIAS_TYPES = ['chef_slang', 'vendor_name', 'common_name', 'abbreviation', 'menu_name', 'component_name'] as const;
 const RECIPE_ALIAS_TYPES = ['chef_slang', 'abbreviation', 'old_name', 'component_name'] as const;
+const EXTERNAL_PRODUCT_CATALOG_SOURCE_TYPES = ['sysco', 'usda_fdc', 'gdsn', 'manual_import'] as const;
+const EXTERNAL_PRODUCT_MATCH_STATUSES = ['suggested', 'confirmed', 'rejected', 'auto_confirmed'] as const;
+const EXTERNAL_PRODUCT_MATCH_BASES = ['gtin', 'upc', 'sysco_supc', 'vendor_item_code', 'name_pack', 'operator'] as const;
+const EXTERNAL_PRODUCT_MATCH_CONFIDENCES = ['high', 'medium', 'low'] as const;
+const EXTERNAL_PRODUCT_MATCHED_BY_VALUES = ['system', 'operator'] as const;
+const EXTERNAL_PRODUCT_SYNC_RUN_STATUSES = ['running', 'completed', 'failed'] as const;
+const ITEM_ALLERGEN_IMPORT_SOURCES = ['external_product', 'uploaded_chart', 'operator'] as const;
+const ITEM_ALLERGEN_IMPORT_MODES = ['draft_claims', 'direct_apply'] as const;
 
 export const allergenCategorySchema = z.enum(ALLERGEN_CATEGORIES);
 export const allergenStatusSchema = z.enum(ALLERGEN_STATUSES);
@@ -239,6 +275,14 @@ export const recipeReviewPrioritySchema = z.enum(RECIPE_REVIEW_PRIORITIES);
 export const recipeInferenceRunStatusSchema = z.enum(RECIPE_INFERENCE_RUN_STATUSES);
 export const itemAliasTypeSchema = z.enum(ITEM_ALIAS_TYPES);
 export const recipeAliasTypeSchema = z.enum(RECIPE_ALIAS_TYPES);
+export const externalProductCatalogSourceTypeSchema = z.enum(EXTERNAL_PRODUCT_CATALOG_SOURCE_TYPES);
+export const externalProductMatchStatusSchema = z.enum(EXTERNAL_PRODUCT_MATCH_STATUSES);
+export const externalProductMatchBasisSchema = z.enum(EXTERNAL_PRODUCT_MATCH_BASES);
+export const externalProductMatchConfidenceSchema = z.enum(EXTERNAL_PRODUCT_MATCH_CONFIDENCES);
+export const externalProductMatchedBySchema = z.enum(EXTERNAL_PRODUCT_MATCHED_BY_VALUES);
+export const externalProductSyncRunStatusSchema = z.enum(EXTERNAL_PRODUCT_SYNC_RUN_STATUSES);
+export const itemAllergenImportSourceSchema = z.enum(ITEM_ALLERGEN_IMPORT_SOURCES);
+export const itemAllergenImportModeSchema = z.enum(ITEM_ALLERGEN_IMPORT_MODES);
 
 export const allergenSchema = z.object({
   id: z.number().int().positive(),
@@ -324,6 +368,86 @@ export const allergenQueryAuditSchema = z.object({
   query_text: z.string().min(1).max(4000),
   allergen_codes: z.array(z.string().min(1)),
   response_summary: z.string().nullable(),
+  created_by: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const externalProductCatalogSchema = z.object({
+  id: z.number().int().positive(),
+  code: z.string().min(1).max(100),
+  name: z.string().min(1).max(200),
+  source_type: externalProductCatalogSourceTypeSchema,
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const externalProductSchema = z.object({
+  id: z.number().int().positive(),
+  catalog_id: z.number().int().positive(),
+  external_key: z.string().min(1).max(200),
+  gtin: z.string().max(64).nullable(),
+  upc: z.string().max(64).nullable(),
+  vendor_item_code: z.string().max(128).nullable(),
+  sysco_supc: z.string().max(64).nullable(),
+  brand_name: z.string().max(200).nullable(),
+  manufacturer_name: z.string().max(200).nullable(),
+  product_name: z.string().min(1).max(200),
+  pack_text: z.string().max(200).nullable(),
+  size_text: z.string().max(200).nullable(),
+  ingredient_statement: z.string().nullable(),
+  allergen_statement: z.string().nullable(),
+  nutrition_json: z.string(),
+  raw_payload_json: z.string(),
+  source_url: z.string().nullable(),
+  last_seen_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const externalProductMatchSchema = z.object({
+  id: z.number().int().positive(),
+  item_id: z.number().int().positive(),
+  vendor_price_id: z.number().int().positive().nullable(),
+  external_product_id: z.number().int().positive(),
+  match_status: externalProductMatchStatusSchema,
+  match_basis: externalProductMatchBasisSchema,
+  match_confidence: externalProductMatchConfidenceSchema,
+  match_score: z.number().nullable(),
+  matched_by: externalProductMatchedBySchema,
+  notes: z.string().nullable(),
+  active: z.number().int().min(0).max(1),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const externalProductAllergenClaimSchema = z.object({
+  id: z.number().int().positive(),
+  external_product_id: z.number().int().positive(),
+  allergen_id: z.number().int().positive(),
+  status: allergenStatusSchema,
+  confidence: allergenConfidenceSchema,
+  source_excerpt: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const externalProductSyncRunSchema = z.object({
+  id: z.number().int().positive(),
+  catalog_id: z.number().int().positive(),
+  status: externalProductSyncRunStatusSchema,
+  started_at: z.string(),
+  completed_at: z.string().nullable(),
+  summary_json: z.string(),
+  notes: z.string().nullable(),
+});
+
+export const itemAllergenImportAuditSchema = z.object({
+  id: z.number().int().positive(),
+  item_id: z.number().int().positive(),
+  external_product_match_id: z.number().int().positive().nullable(),
+  import_source: itemAllergenImportSourceSchema,
+  import_mode: itemAllergenImportModeSchema,
+  summary_json: z.string(),
   created_by: z.string().nullable(),
   created_at: z.string(),
 });
@@ -743,6 +867,12 @@ export type UpdateVendorPriceInput = z.infer<typeof updateVendorPriceSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;
+export type ExternalProductCatalogInput = z.infer<typeof externalProductCatalogSchema>;
+export type ExternalProductInput = z.infer<typeof externalProductSchema>;
+export type ExternalProductMatchInput = z.infer<typeof externalProductMatchSchema>;
+export type ExternalProductAllergenClaimInput = z.infer<typeof externalProductAllergenClaimSchema>;
+export type ExternalProductSyncRunInput = z.infer<typeof externalProductSyncRunSchema>;
+export type ItemAllergenImportAuditInput = z.infer<typeof itemAllergenImportAuditSchema>;
 export type UpsertItemAllergenProfileInput = z.infer<typeof upsertItemAllergenProfileSchema>;
 export type CreateAllergenEvidenceInput = z.infer<typeof createAllergenEvidenceSchema>;
 export type UpsertAllergyDocumentProductMatchInput = z.infer<typeof upsertAllergyDocumentProductMatchSchema>;

@@ -236,6 +236,16 @@ export class SupabaseInventoryStore implements InventoryStore {
       item_size = null,
       reorder_level = null,
       reorder_qty = null,
+      vendor_id = null,
+      venue_id = null,
+      storage_area_id = null,
+      sale_price = null,
+      brand_name = null,
+      manufacturer_name = null,
+      gtin = null,
+      upc = null,
+      sysco_supc = null,
+      manufacturer_item_code = null,
     } = _input;
 
     const payload = {
@@ -253,6 +263,16 @@ export class SupabaseInventoryStore implements InventoryStore {
       ),
       reorder_level,
       reorder_qty,
+      vendor_id,
+      venue_id,
+      storage_area_id,
+      sale_price,
+      brand_name,
+      manufacturer_name,
+      gtin,
+      upc,
+      sysco_supc,
+      manufacturer_item_code,
     };
 
     const rows = await this.request<Item[]>({

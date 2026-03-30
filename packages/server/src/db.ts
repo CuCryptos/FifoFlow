@@ -26,6 +26,27 @@ export function initializeDb(db: Database.Database): void {
       category TEXT NOT NULL,
       unit TEXT NOT NULL,
       current_qty REAL NOT NULL DEFAULT 0,
+      order_unit TEXT,
+      order_unit_price REAL,
+      qty_per_unit REAL,
+      inner_unit TEXT,
+      item_size_value REAL,
+      item_size_unit TEXT,
+      item_size TEXT,
+      reorder_level REAL,
+      reorder_qty REAL,
+      vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+      venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+      storage_area_id INTEGER REFERENCES storage_areas(id) ON DELETE SET NULL,
+      sale_price REAL,
+      brand_name TEXT,
+      manufacturer_name TEXT,
+      gtin TEXT,
+      upc TEXT,
+      sysco_supc TEXT,
+      manufacturer_item_code TEXT,
+      external_product_confidence TEXT CHECK(external_product_confidence IN ('high','medium','low')),
+      external_product_last_matched_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -163,15 +184,30 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
     CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders(vendor_id);
     CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+    CREATE INDEX IF NOT EXISTS idx_items_vendor_id ON items(vendor_id);
+    CREATE INDEX IF NOT EXISTS idx_items_venue_id ON items(venue_id);
+    CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id);
+    CREATE INDEX IF NOT EXISTS idx_items_gtin ON items(gtin);
+    CREATE INDEX IF NOT EXISTS idx_items_upc ON items(upc);
+    CREATE INDEX IF NOT EXISTS idx_items_sysco_supc ON items(sysco_supc);
+    CREATE INDEX IF NOT EXISTS idx_items_manufacturer_item_code ON items(manufacturer_item_code);
 
     CREATE TABLE IF NOT EXISTS vendor_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
       vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
       vendor_item_name TEXT,
+      vendor_item_code TEXT,
+      vendor_pack_text TEXT,
       order_unit TEXT,
       order_unit_price REAL NOT NULL,
       qty_per_unit REAL,
+      gtin TEXT,
+      upc TEXT,
+      sysco_supc TEXT,
+      brand_name TEXT,
+      manufacturer_name TEXT,
+      source_catalog TEXT,
       is_default INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -179,11 +215,134 @@ export function initializeDb(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_vendor_prices_item_id ON vendor_prices(item_id);
     CREATE INDEX IF NOT EXISTS idx_vendor_prices_vendor_id ON vendor_prices(vendor_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_prices_vendor_item_code ON vendor_prices(vendor_item_code);
+    CREATE INDEX IF NOT EXISTS idx_vendor_prices_gtin ON vendor_prices(gtin);
+    CREATE INDEX IF NOT EXISTS idx_vendor_prices_upc ON vendor_prices(upc);
+    CREATE INDEX IF NOT EXISTS idx_vendor_prices_sysco_supc ON vendor_prices(sysco_supc);
 
     CREATE TRIGGER IF NOT EXISTS update_vendor_price_timestamp
     AFTER UPDATE ON vendor_prices
     BEGIN
       UPDATE vendor_prices SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TABLE IF NOT EXISTS external_product_catalogs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      source_type TEXT NOT NULL CHECK(source_type IN ('sysco','usda_fdc','gdsn','manual_import')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS external_products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      catalog_id INTEGER NOT NULL REFERENCES external_product_catalogs(id) ON DELETE CASCADE,
+      external_key TEXT NOT NULL,
+      gtin TEXT,
+      upc TEXT,
+      vendor_item_code TEXT,
+      sysco_supc TEXT,
+      brand_name TEXT,
+      manufacturer_name TEXT,
+      product_name TEXT NOT NULL,
+      pack_text TEXT,
+      size_text TEXT,
+      ingredient_statement TEXT,
+      allergen_statement TEXT,
+      nutrition_json TEXT NOT NULL DEFAULT '{}',
+      raw_payload_json TEXT NOT NULL DEFAULT '{}',
+      source_url TEXT,
+      last_seen_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(catalog_id, external_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS external_product_matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      vendor_price_id INTEGER REFERENCES vendor_prices(id) ON DELETE SET NULL,
+      external_product_id INTEGER NOT NULL REFERENCES external_products(id) ON DELETE CASCADE,
+      match_status TEXT NOT NULL CHECK(match_status IN ('suggested','confirmed','rejected','auto_confirmed')),
+      match_basis TEXT NOT NULL CHECK(match_basis IN ('gtin','upc','sysco_supc','vendor_item_code','name_pack','operator')),
+      match_confidence TEXT NOT NULL CHECK(match_confidence IN ('high','medium','low')),
+      match_score REAL,
+      matched_by TEXT NOT NULL CHECK(matched_by IN ('system','operator')) DEFAULT 'system',
+      notes TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(item_id, external_product_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS external_product_allergen_claims (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_product_id INTEGER NOT NULL REFERENCES external_products(id) ON DELETE CASCADE,
+      allergen_id INTEGER NOT NULL REFERENCES allergens(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK(status IN ('contains','may_contain','free_of','unknown')),
+      confidence TEXT NOT NULL CHECK(confidence IN ('verified','high','moderate','low','unverified','unknown')),
+      source_excerpt TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(external_product_id, allergen_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS external_product_sync_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      catalog_id INTEGER NOT NULL REFERENCES external_product_catalogs(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK(status IN ('running','completed','failed')),
+      started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT,
+      summary_json TEXT NOT NULL DEFAULT '{}',
+      notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS item_allergen_import_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      external_product_match_id INTEGER REFERENCES external_product_matches(id) ON DELETE SET NULL,
+      import_source TEXT NOT NULL CHECK(import_source IN ('external_product','uploaded_chart','operator')),
+      import_mode TEXT NOT NULL CHECK(import_mode IN ('draft_claims','direct_apply')),
+      summary_json TEXT NOT NULL DEFAULT '{}',
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_external_products_gtin ON external_products(gtin);
+    CREATE INDEX IF NOT EXISTS idx_external_products_upc ON external_products(upc);
+    CREATE INDEX IF NOT EXISTS idx_external_products_sysco_supc ON external_products(sysco_supc);
+    CREATE INDEX IF NOT EXISTS idx_external_products_vendor_item_code ON external_products(vendor_item_code);
+    CREATE INDEX IF NOT EXISTS idx_external_products_name ON external_products(product_name COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_external_product_matches_item_id ON external_product_matches(item_id, active DESC, match_status);
+    CREATE INDEX IF NOT EXISTS idx_external_product_matches_external_product_id ON external_product_matches(external_product_id, match_status);
+    CREATE INDEX IF NOT EXISTS idx_external_product_matches_status ON external_product_matches(match_status, match_confidence, match_score DESC);
+    CREATE INDEX IF NOT EXISTS idx_external_product_allergen_claims_product_id ON external_product_allergen_claims(external_product_id, allergen_id);
+    CREATE INDEX IF NOT EXISTS idx_external_product_sync_runs_catalog_id ON external_product_sync_runs(catalog_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_item_allergen_import_audit_item_id ON item_allergen_import_audit(item_id, created_at DESC);
+
+    CREATE TRIGGER IF NOT EXISTS update_external_product_catalogs_timestamp
+    AFTER UPDATE ON external_product_catalogs
+    BEGIN
+      UPDATE external_product_catalogs SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_external_products_timestamp
+    AFTER UPDATE ON external_products
+    BEGIN
+      UPDATE external_products SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_external_product_matches_timestamp
+    AFTER UPDATE ON external_product_matches
+    BEGIN
+      UPDATE external_product_matches SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_external_product_allergen_claims_timestamp
+    AFTER UPDATE ON external_product_allergen_claims
+    BEGIN
+      UPDATE external_product_allergen_claims SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
     CREATE TABLE IF NOT EXISTS recipes (
@@ -366,7 +525,42 @@ export function initializeDb(db: Database.Database): void {
   addColumnIfMissing('storage_area_id', 'INTEGER REFERENCES storage_areas(id) ON DELETE SET NULL');
 
   addColumnIfMissing('sale_price', 'REAL');
+  addColumnIfMissing('brand_name', 'TEXT');
+  addColumnIfMissing('manufacturer_name', 'TEXT');
+  addColumnIfMissing('gtin', 'TEXT');
+  addColumnIfMissing('upc', 'TEXT');
+  addColumnIfMissing('sysco_supc', 'TEXT');
+  addColumnIfMissing('manufacturer_item_code', 'TEXT');
+  addColumnIfMissing('external_product_confidence', "TEXT CHECK(external_product_confidence IN ('high','medium','low'))");
+  addColumnIfMissing('external_product_last_matched_at', 'TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_gtin ON items(gtin)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_upc ON items(upc)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_sysco_supc ON items(sysco_supc)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_items_manufacturer_item_code ON items(manufacturer_item_code)');
+
+  const vendorPriceColumns = db.pragma('table_info(vendor_prices)') as Array<{ name: string }>;
+  const vendorPriceColumnNames = vendorPriceColumns.map((c) => c.name);
+  const addVendorPriceColumnIfMissing = (name: string, definition: string) => {
+    if (!vendorPriceColumnNames.includes(name)) {
+      db.exec(`ALTER TABLE vendor_prices ADD COLUMN ${name} ${definition};`);
+      vendorPriceColumnNames.push(name);
+    }
+  };
+
+  addVendorPriceColumnIfMissing('vendor_item_code', 'TEXT');
+  addVendorPriceColumnIfMissing('vendor_pack_text', 'TEXT');
+  addVendorPriceColumnIfMissing('gtin', 'TEXT');
+  addVendorPriceColumnIfMissing('upc', 'TEXT');
+  addVendorPriceColumnIfMissing('sysco_supc', 'TEXT');
+  addVendorPriceColumnIfMissing('brand_name', 'TEXT');
+  addVendorPriceColumnIfMissing('manufacturer_name', 'TEXT');
+  addVendorPriceColumnIfMissing('source_catalog', 'TEXT');
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_vendor_prices_vendor_item_code ON vendor_prices(vendor_item_code)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_vendor_prices_gtin ON vendor_prices(gtin)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_vendor_prices_upc ON vendor_prices(upc)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_vendor_prices_sysco_supc ON vendor_prices(sysco_supc)');
 
   const recipeColumns = db.pragma('table_info(recipes)') as Array<{ name: string }>;
   const recipeColumnNames = recipeColumns.map((c) => c.name);
@@ -485,6 +679,16 @@ export function initializeDb(db: Database.Database): void {
       AND NOT EXISTS (
         SELECT 1 FROM vendor_prices vp WHERE vp.item_id = items.id AND vp.vendor_id = items.vendor_id
       )
+  `);
+
+  db.exec(`
+    INSERT INTO external_product_catalogs (code, name, source_type)
+    VALUES
+      ('sysco', 'Sysco Catalog', 'sysco'),
+      ('usda_fdc', 'USDA FoodData Central', 'usda_fdc'),
+      ('gdsn', 'GS1 GDSN', 'gdsn'),
+      ('manual_import', 'Manual Import', 'manual_import')
+    ON CONFLICT(code) DO NOTHING;
   `);
 
   // Seed default "General" storage area and populate item_storage
