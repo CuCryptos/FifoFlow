@@ -1,20 +1,49 @@
 import { Router } from 'express';
 import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
+import convertHeic from 'heic-convert';
 import type { InventoryStore } from '../store/types.js';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
 import { matchInvoiceLineToInventory, normalizeInvoiceItemName, tokenizeInvoiceItemName } from './invoiceMatching.js';
 import { extractPdfEvidence, type InvoiceDocumentPageEvidence } from './invoiceDocumentExtraction.js';
 
+const INVOICE_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
+
+const INVOICE_UPLOAD_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.heic', '.heif'];
+
+function fileNameLooksLike(fileName: string, extensions: string[]): boolean {
+  const lowerName = fileName.toLowerCase();
+  return extensions.some((extension) => lowerName.endsWith(extension));
+}
+
+export function isSupportedInvoiceUpload(file: Pick<Express.Multer.File, 'mimetype' | 'originalname'>): boolean {
+  return file.mimetype === 'application/pdf'
+    || INVOICE_IMAGE_MIME_TYPES.has(file.mimetype.toLowerCase())
+    || fileNameLooksLike(file.originalname, INVOICE_UPLOAD_EXTENSIONS);
+}
+
+export function isHeicLikeUpload(file: Pick<Express.Multer.File, 'mimetype' | 'originalname'>): boolean {
+  const mime = file.mimetype.toLowerCase();
+  return mime === 'image/heic'
+    || mime === 'image/heif'
+    || fileNameLooksLike(file.originalname, ['.heic', '.heif']);
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
-    if (allowed.includes(file.mimetype)) {
+    if (isSupportedInvoiceUpload(file)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF, PNG, JPEG, and WebP files are supported'));
+      cb(new Error('Only PDF, PNG, JPEG, WebP, HEIC, and HEIF files are supported'));
     }
   },
 });
@@ -247,6 +276,27 @@ function buildImageEvidence(file: Express.Multer.File): InvoiceDocumentPageEvide
   }];
 }
 
+async function normalizeInvoiceUpload(file: Express.Multer.File): Promise<Express.Multer.File> {
+  if (!isHeicLikeUpload(file)) {
+    return file;
+  }
+
+  const converted = await convertHeic({
+    buffer: file.buffer,
+    format: 'JPEG',
+    quality: 0.92,
+  });
+  const convertedBuffer = Buffer.isBuffer(converted) ? converted : Buffer.from(converted);
+
+  return {
+    ...file,
+    buffer: convertedBuffer,
+    mimetype: 'image/jpeg',
+    originalname: file.originalname.replace(/\.(heic|heif)$/i, '.jpg'),
+    size: convertedBuffer.byteLength,
+  };
+}
+
 function normalizeParsedLine(rawLine: ParsedInvoiceLine): ParsedInvoiceLine | null {
   const vendorItemName = String(rawLine.vendor_item_name ?? '').trim();
   if (!vendorItemName) {
@@ -277,10 +327,11 @@ async function parseOneFile(
   store: InventoryStore,
   vendorIdOverride?: number,
 ): Promise<InvoiceParseResult[]> {
+  const normalizedFile = await normalizeInvoiceUpload(file);
   const vendors = await store.listVendors();
-  const pages = file.mimetype === 'application/pdf'
-    ? await extractPdfEvidence(file.buffer)
-    : buildImageEvidence(file);
+  const pages = normalizedFile.mimetype === 'application/pdf'
+    ? await extractPdfEvidence(normalizedFile.buffer)
+    : buildImageEvidence(normalizedFile);
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -288,7 +339,7 @@ async function parseOneFile(
     messages: [
       {
         role: 'user',
-        content: buildInvoiceParseContent(file, pages, vendors, vendorIdOverride),
+        content: buildInvoiceParseContent(normalizedFile, pages, vendors, vendorIdOverride),
       },
     ],
   });
@@ -376,7 +427,7 @@ async function parseOneFile(
       .filter((line) => isInvoiceLineSupportedByTranscript(line, transcript));
 
     if (parsed.lines.length > 0 && normalizedLines.length === 0 && transcript.transcriptTokens.size > 0) {
-      throw new Error(`No invoice lines from ${file.originalname} could be verified against extracted document text`);
+      throw new Error(`No invoice lines from ${normalizedFile.originalname} could be verified against extracted document text`);
     }
 
     const lines: InvoiceLine[] = normalizedLines.map((line) => {

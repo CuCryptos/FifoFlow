@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useVendors } from '../hooks/useVendors';
 import { useCreateItem, useItems } from '../hooks/useItems';
@@ -21,6 +21,8 @@ export function InvoiceUpload({ onClose }: Props) {
   const confirmInvoice = useConfirmInvoice();
   const createItem = useCreateItem();
   const { toast } = useToast();
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const filePickerRef = useRef<HTMLInputElement | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [results, setResults] = useState<InvoiceParseResult[]>([]);
@@ -30,6 +32,58 @@ export function InvoiceUpload({ onClose }: Props) {
   const [createVpFlags, setCreateVpFlags] = useState<Map<string, boolean>>(new Map());
   const [createItemFlags, setCreateItemFlags] = useState<Map<string, boolean>>(new Map());
   const [recordTransactions, setRecordTransactions] = useState(false);
+
+  const addFiles = (incoming: FileList | File[]) => {
+    const nextFiles = Array.from(incoming);
+    const supportedFiles: File[] = [];
+    let unsupportedCount = 0;
+
+    for (const file of nextFiles) {
+      const mime = file.type.toLowerCase();
+      const name = file.name.toLowerCase();
+      const supported =
+        mime === 'application/pdf'
+        || mime === 'image/png'
+        || mime === 'image/jpeg'
+        || mime === 'image/jpg'
+        || mime === 'image/webp'
+        || mime === 'image/heic'
+        || mime === 'image/heif'
+        || name.endsWith('.pdf')
+        || name.endsWith('.png')
+        || name.endsWith('.jpg')
+        || name.endsWith('.jpeg')
+        || name.endsWith('.webp')
+        || name.endsWith('.heic')
+        || name.endsWith('.heif');
+
+      if (supported) {
+        supportedFiles.push(file);
+      } else {
+        unsupportedCount++;
+      }
+    }
+
+    if (unsupportedCount > 0) {
+      toast(`${unsupportedCount} file${unsupportedCount > 1 ? 's were' : ' was'} skipped. Only PDF, PNG, JPEG, WebP, HEIC, and HEIF are supported right now.`, 'info');
+    }
+
+    if (!supportedFiles.length) {
+      return;
+    }
+
+    setFiles((current) => {
+      const deduped = new Map<string, File>();
+      for (const file of [...current, ...supportedFiles]) {
+        deduped.set(`${file.name}:${file.size}:${file.lastModified}`, file);
+      }
+      return [...deduped.values()];
+    });
+  };
+
+  const removeFileAt = (index: number) => {
+    setFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  };
 
   const handleParse = () => {
     if (files.length === 0) return;
@@ -200,20 +254,71 @@ export function InvoiceUpload({ onClose }: Props) {
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Invoice Files</label>
               <input
+                ref={filePickerRef}
                 type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.webp"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif"
                 multiple
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                className="bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary w-full"
+                onChange={(e) => {
+                  addFiles(e.target.files ?? []);
+                  e.currentTarget.value = '';
+                }}
+                className="hidden"
               />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => {
+                  addFiles(e.target.files ?? []);
+                  e.currentTarget.value = '';
+                }}
+                className="hidden"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => filePickerRef.current?.click()}
+                  className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
+                >
+                  Choose files
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="rounded-lg border border-accent-indigo/30 bg-accent-indigo/5 px-3 py-2 text-sm font-medium text-accent-indigo hover:bg-accent-indigo/10 transition-colors"
+                >
+                  Take photo
+                </button>
+              </div>
               <p className="text-xs text-text-muted mt-1">
-                Select one or more invoices (PDF, PNG, JPEG, WebP). Vendor will be auto-detected.
+                Use `Take photo` on a phone or laptop camera, or choose existing PDFs and images, including HEIC from newer iPhones. Everything still goes through the same invoice parser and review flow.
               </p>
             </div>
 
             {files.length > 0 && (
-              <div className="text-sm text-text-secondary">
-                {files.length} file{files.length > 1 ? 's' : ''} selected: {files.map((f) => f.name).join(', ')}
+              <div className="space-y-2">
+                <div className="text-sm text-text-secondary">
+                  {files.length} file{files.length > 1 ? 's' : ''} selected
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {files.map((file, index) => (
+                    <span
+                      key={`${file.name}:${file.size}:${file.lastModified}`}
+                      className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-1 text-xs text-text-secondary"
+                    >
+                      <span>{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFileAt(index)}
+                        className="text-text-muted hover:text-text-primary"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 

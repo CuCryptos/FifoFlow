@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { InvoiceDocumentPageEvidence } from '../routes/invoiceDocumentExtraction.js';
 import {
   buildInvoiceTranscriptContext,
+  isHeicLikeUpload,
   isInvoiceLineSupportedByTranscript,
+  isSupportedInvoiceUpload,
   parseInvoiceAiResponse,
 } from '../routes/invoices.js';
 
@@ -141,6 +143,32 @@ describe('invoice transcript guardrails', () => {
       source_text: 'ZZZ SMOKE TONIC WATER 200ML',
       page_number: 1,
     }, transcript)).toBe(true);
+  });
+});
+
+describe('invoice upload support', () => {
+  it('accepts HEIC and HEIF uploads from phone cameras', () => {
+    expect(isSupportedInvoiceUpload({
+      mimetype: 'image/heic',
+      originalname: 'invoice-photo.HEIC',
+    } as Express.Multer.File)).toBe(true);
+
+    expect(isSupportedInvoiceUpload({
+      mimetype: 'application/octet-stream',
+      originalname: 'invoice-photo.heif',
+    } as Express.Multer.File)).toBe(true);
+  });
+
+  it('recognizes HEIC-like uploads that need conversion', () => {
+    expect(isHeicLikeUpload({
+      mimetype: 'image/heic',
+      originalname: 'invoice.heic',
+    } as Express.Multer.File)).toBe(true);
+
+    expect(isHeicLikeUpload({
+      mimetype: 'image/jpeg',
+      originalname: 'invoice.jpg',
+    } as Express.Multer.File)).toBe(false);
   });
 });
 
