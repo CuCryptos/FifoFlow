@@ -72,6 +72,7 @@ import type {
   ExternalProductSyncRun,
   CreateLunchMenuInput,
   BulkUpdateLunchMenuDaysInput,
+  GenerateLunchMenuInput,
   ImportLunchMenuInput,
   LunchMenu,
   LunchMenuCalendarView,
@@ -1862,6 +1863,11 @@ export const api = {
     },
     import: (data: ImportLunchMenuInput) =>
       fetchJson<{ menu: LunchMenu; calendar: LunchMenuCalendarView }>('/lunch-menus/import', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    generate: (data: GenerateLunchMenuInput) =>
+      fetchJson<{ menu: LunchMenu; calendar: LunchMenuCalendarView; patterns_info: { source_menu_count: number; main_dishes_found: number; side_dishes_found: number; generated_days: number } }>('/lunch-menus/generate', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

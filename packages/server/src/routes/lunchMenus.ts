@@ -4,9 +4,11 @@ import type Database from 'better-sqlite3';
 import {
   bulkUpdateLunchMenuDaysSchema,
   createLunchMenuSchema,
+  generateLunchMenuSchema,
   importLunchMenuSchema,
   updateLunchMenuSchema,
   type BulkUpdateLunchMenuDaysInput,
+  type GenerateLunchMenuInput,
   type LunchMenu,
   type LunchMenuCalendarDay,
   type LunchMenuCalendarView,
@@ -16,6 +18,7 @@ import {
 } from '@fifoflow/shared';
 import { parseLunchMenuPdfBuffer } from '../lunchMenus/lunchMenuPdfParser.js';
 import { renderLunchMenuPdf } from '../lunchMenus/lunchMenuPdfExport.js';
+import { generateLunchMenuFromHistory } from '../lunchMenus/lunchMenuGenerator.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -168,8 +171,28 @@ export function createLunchMenuRoutes(db: Database.Database): Router {
     }
   });
 
-  router.post('/generate', (_req, res) => {
-    res.status(501).json({ error: 'Lunch menu generation is not implemented yet.' });
+  router.post('/generate', (req, res) => {
+    const parsed = generateLunchMenuSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    try {
+      const result = generateLunchMenuForVenue(db, parsed.data);
+      res.status(201).json(result);
+    } catch (error: any) {
+      const message = error.message ?? 'Failed to generate lunch menu';
+      if (message.includes('not found')) {
+        res.status(404).json({ error: message });
+        return;
+      }
+      if (message.includes('already exists')) {
+        res.status(409).json({ error: message });
+        return;
+      }
+      res.status(500).json({ error: message });
+    }
   });
 
   router.post('/', (req, res) => {
@@ -416,6 +439,57 @@ function importLunchMenuIntoDatabase(db: Database.Database, input: {
     throw new Error('Lunch menu import completed but the menu could not be reloaded');
   }
   return menu;
+}
+
+function generateLunchMenuForVenue(
+  db: Database.Database,
+  input: GenerateLunchMenuInput,
+): { menu: LunchMenu; calendar: LunchMenuCalendarView; patterns_info: { source_menu_count: number; main_dishes_found: number; side_dishes_found: number; generated_days: number } } {
+  const existingTarget = db.prepare(
+    'SELECT id FROM lunch_menus WHERE venue_id = ? AND year = ? AND month = ?'
+  ).get(input.venue_id, input.year, input.month) as { id: number } | undefined;
+
+  if (existingTarget) {
+    throw new Error('A lunch menu already exists for this venue and month.');
+  }
+
+  const sourceMenus = input.source_menu_ids.map((menuId) => getLunchMenuById(db, menuId)).filter(Boolean) as LunchMenu[];
+  if (sourceMenus.length !== input.source_menu_ids.length) {
+    throw new Error('One or more source lunch menus were not found');
+  }
+  if (sourceMenus.some((menu) => menu.venue_id !== input.venue_id)) {
+    throw new Error('Source lunch menus must belong to the selected venue');
+  }
+
+  const generated = generateLunchMenuFromHistory(
+    input.year,
+    input.month,
+    sourceMenus.map((menu) => ({
+      id: menu.id,
+      year: menu.year,
+      month: menu.month,
+      items: menu.items,
+    })),
+  );
+
+  const menu = importLunchMenuIntoDatabase(db, {
+    venue_id: input.venue_id,
+    year: input.year,
+    month: input.month,
+    name: input.name?.trim() || `${MONTH_NAMES[input.month - 1]} ${input.year} Lunch Menu`,
+    notes: input.notes?.trim() || `Auto-generated from ${generated.patterns_info.source_menu_count} historical lunch menu${generated.patterns_info.source_menu_count === 1 ? '' : 's'}.`,
+    replace_existing: true,
+    parsed_days: generated.days.map((day) => ({
+      ...day,
+      nutrition: null,
+    })),
+  });
+
+  return {
+    menu,
+    calendar: buildCalendarView(menu),
+    patterns_info: generated.patterns_info,
+  };
 }
 
 function upsertLunchMenuDays(db: Database.Database, menuId: number, input: BulkUpdateLunchMenuDaysInput): void {

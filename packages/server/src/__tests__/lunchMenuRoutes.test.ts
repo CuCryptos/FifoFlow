@@ -148,4 +148,48 @@ describe('Lunch Menus API', () => {
     expect(res.headers['content-type']).toContain('application/pdf');
     expect((res.body as Buffer).subarray(0, 4).toString()).toBe('%PDF');
   });
+
+  it('generates a new lunch menu from historical menus', async () => {
+    const sourceMenuId = Number(db.prepare(`
+      INSERT INTO lunch_menus (venue_id, year, month, name, status, notes)
+      VALUES (?, ?, ?, ?, 'published', ?)
+    `).run(venueId, 2026, 2, 'February 2026 Lunch Menu', null).lastInsertRowid);
+
+    db.prepare(`
+      INSERT INTO lunch_menu_items (
+        menu_id, date, dish_type, dish_name, recipe_id, sort_order, calories, protein_g, fat_g, sugar_g
+      ) VALUES
+        (?, '2026-02-02', 'main', 'Chicken Katsu', null, 0, null, null, null, null),
+        (?, '2026-02-02', 'side', 'Steamed Rice', null, 1, null, null, null, null),
+        (?, '2026-02-02', 'side', 'Garden Salad', null, 2, null, null, null, null),
+        (?, '2026-02-03', 'main', 'BBQ Chicken', null, 0, null, null, null, null),
+        (?, '2026-02-03', 'side', 'Mac Salad', null, 1, null, null, null, null)
+    `).run(sourceMenuId, sourceMenuId, sourceMenuId, sourceMenuId, sourceMenuId);
+
+    const res = await request(app)
+      .post('/api/lunch-menus/generate')
+      .send({
+        venue_id: venueId,
+        year: 2026,
+        month: 5,
+        source_menu_ids: [sourceMenuId],
+        name: 'May 2026 Lunch Menu',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.menu).toMatchObject({
+      venue_id: venueId,
+      year: 2026,
+      month: 5,
+      name: 'May 2026 Lunch Menu',
+    });
+    expect(res.body.patterns_info).toMatchObject({
+      source_menu_count: 1,
+      generated_days: 21,
+    });
+    expect(res.body.menu.items.length).toBeGreaterThan(0);
+    const generatedDay = res.body.calendar.weeks.flatMap((week: any) => week.days).find((day: any) => day.date === '2026-05-05');
+    expect(generatedDay.main_dishes[0]).toBeTruthy();
+    expect(generatedDay.sides.length).toBeGreaterThan(0);
+  });
 });

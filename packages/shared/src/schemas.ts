@@ -1071,6 +1071,15 @@ export const importLunchMenuSchema = z.object({
   parsed_days: z.array(lunchMenuParsedDaySchema).min(1),
 });
 
+export const generateLunchMenuSchema = z.object({
+  venue_id: z.number().int().positive(),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  source_menu_ids: z.array(z.number().int().positive()).min(1),
+  name: z.string().min(1).max(200).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
 export type LunchMenuItemInput = z.infer<typeof lunchMenuItemSchema>;
 export type LunchMenuInput = z.infer<typeof lunchMenuSchema>;
 export type LunchMenuListEntryInput = z.infer<typeof lunchMenuListEntrySchema>;
@@ -1086,6 +1095,7 @@ export type BulkUpdateLunchMenuDaysInput = z.infer<typeof bulkUpdateLunchMenuDay
 export type CreateLunchMenuInput = z.infer<typeof createLunchMenuSchema>;
 export type UpdateLunchMenuInput = z.infer<typeof updateLunchMenuSchema>;
 export type ImportLunchMenuInput = z.infer<typeof importLunchMenuSchema>;
+export type GenerateLunchMenuInput = z.infer<typeof generateLunchMenuSchema>;
 
 // Snack Bar Sales
 export const createSaleSchema = z.object({

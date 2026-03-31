@@ -3,6 +3,7 @@ import { api } from '../api';
 import type {
   BulkUpdateLunchMenuDaysInput,
   CreateLunchMenuInput,
+  GenerateLunchMenuInput,
   ImportLunchMenuInput,
   UpdateLunchMenuInput,
 } from '@fifoflow/shared';
@@ -50,6 +51,18 @@ export function useImportLunchMenu() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: ImportLunchMenuInput) => api.lunchMenus.import(data),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['lunch-menus'] });
+      qc.setQueryData(['lunch-menus', result.menu.id], result.menu);
+      qc.setQueryData(['lunch-menus', result.menu.id, 'calendar'], result.calendar);
+    },
+  });
+}
+
+export function useGenerateLunchMenu() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: GenerateLunchMenuInput) => api.lunchMenus.generate(data),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['lunch-menus'] });
       qc.setQueryData(['lunch-menus', result.menu.id], result.menu);

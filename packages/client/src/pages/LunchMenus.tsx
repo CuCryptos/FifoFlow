@@ -7,6 +7,7 @@ import type { LunchMenuDayNutrition, LunchMenuParsedDay, LunchMenuParseResult } 
 import {
   useCreateLunchMenu,
   useDeleteLunchMenu,
+  useGenerateLunchMenu,
   useImportLunchMenu,
   useLunchMenu,
   useLunchMenuCalendar,
@@ -41,10 +42,13 @@ export function LunchMenus() {
   const { selectedVenueId } = useVenueContext();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const generatePanelRef = useRef<HTMLDivElement | null>(null);
   const today = useMemo(() => new Date(), []);
   const [createYear, setCreateYear] = useState(today.getMonth() === 11 ? today.getFullYear() + 1 : today.getFullYear());
   const [createMonth, setCreateMonth] = useState(today.getMonth() === 11 ? 1 : today.getMonth() + 2);
   const [draftName, setDraftName] = useState('');
+  const [historySourceIds, setHistorySourceIds] = useState<number[]>([]);
+  const [historySelectionTouched, setHistorySelectionTouched] = useState(false);
   const [selectedMenuId, setSelectedMenuId] = useState<number | null>(null);
   const [selectedDayDate, setSelectedDayDate] = useState<string | null>(null);
   const [mainText, setMainText] = useState('');
@@ -58,6 +62,7 @@ export function LunchMenus() {
 
   const menusQuery = useLunchMenus({ venue_id: selectedVenueId ?? undefined });
   const createMenu = useCreateLunchMenu();
+  const generateMenu = useGenerateLunchMenu();
   const updateMenu = useUpdateLunchMenu();
   const updateDays = useUpdateLunchMenuDays();
   const deleteMenu = useDeleteLunchMenu();
@@ -80,6 +85,17 @@ export function LunchMenus() {
     }
     setSelectedMenuId(menus[0]?.id ?? null);
   }, [menus, selectedMenuId]);
+
+  useEffect(() => {
+    setHistorySourceIds((current) => {
+      const available = menus.map((menu) => menu.id);
+      const filtered = current.filter((menuId) => available.includes(menuId));
+      if (!historySelectionTouched) {
+        return available;
+      }
+      return filtered;
+    });
+  }, [historySelectionTouched, menus]);
 
   useEffect(() => {
     const firstDay = selectedCalendar?.weeks.flatMap((week) => week.days)[0]?.date ?? null;
@@ -129,6 +145,32 @@ export function LunchMenus() {
       toast('Lunch menu created.', 'success');
     } catch (error: any) {
       toast(error.message ?? 'Failed to create lunch menu.', 'error');
+    }
+  }
+
+  async function handleGenerateFromHistory() {
+    if (!selectedVenueId) {
+      toast('Select a venue before generating a lunch menu.', 'error');
+      return;
+    }
+    if (historySourceIds.length === 0) {
+      toast('Choose at least one historical lunch menu as a source.', 'error');
+      return;
+    }
+
+    try {
+      const result = await generateMenu.mutateAsync({
+        venue_id: selectedVenueId,
+        year: createYear,
+        month: createMonth,
+        source_menu_ids: historySourceIds,
+        name: draftName.trim() || null,
+        notes: null,
+      });
+      setSelectedMenuId(result.menu.id);
+      toast(`Generated ${result.patterns_info.generated_days} weekdays from ${result.patterns_info.source_menu_count} historical menu${result.patterns_info.source_menu_count === 1 ? '' : 's'}.`, 'success');
+    } catch (error: any) {
+      toast(error.message ?? 'Failed to generate lunch menu from history.', 'error');
     }
   }
 
@@ -301,10 +343,10 @@ export function LunchMenus() {
           </button>
           <button
             type="button"
-            disabled
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-400"
+            onClick={() => generatePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="rounded-full border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
           >
-            Generate from history next wave
+            Generate from history
           </button>
           <Link
             to="/recipes"
@@ -366,6 +408,81 @@ export function LunchMenus() {
               </button>
             </form>
           </WorkflowPanel>
+
+          <div ref={generatePanelRef}>
+            <WorkflowPanel
+              title="Generate From History"
+              description="Use older monthly menus from this venue as the pattern source for a new month. The generated month still lands in the normal FIFOFlow editor for cleanup."
+            >
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  Target month: <span className="font-semibold text-slate-950">{MONTH_NAMES[createMonth - 1]} {createYear}</span>
+                </div>
+                {menus.length > 0 ? (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistorySelectionTouched(true);
+                          setHistorySourceIds(menus.map((menu) => menu.id));
+                        }}
+                        className="rounded-full border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistorySelectionTouched(true);
+                          setHistorySourceIds([]);
+                        }}
+                        className="rounded-full border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {menus.map((menu) => (
+                        <label key={menu.id} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={historySourceIds.includes(menu.id)}
+                            onChange={(event) => {
+                              setHistorySelectionTouched(true);
+                              setHistorySourceIds((current) => event.target.checked
+                                ? [...current, menu.id]
+                                : current.filter((value) => value !== menu.id));
+                            }}
+                            className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <div className="font-semibold text-slate-950">{menu.name}</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {MONTH_NAMES[menu.month - 1]} {menu.year} • {menu.item_count} saved dish row{menu.item_count === 1 ? '' : 's'}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateFromHistory()}
+                      disabled={generateMenu.isPending || historySourceIds.length === 0}
+                      className="rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-sky-300"
+                    >
+                      {generateMenu.isPending ? 'Generating...' : 'Generate lunch menu from history'}
+                    </button>
+                  </>
+                ) : (
+                  <WorkflowEmptyState
+                    title="No historical menus yet"
+                    body="Import or create at least one monthly menu for this venue first. Those become the source months for generated menus."
+                  />
+                )}
+              </div>
+            </WorkflowPanel>
+          </div>
 
           <WorkflowPanel
             title="Monthly Menus"

@@ -40,17 +40,18 @@ export async function renderLunchMenuPdf(menu: LunchMenu, options: LunchMenuPdfO
 function drawDocument(doc: PDFKit.PDFDocument, menu: LunchMenu, options: LunchMenuPdfOptions): void {
   const monthName = MONTH_NAMES[menu.month - 1] ?? String(menu.month);
   const title = menu.name?.trim() || `${monthName} ${menu.year} Lunch Menu`;
-  const venueName = options.venueName?.trim() || 'FIFOFlow Lunch Menu';
+  const venueName = options.venueName?.trim() || 'PARADISE KITCHEN';
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
-  const margin = 28;
+  const margin = 26;
   const usableWidth = pageWidth - margin * 2;
   const usableHeight = pageHeight - margin * 2;
-  const headerHeight = 72;
-  const footerHeight = 28;
-  const weekdayHeaderHeight = 24;
+  const headerHeight = 102;
+  const footerHeight = 30;
+  const weekdayHeaderHeight = 22;
   const weekCount = countWeeks(menu.year, menu.month);
-  const cellHeight = Math.max(88, (usableHeight - headerHeight - footerHeight - weekdayHeaderHeight) / Math.max(weekCount, 1));
+  const availableGridHeight = usableHeight - headerHeight - footerHeight - weekdayHeaderHeight;
+  const cellHeight = Math.max(72, availableGridHeight / Math.max(weekCount, 1));
   const cellWidth = usableWidth / 5;
   const startY = margin + headerHeight;
 
@@ -79,17 +80,27 @@ function drawHeader(
   year: number,
 ): void {
   doc.save();
-  doc.lineWidth(1.25).strokeColor('#0f172a').roundedRect(x, y, width, 58, 10).stroke();
+  const topY = y + 8;
+  const bottomY = y + 96;
+  doc.lineWidth(2).strokeColor('#111827').moveTo(x + 10, topY).lineTo(x + width - 10, topY).stroke();
+  doc.lineWidth(0.6).moveTo(x + 10, topY + 4).lineTo(x + width - 10, topY + 4).stroke();
+  doc.lineWidth(2).moveTo(x + 10, bottomY).lineTo(x + width - 10, bottomY).stroke();
+  doc.lineWidth(0.6).moveTo(x + 10, bottomY - 4).lineTo(x + width - 10, bottomY - 4).stroke();
 
-  doc.font('Helvetica-Bold').fontSize(22).fillColor('#0f172a').text(venueName, x + 16, y + 10, {
+  doc.font('Helvetica-Bold').fontSize(24).fillColor('#111827').text(venueName.toUpperCase(), x + 16, y + 20, {
+    align: 'center',
+    width: width - 32,
+  });
+  doc.font('Helvetica-Oblique').fontSize(9).fillColor('#475569').text('Serving Fresh, Quality Meals Daily', x + 16, y + 44, {
+    align: 'center',
+    width: width - 32,
+  });
+  doc.moveTo(x + width / 2 - 92, y + 58).lineTo(x + width / 2 + 92, y + 58).lineWidth(0.5).strokeColor('#64748b').stroke();
+  doc.font('Helvetica-Bold').fontSize(19).fillColor('#111827').text(`${monthName} ${year}`, x + 16, y + 62, {
     width: width - 32,
     align: 'center',
   });
-  doc.font('Helvetica').fontSize(10).fillColor('#475569').text(`${monthName} ${year} employee lunch menu`, x + 16, y + 34, {
-    width: width - 32,
-    align: 'center',
-  });
-  doc.font('Helvetica-Bold').fontSize(12).fillColor('#0f172a').text(title, x + 16, y + 50, {
+  doc.font('Helvetica').fontSize(8).fillColor('#6b7280').text('EMPLOYEE LUNCH MENU', x + 16, y + 83, {
     width: width - 32,
     align: 'center',
   });
@@ -100,8 +111,8 @@ function drawWeekdayHeaders(doc: PDFKit.PDFDocument, x: number, y: number, cellW
   WEEKDAY_LABELS.forEach((label, index) => {
     const cellX = x + index * cellWidth;
     doc.save();
-    doc.rect(cellX, y, cellWidth, height).fillAndStroke('#f8fafc', '#cbd5e1');
-    doc.font('Helvetica-Bold').fontSize(10).fillColor('#334155').text(label.toUpperCase(), cellX + 8, y + 7, {
+    doc.rect(cellX, y, cellWidth, height).fillAndStroke('#f8fafc', '#9ca3af');
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#374151').text(label.toUpperCase(), cellX + 8, y + 6, {
       width: cellWidth - 16,
       align: 'center',
     });
@@ -111,42 +122,50 @@ function drawWeekdayHeaders(doc: PDFKit.PDFDocument, x: number, y: number, cellW
 
 function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: number, height: number, day: CalendarDayData | null): void {
   doc.save();
-  doc.rect(x, y, width, height).fillAndStroke('#ffffff', '#cbd5e1');
+  doc.rect(x, y, width, height).fillAndStroke('#ffffff', '#b8c2cf');
 
   if (!day) {
     doc.restore();
     return;
   }
 
-  doc.roundedRect(x + width - 28, y, 28, 22, 0).fillAndStroke('#f8fafc', '#cbd5e1');
-  doc.font('Helvetica-Bold').fontSize(10).fillColor('#0f172a').text(String(day.dayNumber), x + width - 24, y + 6, {
-    width: 20,
+  const dateBoxWidth = 28;
+  const dateBoxHeight = 22;
+  doc.lineWidth(0.55).strokeColor('#9ca3af')
+    .moveTo(x + width - dateBoxWidth, y + dateBoxHeight)
+    .lineTo(x + width, y + dateBoxHeight)
+    .stroke();
+  doc.moveTo(x + width - dateBoxWidth, y)
+    .lineTo(x + width - dateBoxWidth, y + dateBoxHeight)
+    .stroke();
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text(String(day.dayNumber), x + width - dateBoxWidth + 4, y + 6, {
+    width: dateBoxWidth - 8,
     align: 'center',
   });
 
-  let cursorY = y + 10;
+  let cursorY = y + 14;
   if (day.mains.length > 0) {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor('#0f172a').text(day.mains.join('\n'), x + 8, cursorY, {
+    doc.font('Helvetica-Bold').fontSize(8.8).fillColor('#111827').text(day.mains.join('\n'), x + 10, cursorY, {
       width: width - 16,
       align: 'center',
-      height: 36,
+      height: 34,
       ellipsis: true,
     });
-    cursorY = Math.max(cursorY + 28, doc.y + 4);
+    cursorY = Math.max(cursorY + 25, doc.y + 3);
   }
 
   if (day.sides.length > 0) {
-    doc.font('Helvetica').fontSize(8).fillColor('#334155').text(day.sides.join(', '), x + 8, cursorY, {
-      width: width - 16,
+    doc.font('Helvetica').fontSize(7.6).fillColor('#374151').text(day.sides.join(', '), x + 10, cursorY, {
+      width: width - 20,
       align: 'center',
-      height: 24,
+      height: 23,
       ellipsis: true,
     });
   }
 
   if (day.nutrition) {
-    const nutritionY = y + height - 28;
-    doc.moveTo(x + 12, nutritionY - 4).lineTo(x + width - 12, nutritionY - 4).strokeColor('#e2e8f0').stroke();
+    const nutritionY = y + height - 26;
+    doc.moveTo(x + 10, nutritionY - 3).lineTo(x + width - 10, nutritionY - 3).lineWidth(0.45).strokeColor('#c4cbd4').stroke();
     const parts = [
       day.nutrition.calories > 0 ? `${day.nutrition.calories} cal` : null,
       day.nutrition.protein_g > 0 ? `${Math.round(day.nutrition.protein_g)}g P` : null,
@@ -155,7 +174,7 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
     ].filter(Boolean);
 
     if (parts.length > 0) {
-      doc.font('Helvetica').fontSize(7).fillColor('#64748b').text(parts.join(' • '), x + 8, nutritionY + 2, {
+      doc.font('Helvetica').fontSize(6.7).fillColor('#6b7280').text(parts.join(' • '), x + 8, nutritionY + 2, {
         width: width - 16,
         align: 'center',
       });
@@ -167,14 +186,25 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
 
 function drawFooter(doc: PDFKit.PDFDocument, x: number, y: number, width: number, notes: string | null): void {
   doc.save();
-  doc.moveTo(x, y).lineTo(x + width, y).strokeColor('#cbd5e1').stroke();
-  const footerText = notes?.trim()
-    ? `Notes: ${notes.trim()}`
-    : 'Generated from FIFOFlow lunch menu planning.';
-  doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(footerText, x, y + 6, {
-    width,
+  doc.moveTo(x, y).lineTo(x + width, y).lineWidth(1).strokeColor('#111827').stroke();
+  doc.font('Helvetica').fontSize(7.8).fillColor('#4b5563').text('*Nutritional Information are Estimates Only.', x + 4, y + 6, {
+    width: width / 2 - 20,
     align: 'left',
   });
+  doc.font('Helvetica').fontSize(7.8).fillColor('#4b5563').text('Lunch served Monday - Friday | 11:30 AM - 1:00 PM', x + width / 2, y + 6, {
+    width: width / 2 - 4,
+    align: 'right',
+  });
+  doc.fillColor('#6b7280').circle(x + width / 2, y + 12, 1.5).fill();
+  doc.circle(x + width / 2 - 10, y + 12, 1).fill();
+  doc.circle(x + width / 2 + 10, y + 12, 1).fill();
+  if (notes?.trim()) {
+    doc.font('Helvetica').fontSize(7.2).fillColor('#6b7280').text(`Notes: ${notes.trim()}`, x + 4, y - 12, {
+      width: width - 8,
+      align: 'left',
+      ellipsis: true,
+    });
+  }
   doc.restore();
 }
 
