@@ -2,6 +2,7 @@ import { UNITS } from '@fifoflow/shared';
 import type { Item, ItemStorage } from '@fifoflow/shared';
 import { deriveInventoryUnitEconomics } from './InventoryUnitEconomicsSummary';
 import {
+  InventoryQuickEditTextField,
   InventoryQuickEditNumberField,
   InventoryQuickEditSelectField,
 } from './InventoryQuickEditFields';
@@ -153,6 +154,22 @@ export function InventoryQueueCard({
           )}
 
           <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(220px,0.9fr)]">
+            <div className="rounded-2xl bg-slate-50 px-3 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Item identity</div>
+              <div className="mt-3 grid gap-2">
+                <InventoryQuickEditTextField
+                  itemId={item.id}
+                  field="name"
+                  value={item.name}
+                  label="Product name"
+                  placeholder="Inventory item name"
+                />
+                <div className="text-xs text-slate-500">
+                  Rename the product here or open the item drawer for a fuller edit surface.
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-2xl bg-slate-50 px-3 py-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stocking</div>
               <div className="mt-3 grid gap-2">

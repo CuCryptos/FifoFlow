@@ -31,6 +31,7 @@ export function InventoryItemSidePanel({
   venues: Array<{ id: number; name: string }>;
 }) {
   type InventoryItemPanelDraft = {
+    name: string;
     category: Item['category'];
     vendor_id: string;
     venue_id: string;
@@ -48,6 +49,7 @@ export function InventoryItemSidePanel({
   type DraftField = keyof InventoryItemPanelDraft;
   type FieldSaveState = 'idle' | 'saving' | 'saved' | 'rolled_back';
   const emptyFieldStates = (): Record<DraftField, FieldSaveState> => ({
+    name: 'idle',
     category: 'idle',
     vendor_id: 'idle',
     venue_id: 'idle',
@@ -63,6 +65,7 @@ export function InventoryItemSidePanel({
     order_unit_price: 'idle',
   });
   const emptySavedAt = (): Record<DraftField, number | null> => ({
+    name: null,
     category: null,
     vendor_id: null,
     venue_id: null,
@@ -81,6 +84,7 @@ export function InventoryItemSidePanel({
   const updateItem = useUpdateItem();
   const { toast } = useToast();
   const [draft, setDraft] = useState<InventoryItemPanelDraft>({
+    name: item.name,
     category: item.category,
     vendor_id: item.vendor_id == null ? '' : String(item.vendor_id),
     venue_id: item.venue_id == null ? '' : String(item.venue_id),
@@ -98,13 +102,16 @@ export function InventoryItemSidePanel({
   const [fieldStates, setFieldStates] = useState<Record<DraftField, FieldSaveState>>(emptyFieldStates);
   const [fieldSavedAt, setFieldSavedAt] = useState<Record<DraftField, number | null>>(emptySavedAt);
   const [groupBanner, setGroupBanner] = useState<{
+    identity: { tone: 'success' | 'error'; message: string } | null;
     assignments: { tone: 'success' | 'error'; message: string } | null;
     ordering: { tone: 'success' | 'error'; message: string } | null;
   }>({
+    identity: null,
     assignments: null,
     ordering: null,
   });
   const [fieldRollbackReasons, setFieldRollbackReasons] = useState<Record<DraftField, string | null>>({
+    name: null,
     category: null,
     vendor_id: null,
     venue_id: null,
@@ -122,6 +129,7 @@ export function InventoryItemSidePanel({
 
   useEffect(() => {
     setDraft({
+      name: item.name,
       category: item.category,
       vendor_id: item.vendor_id == null ? '' : String(item.vendor_id),
       venue_id: item.venue_id == null ? '' : String(item.venue_id),
@@ -139,10 +147,12 @@ export function InventoryItemSidePanel({
     setFieldStates(emptyFieldStates());
     setFieldSavedAt(emptySavedAt());
     setGroupBanner({
+      identity: null,
       assignments: null,
       ordering: null,
     });
     setFieldRollbackReasons({
+      name: null,
       category: null,
       vendor_id: null,
       venue_id: null,
@@ -161,7 +171,7 @@ export function InventoryItemSidePanel({
 
   useEffect(() => {
     const timers: number[] = [];
-    (['assignments', 'ordering'] as const).forEach((key) => {
+    (['identity', 'assignments', 'ordering'] as const).forEach((key) => {
       if (groupBanner[key]?.tone === 'success') {
         const timer = window.setTimeout(() => {
           setGroupBanner((current) => (
@@ -193,10 +203,13 @@ export function InventoryItemSidePanel({
     itemSizeUnit: item.item_size_unit,
   });
   const assignmentFields: DraftField[] = ['category', 'vendor_id', 'venue_id', 'storage_area_id'];
+  const identityFields: DraftField[] = ['name'];
   const orderingFields: DraftField[] = ['unit', 'reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'inner_unit', 'item_size_value', 'item_size_unit', 'order_unit_price'];
   const changedFields = (Object.entries(draft) as Array<[DraftField, string]>)
     .filter(([field, value]) => {
       switch (field) {
+        case 'name':
+          return value.trim() !== item.name;
         case 'category':
           return value !== item.category;
         case 'vendor_id':
@@ -229,7 +242,9 @@ export function InventoryItemSidePanel({
     })
     .map(([field]) => field);
   const assignmentChangedFields = assignmentFields.filter((field) => changedFields.includes(field));
+  const identityChangedFields = identityFields.filter((field) => changedFields.includes(field));
   const orderingChangedFields = orderingFields.filter((field) => changedFields.includes(field));
+  const identityFieldStates = Object.fromEntries(identityFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
   const assignmentFieldStates = Object.fromEntries(assignmentFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
   const orderingFieldStates = Object.fromEntries(orderingFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
 
@@ -237,6 +252,9 @@ export function InventoryItemSidePanel({
     const patch: Record<string, string | number | null> = {};
     fields.forEach((field) => {
       switch (field) {
+        case 'name':
+          patch.name = draft.name.trim();
+          break;
         case 'category':
           patch.category = draft.category;
           break;
@@ -281,7 +299,7 @@ export function InventoryItemSidePanel({
     return patch;
   };
 
-  const saveFieldGroup = (fields: DraftField[], label: string, groupKey: 'assignments' | 'ordering') => {
+  const saveFieldGroup = (fields: DraftField[], label: string, groupKey: 'identity' | 'assignments' | 'ordering') => {
     const fieldsToSave = fields.filter((field) => changedFields.includes(field));
     if (fieldsToSave.length === 0) {
       return;
@@ -398,6 +416,45 @@ export function InventoryItemSidePanel({
       </div>
 
       <ItemIdentifierEditor itemId={item.id} item={item} compact />
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Item identity</div>
+            <div className="mt-1 text-sm text-slate-600">Rename the inventory item here. The drawer title updates from the same saved record.</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <FieldStateSummary changedCount={identityChangedFields.length} fieldStates={identityFieldStates} />
+            <button
+              type="button"
+              onClick={() => saveFieldGroup(identityFields, 'Item name', 'identity')}
+              disabled={updateItem.isPending || identityChangedFields.length === 0 || draft.name.trim().length === 0}
+              className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {updateItem.isPending ? 'Saving...' : identityChangedFields.length === 0 ? 'No changes' : 'Save name'}
+            </button>
+          </div>
+        </div>
+        {groupBanner.identity && (
+          <StickyGroupBanner
+            tone={groupBanner.identity.tone}
+            message={groupBanner.identity.message}
+            onDismiss={() => setGroupBanner((current) => ({ ...current, identity: null }))}
+          />
+        )}
+        <div className="mt-3">
+          <label className="space-y-1 text-sm">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Product name</span>
+            <input
+              type="text"
+              value={draft.name}
+              onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
+              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.name)}`}
+            />
+            <FieldStateHint state={fieldStates.name} dirty={changedFields.includes('name')} savedAt={fieldSavedAt.name} rollbackReason={fieldRollbackReasons.name} />
+          </label>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="flex items-center justify-between gap-3">
