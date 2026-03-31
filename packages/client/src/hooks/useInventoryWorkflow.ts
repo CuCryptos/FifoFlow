@@ -21,6 +21,7 @@ export type InventorySortField =
 
 export type InventorySortDir = 'asc' | 'desc';
 export type InventoryExportGroupBy = 'storage_area' | 'venue' | 'vendor';
+export type InventoryBarExportMode = 'combined' | 'split_bar';
 
 export interface UseInventoryWorkflowOptions {
   initialSearch?: string;
@@ -28,6 +29,7 @@ export interface UseInventoryWorkflowOptions {
   initialAreaFilter?: string;
   initialShowReorderOnly?: boolean;
   initialExportGroupBy?: InventoryExportGroupBy;
+  initialBarExportMode?: InventoryBarExportMode;
   initialSortField?: InventorySortField;
   initialSortDir?: InventorySortDir;
   initialWorkflowFocus?: InventoryWorkflowFocus;
@@ -41,6 +43,7 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
     initialAreaFilter = '',
     initialShowReorderOnly = false,
     initialExportGroupBy = 'storage_area',
+    initialBarExportMode = 'combined',
     initialSortField = 'name',
     initialSortDir = 'asc',
     initialWorkflowFocus = 'all',
@@ -52,6 +55,7 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
   const [areaFilter, setAreaFilter] = useState(initialAreaFilter);
   const [showReorderOnly, setShowReorderOnly] = useState(initialShowReorderOnly);
   const [exportGroupBy, setExportGroupBy] = useState<InventoryExportGroupBy>(initialExportGroupBy);
+  const [barExportMode, setBarExportMode] = useState<InventoryBarExportMode>(initialBarExportMode);
   const [sortField, setSortField] = useState<InventorySortField>(initialSortField);
   const [sortDir, setSortDir] = useState<InventorySortDir>(initialSortDir);
   const [workflowFocus, setWorkflowFocus] = useState<InventoryWorkflowFocus>(initialWorkflowFocus);
@@ -78,11 +82,13 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
     setAreaFilter(initialAreaFilter);
     setShowReorderOnly(initialShowReorderOnly);
     setExportGroupBy(initialExportGroupBy);
+    setBarExportMode(initialBarExportMode);
     setSortField(initialSortField);
     setSortDir(initialSortDir);
     setWorkflowFocus(initialWorkflowFocus);
   }, [
     initialAreaFilter,
+    initialBarExportMode,
     initialCategory,
     initialExportGroupBy,
     initialSearch,
@@ -122,6 +128,8 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
     setShowReorderOnly,
     exportGroupBy,
     setExportGroupBy,
+    barExportMode,
+    setBarExportMode,
     sortField,
     setSortField,
     sortDir,
@@ -168,6 +176,7 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
     category,
     closeDialogs,
     exportGroupBy,
+    barExportMode,
     mergeTargetId,
     resetBulkActions,
     resetFilters,

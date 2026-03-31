@@ -89,6 +89,8 @@ export function Inventory() {
     setShowReorderOnly,
     exportGroupBy,
     setExportGroupBy,
+    barExportMode,
+    setBarExportMode,
     sortField,
     setSortField,
     sortDir,
@@ -339,6 +341,8 @@ export function Inventory() {
         <InventoryPageActions
           exportGroupBy={exportGroupBy}
           onExportGroupByChange={setExportGroupBy}
+          barExportMode={barExportMode}
+          onBarExportModeChange={setBarExportMode}
           areas={areas ?? []}
           vendors={vendors ?? []}
           venues={venues ?? []}
