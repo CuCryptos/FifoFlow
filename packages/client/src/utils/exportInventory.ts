@@ -29,9 +29,35 @@ interface RowData {
 
 type ExportSection = 'Alcohol' | 'Non-Alcohol' | 'Other Inventory';
 
-const ALCOHOL_CATEGORIES = new Set(['Beer', 'Wine', 'Spirits']);
+const ALCOHOL_CATEGORIES = new Set(['Beer', 'Wine', 'Spirits', 'Ready to Drink']);
 const NON_ALCOHOL_CATEGORIES = new Set(['Mixer', 'Mixers', 'Non-Alcoholic', 'Beverages']);
 const SECTION_ORDER: ExportSection[] = ['Alcohol', 'Non-Alcohol', 'Other Inventory'];
+const ALCOHOL_NAME_PATTERNS = [
+  /\bale\b/i,
+  /\bbeer\b/i,
+  /\bbourbon\b/i,
+  /\bbrandy\b/i,
+  /\bchampagne\b/i,
+  /\bcider\b/i,
+  /\bcognac\b/i,
+  /\bgin\b/i,
+  /\blique?u?r\b/i,
+  /\bliqeuer\b/i,
+  /\bliquor\b/i,
+  /\bmezcal\b/i,
+  /\bprosecco\b/i,
+  /\brtd\b/i,
+  /\brum\b/i,
+  /\bsake\b/i,
+  /\bscotch\b/i,
+  /\bspirits?\b/i,
+  /\bstout\b/i,
+  /\btequila\b/i,
+  /\bvodka\b/i,
+  /\bvermouth\b/i,
+  /\bwhisk(?:e)?y\b/i,
+  /\bwine\b/i,
+];
 
 function getGroupName(item: Item, groupBy: GroupBy, areaLookup: Map<number, string>, venueLookup: Map<number, string>, vendorLookup: Map<number, string>): string {
   switch (groupBy) {
@@ -53,6 +79,9 @@ function groupByLabel(groupBy: GroupBy): string {
 }
 
 function classifyBarSection(item: Item): ExportSection {
+  if (ALCOHOL_NAME_PATTERNS.some((pattern) => pattern.test(item.name))) {
+    return 'Alcohol';
+  }
   if (ALCOHOL_CATEGORIES.has(item.category)) {
     return 'Alcohol';
   }
