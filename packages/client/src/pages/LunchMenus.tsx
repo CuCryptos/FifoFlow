@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useToast } from '../contexts/ToastContext';
+import type { LunchMenuDayNutrition, LunchMenuParsedDay, LunchMenuParseResult } from '@fifoflow/shared';
 import {
   useCreateLunchMenu,
   useDeleteLunchMenu,
@@ -52,7 +53,7 @@ export function LunchMenus() {
   const [proteinText, setProteinText] = useState('');
   const [fatText, setFatText] = useState('');
   const [sugarText, setSugarText] = useState('');
-  const [parsedUpload, setParsedUpload] = useState<Awaited<ReturnType<typeof api.lunchMenus.uploadPdf>> | null>(null);
+  const [parsedUpload, setParsedUpload] = useState<LunchMenuParseResult | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
 
   const menusQuery = useLunchMenus({ venue_id: selectedVenueId ?? undefined });
@@ -194,6 +195,18 @@ export function LunchMenus() {
     } catch (error: any) {
       toast(error.message ?? 'Failed to import parsed lunch menu.', 'error');
     }
+  }
+
+  function updateParsedDay(date: string, updater: (day: LunchMenuParsedDay) => LunchMenuParsedDay) {
+    setParsedUpload((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        days: current.days.map((day) => (day.date === date ? updater(day) : day)),
+      };
+    });
   }
 
   async function handleSaveDayEdits(event: React.FormEvent<HTMLFormElement>) {
@@ -407,10 +420,114 @@ export function LunchMenus() {
                 <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
                   {parsedUpload.days.map((day) => (
                     <div key={day.date} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{day.date}</div>
-                      <div className="mt-2 text-sm text-slate-700">
-                        <div><span className="font-semibold text-slate-950">Mains:</span> {day.main_dishes.join(', ') || 'None'}</div>
-                        <div className="mt-1"><span className="font-semibold text-slate-950">Sides:</span> {day.sides.join(', ') || 'None'}</div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{day.date}</div>
+                        {day.needs_review ? (
+                          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                            Needs review
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                            Clean
+                          </span>
+                        )}
+                      </div>
+                      {day.review_notes.length > 0 ? (
+                        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          {day.review_notes.join(' • ')}
+                        </div>
+                      ) : null}
+                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        <label className="space-y-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                          <span>Main dishes</span>
+                          <textarea
+                            value={day.main_dishes.join('\n')}
+                            onChange={(event) => updateParsedDay(day.date, (current) => ({
+                              ...current,
+                              main_dishes: parseEditorLines(event.target.value),
+                              needs_review: false,
+                              review_notes: [],
+                            }))}
+                            rows={3}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-slate-900"
+                          />
+                        </label>
+                        <label className="space-y-2 text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                          <span>Sides</span>
+                          <textarea
+                            value={day.sides.join('\n')}
+                            onChange={(event) => updateParsedDay(day.date, (current) => ({
+                              ...current,
+                              sides: parseEditorLines(event.target.value),
+                              needs_review: false,
+                              review_notes: [],
+                            }))}
+                            rows={3}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-900"
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <LabeledNumberInput
+                          label="Calories"
+                          value={day.nutrition?.calories ? String(day.nutrition.calories) : ''}
+                            onChange={(value) => updateParsedDay(day.date, (current) => ({
+                              ...current,
+                              nutrition: buildParsedNutritionPayload(
+                                value,
+                                current.nutrition?.protein_g ? String(current.nutrition.protein_g) : '',
+                                current.nutrition?.fat_g ? String(current.nutrition.fat_g) : '',
+                                current.nutrition?.sugar_g ? String(current.nutrition.sugar_g) : '',
+                              ),
+                            needs_review: false,
+                            review_notes: [],
+                          }))}
+                        />
+                        <LabeledNumberInput
+                          label="Protein (g)"
+                          value={day.nutrition?.protein_g ? String(day.nutrition.protein_g) : ''}
+                            onChange={(value) => updateParsedDay(day.date, (current) => ({
+                              ...current,
+                              nutrition: buildParsedNutritionPayload(
+                                current.nutrition?.calories ? String(current.nutrition.calories) : '',
+                                value,
+                                current.nutrition?.fat_g ? String(current.nutrition.fat_g) : '',
+                                current.nutrition?.sugar_g ? String(current.nutrition.sugar_g) : '',
+                              ),
+                            needs_review: false,
+                            review_notes: [],
+                          }))}
+                        />
+                        <LabeledNumberInput
+                          label="Fat (g)"
+                          value={day.nutrition?.fat_g ? String(day.nutrition.fat_g) : ''}
+                            onChange={(value) => updateParsedDay(day.date, (current) => ({
+                              ...current,
+                              nutrition: buildParsedNutritionPayload(
+                                current.nutrition?.calories ? String(current.nutrition.calories) : '',
+                                current.nutrition?.protein_g ? String(current.nutrition.protein_g) : '',
+                                value,
+                                current.nutrition?.sugar_g ? String(current.nutrition.sugar_g) : '',
+                              ),
+                            needs_review: false,
+                            review_notes: [],
+                          }))}
+                        />
+                        <LabeledNumberInput
+                          label="Sugar (g)"
+                          value={day.nutrition?.sugar_g ? String(day.nutrition.sugar_g) : ''}
+                            onChange={(value) => updateParsedDay(day.date, (current) => ({
+                              ...current,
+                              nutrition: buildParsedNutritionPayload(
+                                current.nutrition?.calories ? String(current.nutrition.calories) : '',
+                                current.nutrition?.protein_g ? String(current.nutrition.protein_g) : '',
+                                current.nutrition?.fat_g ? String(current.nutrition.fat_g) : '',
+                                value,
+                            ),
+                            needs_review: false,
+                            review_notes: [],
+                          }))}
+                        />
                       </div>
                     </div>
                   ))}
@@ -671,6 +788,20 @@ function buildNutritionPayload(calories: string, protein: string, fat: string, s
   }
 
   return payload;
+}
+
+function buildParsedNutritionPayload(calories: string, protein: string, fat: string, sugar: string): LunchMenuDayNutrition | null {
+  const payload = buildNutritionPayload(calories, protein, fat, sugar);
+  if (!payload) {
+    return null;
+  }
+
+  return {
+    calories: payload.calories ?? 0,
+    protein_g: payload.protein_g ?? 0,
+    fat_g: payload.fat_g ?? 0,
+    sugar_g: payload.sugar_g ?? 0,
+  };
 }
 
 function parseNullableNumber(value: string): number | null {

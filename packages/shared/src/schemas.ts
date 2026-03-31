@@ -1009,7 +1009,10 @@ export const lunchMenuParsedDaySchema = z.object({
   date: z.string().min(1),
   main_dishes: z.array(z.string().min(1)).default([]),
   sides: z.array(z.string().min(1)).default([]),
+  nutrition: lunchMenuDayNutritionSchema.nullable().default(null),
   raw_text: z.string().nullable(),
+  needs_review: z.boolean().default(false),
+  review_notes: z.array(z.string()).default([]),
 });
 
 export const lunchMenuParseResultSchema = z.object({

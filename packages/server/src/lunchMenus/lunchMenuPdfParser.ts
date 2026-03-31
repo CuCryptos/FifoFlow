@@ -1,5 +1,5 @@
 import { extractPdfEvidence } from '../routes/invoiceDocumentExtraction.js';
-import type { LunchMenuParseResult, LunchMenuParsedDay } from '@fifoflow/shared';
+import type { LunchMenuDayNutrition, LunchMenuParseResult, LunchMenuParsedDay } from '@fifoflow/shared';
 
 const MONTH_LOOKUP = new Map<string, number>([
   ['january', 1], ['jan', 1],
@@ -53,6 +53,20 @@ interface ColumnRange {
 interface WeekBuffer {
   dates: Array<string | null>;
   cells: string[][];
+}
+
+interface TextSpan {
+  text: string;
+  start: number;
+  end: number;
+}
+
+interface ParsedCellContent {
+  main_dishes: string[];
+  sides: string[];
+  nutrition: LunchMenuDayNutrition | null;
+  needs_review: boolean;
+  review_notes: string[];
 }
 
 export async function parseLunchMenuPdfBuffer(buffer: Buffer, fileName: string): Promise<LunchMenuParseResult> {
@@ -185,6 +199,9 @@ function parseGridLayout(text: string, year: number | null, month: number | null
 
     for (let lineIndex = index + 1; lineIndex < lines.length; lineIndex += 1) {
       const line = lines[lineIndex] ?? '';
+      if (isFooterLine(line)) {
+        break;
+      }
       if (detectHeaderLine(line)) {
         index = lineIndex - 1;
         break;
@@ -194,19 +211,11 @@ function parseGridLayout(text: string, year: number | null, month: number | null
         continue;
       }
 
-      const cells = splitLineByRanges(line, headerMatch.ranges);
-      if (cells.every((cell) => cell.length === 0)) {
-        continue;
-      }
-
-      const detectedDates = cells.map((cell) => extractLeadingDate(cell, year, month));
-      if (detectedDates.filter(Boolean).length >= 2) {
+      const detectedDates = detectWeekDateLine(line, year, month);
+      if (detectedDates.filter(Boolean).length > 0) {
         currentWeek = {
           dates: detectedDates,
-          cells: cells.map((cell) => {
-            const stripped = stripLeadingDate(cell);
-            return stripped ? [stripped] : [];
-          }),
+          cells: detectedDates.map(() => []),
         };
         weekBuffers.push(currentWeek);
         continue;
@@ -216,12 +225,13 @@ function parseGridLayout(text: string, year: number | null, month: number | null
         continue;
       }
 
-      cells.forEach((cell, weekdayIndex) => {
-        if (!cell || !currentWeek?.dates[weekdayIndex]) {
-          return;
+      for (const span of extractTextSpans(line)) {
+        const weekdayIndex = assignSpanToWeekday(span, headerMatch.ranges);
+        if (weekdayIndex == null || !currentWeek.dates[weekdayIndex]) {
+          continue;
         }
-        currentWeek.cells[weekdayIndex]?.push(cell);
-      });
+        currentWeek.cells[weekdayIndex]?.push(span.text);
+      }
     }
 
     for (const week of weekBuffers) {
@@ -230,15 +240,18 @@ function parseGridLayout(text: string, year: number | null, month: number | null
           return;
         }
         const rawText = week.cells[weekdayIndex]?.join('\n').trim() ?? '';
-        const parsed = parseCellContent(rawText);
-        if (parsed.main_dishes.length === 0 && parsed.sides.length === 0) {
+        const parsed = parseStructuredCellLines(week.cells[weekdayIndex] ?? []);
+        if (parsed.main_dishes.length === 0 && parsed.sides.length === 0 && !parsed.nutrition) {
           return;
         }
         days.push({
           date: dateValue,
           main_dishes: parsed.main_dishes,
           sides: parsed.sides,
+          nutrition: parsed.nutrition,
           raw_text: rawText || null,
+          needs_review: parsed.needs_review,
+          review_notes: parsed.review_notes,
         });
       });
     }
@@ -270,8 +283,8 @@ function parseLooseDayRows(text: string, year: number | null, month: number | nu
       continue;
     }
 
-    const parsed = parseCellContent(match[2] ?? '');
-    if (parsed.main_dishes.length === 0 && parsed.sides.length === 0) {
+    const parsed = parseFreeformContent(match[2] ?? '');
+    if (parsed.main_dishes.length === 0 && parsed.sides.length === 0 && !parsed.nutrition) {
       continue;
     }
 
@@ -279,7 +292,10 @@ function parseLooseDayRows(text: string, year: number | null, month: number | nu
       date: isoDate,
       main_dishes: parsed.main_dishes,
       sides: parsed.sides,
+      nutrition: parsed.nutrition,
       raw_text: match[2]?.trim() ?? null,
+      needs_review: parsed.needs_review,
+      review_notes: parsed.review_notes,
     });
   }
 
@@ -316,6 +332,64 @@ function splitLineByRanges(line: string, ranges: ColumnRange[]): string[] {
   return ranges.map((range) => line.slice(range.start, range.end).trim());
 }
 
+function detectWeekDateLine(line: string, year: number, month: number): Array<string | null> {
+  if (/[A-Za-z]/.test(line)) {
+    return [];
+  }
+
+  const spans = extractTextSpans(line).filter((span) => /^\d{1,2}$/.test(span.text));
+  if (spans.length === 0 || spans.length > 5) {
+    return [];
+  }
+
+  const dates = Array<string | null>(5).fill(null);
+  spans.forEach((span, index) => {
+    if (index < 5) {
+      dates[index] = toIsoDate(year, month, Number(span.text));
+    }
+  });
+  return dates;
+}
+
+function extractTextSpans(line: string): TextSpan[] {
+  const spans: TextSpan[] = [];
+  const regex = /\S+(?: \S+)*/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(line)) !== null) {
+    const text = match[0]?.trim();
+    if (!text) {
+      continue;
+    }
+    spans.push({
+      text,
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  return spans;
+}
+
+function assignSpanToWeekday(span: TextSpan, ranges: ColumnRange[]): number | null {
+  const midPoint = span.start + ((span.end - span.start) / 2);
+
+  for (let index = 0; index < ranges.length; index += 1) {
+    const range = ranges[index];
+    if (!range) {
+      continue;
+    }
+    const upperBound = index === ranges.length - 1
+      ? Number.POSITIVE_INFINITY
+      : ((range.end - 1) + (ranges[index + 1]?.start ?? range.end)) / 2;
+    if (midPoint >= range.start && midPoint < upperBound) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
 function extractLeadingDate(cell: string, year: number, month: number): string | null {
   const match = cell.match(/^(\d{1,2})(?:\b|\s)/);
   if (!match) {
@@ -346,20 +420,127 @@ function isWeekend(isoDate: string): boolean {
   return weekday === 0 || weekday === 6;
 }
 
-function parseCellContent(content: string): Pick<LunchMenuParsedDay, 'main_dishes' | 'sides'> {
+function parseStructuredCellLines(lines: string[]): ParsedCellContent {
+  const rawLines = lines
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((line) => !isFooterLine(line));
+
+  if (rawLines.length === 0) {
+    return {
+      main_dishes: [],
+      sides: [],
+      nutrition: null,
+      needs_review: false,
+      review_notes: [],
+    };
+  }
+
+  const contentLines: string[] = [];
+  const nutritionLines: string[] = [];
+  let inNutrition = false;
+
+  for (const line of rawLines) {
+    if (/nutritional information/i.test(line)) {
+      inNutrition = true;
+      nutritionLines.push(line);
+      continue;
+    }
+    if (inNutrition) {
+      nutritionLines.push(line);
+    } else {
+      contentLines.push(line);
+    }
+  }
+
+  const mainLine = cleanDishName(contentLines[0] ?? '');
+  const collapsedSideLines = collapseWrappedContentLines(contentLines.slice(1));
+  const sideText = collapsedSideLines.join(', ');
+  const sideParts = sideText
+    .split(/[,;]+/)
+    .map((part) => cleanDishName(part))
+    .filter(Boolean)
+    .filter((part) => !looksLikeNutritionFragment(part));
+  const nutrition = parseNutritionText(nutritionLines.join(' '));
+
+  const mainDishes = mainLine ? [mainLine] : [];
+  const sides = dedupeStrings(sideParts.filter((entry) => !mainDishes.includes(entry)));
+  const reviewNotes = buildReviewNotes({
+    main_dishes: mainDishes,
+    sides,
+    nutrition,
+    raw_text: rawLines.join('\n'),
+  });
+
+  return {
+    main_dishes: mainDishes,
+    sides,
+    nutrition,
+    needs_review: reviewNotes.length > 0,
+    review_notes: reviewNotes,
+  };
+}
+
+function collapseWrappedContentLines(lines: string[]): string[] {
+  const collapsed: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = cleanDishName(rawLine);
+    if (!line) {
+      continue;
+    }
+
+    if (collapsed.length === 0) {
+      collapsed.push(line);
+      continue;
+    }
+
+    const previous = collapsed[collapsed.length - 1] ?? '';
+    const continuation = isContinuationLine(previous, line);
+    if (continuation) {
+      collapsed[collapsed.length - 1] = `${previous} ${line}`.replace(/\s+/g, ' ').trim();
+    } else {
+      collapsed.push(line);
+    }
+  }
+
+  return collapsed;
+}
+
+function isContinuationLine(previous: string, current: string): boolean {
+  if (current.split(/\s+/).length <= 1) {
+    return true;
+  }
+
+  if (/^(?:and|with|rice|potatoes|salad|chips|bread|rolls?)$/i.test(current)) {
+    return true;
+  }
+
+  return /\b(?:mashed|steamed|garden|mac|mixed|white|brown|fried|garlic|green)$|,$/i.test(previous);
+}
+
+function parseFreeformContent(content: string): ParsedCellContent {
+  const nutrition = parseNutritionText(content);
   const normalized = content
+    .replace(/\bNutritional Information:?\b/gi, '\n')
     .replace(/\s*•\s*/g, '\n')
-    .replace(/\s*\|\s*/g, '\n')
     .replace(/\s{2,}/g, '\n')
     .replace(/\bserved with\b/gi, '\n');
 
   const parts = normalized
     .split(/[\n,;]+/)
     .map((part) => cleanDishName(part))
-    .filter((part) => part.length > 0);
+    .filter((part) => part.length > 0)
+    .filter((part) => !looksLikeNutritionFragment(part));
 
   if (parts.length === 0) {
-    return { main_dishes: [], sides: [] };
+    return {
+      main_dishes: [],
+      sides: [],
+      nutrition,
+      needs_review: nutrition == null,
+      review_notes: nutrition == null ? ['No dish text could be recovered from this parsed row.'] : [],
+    };
   }
 
   const mainDishes: string[] = [];
@@ -387,16 +568,103 @@ function parseCellContent(content: string): Pick<LunchMenuParsedDay, 'main_dishe
     sides.push(...parts.slice(1));
   }
 
+  const dedupedMains = dedupeStrings(mainDishes);
+  const dedupedSides = dedupeStrings(sides.filter((entry) => !dedupedMains.includes(entry)));
+  const reviewNotes = buildReviewNotes({
+    main_dishes: dedupedMains,
+    sides: dedupedSides,
+    nutrition,
+    raw_text: content,
+  });
+
   return {
-    main_dishes: dedupeStrings(mainDishes),
-    sides: dedupeStrings(sides.filter((entry) => !mainDishes.includes(entry))),
+    main_dishes: dedupedMains,
+    sides: dedupedSides,
+    nutrition,
+    needs_review: reviewNotes.length > 0,
+    review_notes: reviewNotes,
   };
+}
+
+function parseNutritionText(text: string): LunchMenuDayNutrition | null {
+  if (!text) {
+    return null;
+  }
+
+  const calories = extractNutritionNumber(text, /(\d+(?:\.\d+)?)\s*cal\b/i);
+  const protein = extractNutritionNumber(text, /(\d+(?:\.\d+)?)\s*g\s*p\b/i);
+  const fat = extractNutritionNumber(text, /(\d+(?:\.\d+)?)\s*g\s*f\b/i);
+  const sugar = extractNutritionNumber(text, /(\d+(?:\.\d+)?)\s*g\s*s\b/i);
+
+  if (calories == null && protein == null && fat == null && sugar == null) {
+    return null;
+  }
+
+  return {
+    calories: calories ?? 0,
+    protein_g: protein ?? 0,
+    fat_g: fat ?? 0,
+    sugar_g: sugar ?? 0,
+  };
+}
+
+function extractNutritionNumber(text: string, pattern: RegExp): number | null {
+  const match = text.match(pattern);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildReviewNotes(day: Pick<LunchMenuParsedDay, 'main_dishes' | 'sides' | 'nutrition' | 'raw_text'>): string[] {
+  const notes: string[] = [];
+  const allEntries = [...day.main_dishes, ...day.sides];
+
+  if (day.main_dishes.length === 0) {
+    notes.push('Main dish could not be identified cleanly.');
+  }
+
+  if (allEntries.some((entry) => looksTruncated(entry))) {
+    notes.push('At least one dish name looks truncated and should be reviewed.');
+  }
+
+  if (allEntries.some((entry) => looksLikeNutritionFragment(entry))) {
+    notes.push('Nutrition text leaked into dish content and should be corrected.');
+  }
+
+  if (!day.nutrition && /\bcal\b|\bg\s*[PFS]\b/i.test(day.raw_text ?? '')) {
+    notes.push('Nutrition text was detected but not fully recovered.');
+  }
+
+  return dedupeStrings(notes);
+}
+
+function looksTruncated(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 3) {
+    return true;
+  }
+  return /^[a-z]/.test(trimmed) || /(?:^|[\s-])[a-z]{1,2}$/.test(trimmed);
+}
+
+function looksLikeNutritionFragment(value: string): boolean {
+  return /\b(?:nutri|itional information|cal\b|\d+\s*g\s*[PFS])\b/i.test(value);
+}
+
+function isFooterLine(line: string): boolean {
+  return /generated from fifoflow lunch menu planning|lunch served monday\s*-\s*friday|\*?nutritional information are estimates only/i.test(line);
 }
 
 function cleanDishName(value: string): string {
   return value
     .replace(/^[-–•]+/, '')
+    .replace(/\bNutritional Information:?\b/gi, '')
+    .replace(/\b\d+(?:\.\d+)?\s*cal\b/gi, '')
+    .replace(/\b\d+(?:\.\d+)?\s*g\s*[PFS]\b/gi, '')
+    .replace(/\s*\|\s*/g, ' ')
     .replace(/\s+/g, ' ')
+    .replace(/^,+|,+$/g, '')
     .trim();
 }
 
@@ -410,16 +678,22 @@ function mergeParsedDays(days: LunchMenuParsedDay[]): LunchMenuParsedDay[] {
         date: day.date,
         main_dishes: dedupeStrings(day.main_dishes),
         sides: dedupeStrings(day.sides),
+        nutrition: day.nutrition,
         raw_text: day.raw_text,
+        needs_review: day.needs_review,
+        review_notes: dedupeStrings(day.review_notes),
       });
       continue;
     }
 
     current.main_dishes = dedupeStrings([...current.main_dishes, ...day.main_dishes]);
     current.sides = dedupeStrings([...current.sides, ...day.sides]);
+    current.nutrition = current.nutrition ?? day.nutrition;
     if (!current.raw_text && day.raw_text) {
       current.raw_text = day.raw_text;
     }
+    current.needs_review = current.needs_review || day.needs_review;
+    current.review_notes = dedupeStrings([...current.review_notes, ...day.review_notes]);
   }
 
   return Array.from(merged.values());

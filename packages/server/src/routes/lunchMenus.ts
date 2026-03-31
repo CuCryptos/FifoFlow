@@ -351,7 +351,12 @@ function importLunchMenuIntoDatabase(db: Database.Database, input: {
   name?: string | null;
   notes?: string | null;
   replace_existing?: boolean;
-  parsed_days: Array<{ date: string; main_dishes: string[]; sides: string[] }>;
+  parsed_days: Array<{
+    date: string;
+    main_dishes: string[];
+    sides: string[];
+    nutrition?: { calories: number; protein_g: number; fat_g: number; sugar_g: number } | null;
+  }>;
 }): LunchMenu {
   const transaction = db.transaction(() => {
     let menuId = input.menu_id ?? null;
@@ -428,7 +433,12 @@ function upsertLunchMenuDays(db: Database.Database, menuId: number, input: BulkU
 function insertParsedDays(
   db: Database.Database,
   menuId: number,
-  days: Array<{ date: string; main_dishes: string[]; sides: string[] }>,
+  days: Array<{
+    date: string;
+    main_dishes: string[];
+    sides: string[];
+    nutrition?: { calories: number; protein_g: number; fat_g: number; sugar_g: number } | null;
+  }>,
 ): void {
   const insert = db.prepare(`
     INSERT INTO lunch_menu_items (
@@ -446,13 +456,47 @@ function insertParsedDays(
   `);
 
   for (const day of days) {
+    const nutritionTargetType = day.main_dishes.length > 0 ? 'main' : day.sides.length > 0 ? 'side' : null;
+    let nutritionWritten = false;
     let sortOrder = 0;
+
     for (const main of day.main_dishes) {
-      insert.run(menuId, day.date, 'main', main, null, sortOrder, null, null, null, null);
+      const includeNutrition = nutritionTargetType === 'main' && !nutritionWritten;
+      insert.run(
+        menuId,
+        day.date,
+        'main',
+        main,
+        null,
+        sortOrder,
+        includeNutrition ? day.nutrition?.calories ?? null : null,
+        includeNutrition ? day.nutrition?.protein_g ?? null : null,
+        includeNutrition ? day.nutrition?.fat_g ?? null : null,
+        includeNutrition ? day.nutrition?.sugar_g ?? null : null,
+      );
+      if (includeNutrition) {
+        nutritionWritten = true;
+      }
       sortOrder += 1;
     }
+
     for (const side of day.sides) {
-      insert.run(menuId, day.date, 'side', side, null, sortOrder, null, null, null, null);
+      const includeNutrition = nutritionTargetType === 'side' && !nutritionWritten;
+      insert.run(
+        menuId,
+        day.date,
+        'side',
+        side,
+        null,
+        sortOrder,
+        includeNutrition ? day.nutrition?.calories ?? null : null,
+        includeNutrition ? day.nutrition?.protein_g ?? null : null,
+        includeNutrition ? day.nutrition?.fat_g ?? null : null,
+        includeNutrition ? day.nutrition?.sugar_g ?? null : null,
+      );
+      if (includeNutrition) {
+        nutritionWritten = true;
+      }
       sortOrder += 1;
     }
   }

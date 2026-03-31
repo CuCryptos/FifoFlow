@@ -42,13 +42,24 @@ describe('Lunch Menus API', () => {
             date: '2026-04-06',
             main_dishes: ['Chicken Katsu'],
             sides: ['Rice', 'Mac Salad'],
+            nutrition: {
+              calories: 540,
+              protein_g: 28,
+              fat_g: 17,
+              sugar_g: 6,
+            },
             raw_text: 'Chicken Katsu, Rice, Mac Salad',
+            needs_review: false,
+            review_notes: [],
           },
           {
             date: '2026-04-07',
             main_dishes: ['Beef Stew'],
             sides: ['Green Salad'],
+            nutrition: null,
             raw_text: 'Beef Stew, Green Salad',
+            needs_review: false,
+            review_notes: [],
           },
         ],
       });
@@ -66,6 +77,12 @@ describe('Lunch Menus API', () => {
       date: '2026-04-06',
       main_dishes: ['Chicken Katsu'],
       sides: ['Rice', 'Mac Salad'],
+      nutrition: {
+        calories: 540,
+        protein_g: 28,
+        fat_g: 17,
+        sugar_g: 6,
+      },
     });
   });
 

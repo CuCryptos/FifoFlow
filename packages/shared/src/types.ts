@@ -905,7 +905,10 @@ export interface LunchMenuParsedDay {
   date: string;
   main_dishes: string[];
   sides: string[];
+  nutrition: LunchMenuDayNutrition | null;
   raw_text: string | null;
+  needs_review: boolean;
+  review_notes: string[];
 }
 
 export interface LunchMenuParseResult {
