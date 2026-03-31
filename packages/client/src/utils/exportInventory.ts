@@ -79,14 +79,14 @@ function groupByLabel(groupBy: GroupBy): string {
 }
 
 function classifyBarSection(item: Item): ExportSection {
+  if (NON_ALCOHOL_CATEGORIES.has(item.category)) {
+    return 'Non-Alcohol';
+  }
   if (ALCOHOL_NAME_PATTERNS.some((pattern) => pattern.test(item.name))) {
     return 'Alcohol';
   }
   if (ALCOHOL_CATEGORIES.has(item.category)) {
     return 'Alcohol';
-  }
-  if (NON_ALCOHOL_CATEGORIES.has(item.category)) {
-    return 'Non-Alcohol';
   }
   return 'Other Inventory';
 }
