@@ -1,20 +1,25 @@
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { useVendors } from '../hooks/useVendors';
-import { useItems } from '../hooks/useItems';
-import { useParseInvoice } from '../hooks/useInvoices';
+import { useCreateItem, useItems } from '../hooks/useItems';
+import { useConfirmInvoice, useParseInvoice } from '../hooks/useInvoices';
 import { useToast } from '../contexts/ToastContext';
 import { api } from '../api';
-import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
+import { useVenueContext } from '../contexts/VenueContext';
+import { CATEGORIES, UNITS } from '@fifoflow/shared';
+import type { Category, InvoiceLine, InvoiceParseResult, Unit } from '@fifoflow/shared';
 
 interface Props {
   onClose: () => void;
 }
 
 export function InvoiceUpload({ onClose }: Props) {
+  const { selectedVenueId } = useVenueContext();
   const { data: vendors } = useVendors();
-  const { data: items } = useItems();
+  const { data: items } = useItems({ venue_id: selectedVenueId ?? undefined });
   const parseInvoice = useParseInvoice();
+  const confirmInvoice = useConfirmInvoice();
+  const createItem = useCreateItem();
   const { toast } = useToast();
 
   const [files, setFiles] = useState<File[]>([]);
@@ -23,6 +28,7 @@ export function InvoiceUpload({ onClose }: Props) {
   const [lineOverrides, setLineOverrides] = useState<Map<string, number | null>>(new Map());
   const [vendorOverrides, setVendorOverrides] = useState<Map<number, number>>(new Map());
   const [createVpFlags, setCreateVpFlags] = useState<Map<string, boolean>>(new Map());
+  const [createItemFlags, setCreateItemFlags] = useState<Map<string, boolean>>(new Map());
   const [recordTransactions, setRecordTransactions] = useState(false);
 
   const handleParse = () => {
@@ -34,17 +40,21 @@ export function InvoiceUpload({ onClose }: Props) {
           setResults(data);
           setActiveResultIdx(0);
           const flags = new Map<string, boolean>();
+          const itemFlags = new Map<string, boolean>();
           data.forEach((result, ri) => {
             result.lines.forEach((line, li) => {
+              const key = `${ri}-${li}`;
               flags.set(
-                `${ri}-${li}`,
+                key,
                 line.matched_item_id != null
                 && (line.match_confidence === 'exact' || line.match_confidence === 'high')
                 && !line.existing_vendor_price_id,
               );
+              itemFlags.set(key, line.matched_item_id == null);
             });
           });
           setCreateVpFlags(flags);
+          setCreateItemFlags(itemFlags);
         },
         onError: (err) => {
           toast(`Parse failed: ${err.message}`, 'error');
@@ -57,53 +67,90 @@ export function InvoiceUpload({ onClose }: Props) {
 
   const handleConfirm = async () => {
     if (results.length === 0) return;
+    const needsItemCreation = results.some((result, ri) => result.lines.some((line, li) => {
+      const key = `${ri}-${li}`;
+      const overrideItemId = lineOverrides.get(key);
+      const itemId = overrideItemId !== undefined ? overrideItemId : line.matched_item_id;
+      return !itemId && (createItemFlags.get(key) ?? false);
+    }));
 
-    // Build all confirmable payloads
-    const payloads: Array<Parameters<typeof api.invoices.confirm>[0]> = [];
-    results.forEach((result, ri) => {
-      const vendorId = vendorOverrides.get(ri) ?? result.vendor_id;
-      if (!vendorId) return;
+    if (needsItemCreation && !selectedVenueId) {
+      toast('Select a venue before creating inventory items from invoice lines', 'error');
+      return;
+    }
 
-      const lines = result.lines
-        .map((line, li) => {
+    setIsConfirming(true);
+    let totalItemsCreated = 0;
+    let totalVpCreated = 0;
+    let totalTxCreated = 0;
+    let totalVendorsAssigned = 0;
+
+    try {
+      const createdItemIds = new Map<string, number>();
+      const payloads: Array<Parameters<typeof api.invoices.confirm>[0]> = [];
+
+      for (const [ri, result] of results.entries()) {
+        const vendorId = vendorOverrides.get(ri) ?? result.vendor_id;
+        if (!vendorId) continue;
+
+        const lines: Parameters<typeof api.invoices.confirm>[0]['lines'] = [];
+        for (const [li, line] of result.lines.entries()) {
           const key = `${ri}-${li}`;
           const overrideItemId = lineOverrides.get(key);
-          const itemId = overrideItemId !== undefined ? overrideItemId : line.matched_item_id;
-          if (!itemId) return null;
-          return {
+          let itemId = overrideItemId !== undefined ? overrideItemId : line.matched_item_id;
+
+          if (!itemId && (createItemFlags.get(key) ?? false)) {
+            const dedupeKey = `${vendorId}:${normalizeInvoiceItemName(line.vendor_item_name)}`;
+            const existingCreatedItemId = createdItemIds.get(dedupeKey);
+
+            if (existingCreatedItemId) {
+              itemId = existingCreatedItemId;
+            } else {
+              const createdItem = await createItem.mutateAsync({
+                name: line.vendor_item_name,
+                category: inferCategoryFromInvoiceLine(line.vendor_item_name),
+                unit: inferInventoryUnitFromInvoiceLine(line),
+                order_unit: coerceInvoiceUnit(line.unit),
+                order_unit_price: line.unit_price,
+                vendor_id: vendorId,
+                venue_id: selectedVenueId ?? null,
+              });
+              itemId = createdItem.id;
+              createdItemIds.set(dedupeKey, itemId);
+              totalItemsCreated++;
+            }
+          }
+
+          if (!itemId) continue;
+
+          lines.push({
             vendor_item_name: line.vendor_item_name,
             matched_item_id: itemId,
             quantity: line.quantity,
             unit: line.unit,
             unit_price: line.unit_price,
             create_vendor_price: createVpFlags.get(key) ?? false,
-          };
-        })
-        .filter((l): l is NonNullable<typeof l> => l !== null);
+          });
+        }
 
-      if (lines.length > 0) {
-        payloads.push({ vendor_id: vendorId, lines, record_transactions: recordTransactions });
+        if (lines.length > 0) {
+          payloads.push({ vendor_id: vendorId, lines, record_transactions: recordTransactions });
+        }
       }
-    });
 
-    if (payloads.length === 0) {
-      toast('No invoices with matched vendors to confirm', 'info');
-      return;
-    }
+      if (payloads.length === 0) {
+        toast('No invoices with matched vendors to confirm', 'info');
+        return;
+      }
 
-    setIsConfirming(true);
-    let totalVpCreated = 0;
-    let totalTxCreated = 0;
-    let totalVendorsAssigned = 0;
-
-    try {
       for (const payload of payloads) {
-        const data = await api.invoices.confirm(payload);
+        const data = await confirmInvoice.mutateAsync(payload);
         totalVpCreated += data.vendor_prices_created;
         totalTxCreated += data.transactions_created;
         totalVendorsAssigned += data.vendors_assigned ?? 0;
       }
       const parts = [];
+      if (totalItemsCreated > 0) parts.push(`${totalItemsCreated} inventory items created`);
       if (totalVendorsAssigned > 0) parts.push(`${totalVendorsAssigned} vendors assigned`);
       if (totalVpCreated > 0) parts.push(`${totalVpCreated} vendor prices created`);
       if (totalTxCreated > 0) parts.push(`${totalTxCreated} transactions recorded`);
@@ -273,6 +320,7 @@ export function InvoiceUpload({ onClose }: Props) {
                         <th className="px-2 py-2 text-text-secondary font-medium text-right">Total</th>
                         <th className="px-2 py-2 text-text-secondary font-medium">Match</th>
                         <th className="px-2 py-2 text-text-secondary font-medium">Mapped Item</th>
+                        <th className="px-2 py-2 text-text-secondary font-medium text-center">Create Item</th>
                         <th className="px-2 py-2 text-text-secondary font-medium text-center">Create VP</th>
                       </tr>
                     </thead>
@@ -290,9 +338,14 @@ export function InvoiceUpload({ onClose }: Props) {
                               <select
                                 value={getEffectiveItemId(line, activeResultIdx, li) ?? ''}
                                 onChange={(e) => {
+                                  const key = `${activeResultIdx}-${li}`;
                                   const newMap = new Map(lineOverrides);
-                                  newMap.set(`${activeResultIdx}-${li}`, e.target.value ? Number(e.target.value) : null);
+                                  newMap.set(key, e.target.value ? Number(e.target.value) : null);
                                   setLineOverrides(newMap);
+
+                                  const newCreateItemMap = new Map(createItemFlags);
+                                  newCreateItemMap.set(key, !e.target.value && line.matched_item_id == null);
+                                  setCreateItemFlags(newCreateItemMap);
                                 }}
                                 className="bg-white border border-border rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-accent-indigo/20"
                               >
@@ -326,9 +379,14 @@ export function InvoiceUpload({ onClose }: Props) {
                                           key={`chip-${suggestion.item_id}`}
                                           type="button"
                                           onClick={() => {
+                                            const key = `${activeResultIdx}-${li}`;
                                             const newMap = new Map(lineOverrides);
-                                            newMap.set(`${activeResultIdx}-${li}`, suggestion.item_id);
+                                            newMap.set(key, suggestion.item_id);
                                             setLineOverrides(newMap);
+
+                                            const newCreateItemMap = new Map(createItemFlags);
+                                            newCreateItemMap.set(key, false);
+                                            setCreateItemFlags(newCreateItemMap);
                                           }}
                                           className={`rounded-full border px-2 py-1 text-[11px] transition-colors ${
                                             selected
@@ -375,6 +433,26 @@ export function InvoiceUpload({ onClose }: Props) {
                           <td className="px-2 py-2 text-center">
                             <input
                               type="checkbox"
+                              checked={createItemFlags.get(`${activeResultIdx}-${li}`) ?? false}
+                              onChange={(e) => {
+                                const key = `${activeResultIdx}-${li}`;
+                                const newMap = new Map(createItemFlags);
+                                newMap.set(key, e.target.checked);
+                                setCreateItemFlags(newMap);
+
+                                if (e.target.checked) {
+                                  const newOverrides = new Map(lineOverrides);
+                                  newOverrides.set(key, null);
+                                  setLineOverrides(newOverrides);
+                                }
+                              }}
+                              disabled={getEffectiveItemId(line, activeResultIdx, li) != null}
+                              className="rounded border-border text-accent-indigo focus:ring-accent-indigo/20 cursor-pointer disabled:opacity-30"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
                               checked={createVpFlags.get(`${activeResultIdx}-${li}`) ?? false}
                               onChange={(e) => {
                                 const newMap = new Map(createVpFlags);
@@ -403,6 +481,15 @@ export function InvoiceUpload({ onClose }: Props) {
                 />
                 Also record as received transactions
               </label>
+              {selectedVenueId ? (
+                <span className="text-xs text-text-muted">
+                  Unmatched rows marked `Create Item` will be saved into the selected venue.
+                </span>
+              ) : (
+                <span className="text-xs text-amber-700">
+                  Select a venue before confirming invoice rows that need new inventory items.
+                </span>
+              )}
             </div>
 
             <div className="flex justify-between">
@@ -411,6 +498,7 @@ export function InvoiceUpload({ onClose }: Props) {
                   setResults([]);
                   setLineOverrides(new Map());
                   setCreateVpFlags(new Map());
+                  setCreateItemFlags(new Map());
                   setVendorOverrides(new Map());
                   setFiles([]);
                 }}
@@ -439,4 +527,43 @@ export function InvoiceUpload({ onClose }: Props) {
       </div>
     </div>
   );
+}
+
+function normalizeInvoiceItemName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function coerceInvoiceUnit(unit: string | null | undefined): Unit | null {
+  if (!unit) return null;
+  const normalized = unit.trim().toLowerCase();
+  return UNITS.find((candidate) => candidate.toLowerCase() === normalized) ?? null;
+}
+
+function inferCategoryFromInvoiceLine(name: string): Category {
+  const text = name.toLowerCase();
+  if (/(vodka|gin|rum|tequila|whiskey|whisky|bourbon|mezcal|liqueur|cordial|amaro|brandy|cognac)/.test(text)) return 'Spirits';
+  if (/(beer|ipa|lager|ale|stout|porter|pilsner|seltzer)/.test(text)) return 'Beer';
+  if (/(wine|cabernet|pinot|sauvignon|chardonnay|merlot|rose|prosecco|champagne)/.test(text)) return 'Wine';
+  if (/(tonic|soda|cola|ginger beer|ginger ale|juice|syrup|bitters|mix|mixer)/.test(text)) return 'Mixers';
+  if (/(milk|cream|cheese|yogurt|butter)/.test(text)) return 'Dairy';
+  if (/(beef|pork|chicken|lamb|duck|sausage|bacon)/.test(text)) return 'Meat';
+  if (/(salmon|tuna|shrimp|fish|oyster|mussel|crab|lobster)/.test(text)) return 'Seafood';
+  if (/(lettuce|tomato|onion|potato|cabbage|carrot|lime|lemon|orange|cilantro|parsley|produce)/.test(text)) return 'Produce';
+  return CATEGORIES.includes('Other') ? 'Other' : CATEGORIES[0];
+}
+
+function inferInventoryUnitFromInvoiceLine(line: Pick<InvoiceLine, 'vendor_item_name' | 'unit'>): Unit {
+  const unitFromInvoice = coerceInvoiceUnit(line.unit);
+  const text = `${line.vendor_item_name} ${line.unit ?? ''}`.toLowerCase();
+
+  if (/\bbottle\b|\bbtls?\b/.test(text)) return 'bottle';
+  if (/\bcan\b|\bcans\b/.test(text)) return 'can';
+  if (/\bcase\b|\bcs\b/.test(text) && /\bbottle\b|\bbtls?\b/.test(text)) return 'bottle';
+  if (/\bcase\b|\bcs\b/.test(text) && /\bcan\b|\bcans\b/.test(text)) return 'can';
+
+  if (unitFromInvoice && unitFromInvoice !== 'case' && unitFromInvoice !== 'box' && unitFromInvoice !== 'pack') {
+    return unitFromInvoice;
+  }
+
+  return 'each';
 }
