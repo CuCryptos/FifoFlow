@@ -86,6 +86,36 @@ describe('Lunch Menus API', () => {
     });
   });
 
+  it('pads the first workweek so dates stay under the correct weekday', async () => {
+    const menuId = Number(db.prepare(`
+      INSERT INTO lunch_menus (venue_id, year, month, name, status, notes)
+      VALUES (?, ?, ?, ?, 'draft', ?)
+    `).run(venueId, 2026, 4, 'April 2026 Lunch Menu', null).lastInsertRowid);
+
+    const res = await request(app).get(`/api/lunch-menus/${menuId}/calendar`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.weeks[0].days).toHaveLength(5);
+    expect(res.body.weeks[0].days[0]).toMatchObject({
+      day_name: 'Monday',
+      date: null,
+      is_placeholder: true,
+      weekday_index: 1,
+    });
+    expect(res.body.weeks[0].days[1]).toMatchObject({
+      day_name: 'Tuesday',
+      date: null,
+      is_placeholder: true,
+      weekday_index: 2,
+    });
+    expect(res.body.weeks[0].days[2]).toMatchObject({
+      day_name: 'Wednesday',
+      date: '2026-04-01',
+      is_placeholder: false,
+      weekday_index: 3,
+    });
+  });
+
   it('updates a single day through the bulk day editor route', async () => {
     const menuId = Number(db.prepare(`
       INSERT INTO lunch_menus (venue_id, year, month, name, status, notes)

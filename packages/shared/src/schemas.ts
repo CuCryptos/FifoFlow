@@ -1,9 +1,11 @@
 import { z } from 'zod';
-import { CATEGORIES, UNITS, TRANSACTION_TYPES, TRANSACTION_REASONS } from './constants.js';
+import { UNITS, TRANSACTION_TYPES, TRANSACTION_REASONS } from './constants.js';
+
+const categorySchema = z.string().trim().min(1, 'Category is required').max(120);
 
 export const createItemSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
-  category: z.enum(CATEGORIES),
+  category: categorySchema,
   unit: z.enum(UNITS),
   order_unit: z.enum(UNITS).nullable().optional(),
   order_unit_price: z.number().min(0).nullable().optional(),
@@ -28,7 +30,7 @@ export const createItemSchema = z.object({
 
 export const updateItemSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200).optional(),
-  category: z.enum(CATEGORIES).optional(),
+  category: categorySchema.optional(),
   unit: z.enum(UNITS).optional(),
   current_qty: z.number().min(0).optional(),
   order_unit: z.enum(UNITS).nullable().optional(),
@@ -82,7 +84,7 @@ export const setItemCountSchema = z.object({
 
 export const createCountSessionSchema = z.object({
   name: z.string().min(1, 'Session name is required').max(120),
-  template_category: z.enum(CATEGORIES).nullable().optional(),
+  template_category: categorySchema.nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
 });
 
@@ -137,7 +139,7 @@ export type RecordCountEntryInput = z.infer<typeof recordCountEntrySchema>;
 export const bulkUpdateItemsSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1),
   updates: z.object({
-    category: z.enum(CATEGORIES).optional(),
+    category: categorySchema.optional(),
     vendor_id: z.number().int().positive().nullable().optional(),
     venue_id: z.number().int().positive().nullable().optional(),
     storage_area_id: z.number().int().positive().nullable().optional(),
@@ -178,6 +180,12 @@ export type ItemStorageRowInput = z.infer<typeof itemStorageRowInputSchema>;
 export type ReplaceItemStorageInput = z.infer<typeof replaceItemStorageSchema>;
 export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
 export type BulkDeleteItemsInput = z.infer<typeof bulkDeleteItemsSchema>;
+
+export const createInventoryCategorySchema = z.object({
+  name: categorySchema,
+});
+
+export type CreateInventoryCategoryInput = z.infer<typeof createInventoryCategorySchema>;
 
 export const createVendorSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
@@ -984,8 +992,10 @@ export const lunchMenuDayNutritionSchema = z.object({
 });
 
 export const lunchMenuCalendarDaySchema = z.object({
-  date: z.string().min(1),
+  date: z.string().min(1).nullable(),
   day_name: z.string().min(1),
+  weekday_index: z.number().int().min(1).max(5),
+  is_placeholder: z.boolean().default(false),
   main_dishes: z.array(z.string()),
   sides: z.array(z.string()),
   nutrition: lunchMenuDayNutritionSchema.nullable(),

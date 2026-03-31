@@ -48,6 +48,7 @@ const MONTH_NAMES = [
 ] as const;
 
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+const WORKWEEK_DAY_INDEXES = [1, 2, 3, 4, 5] as const;
 
 interface LunchMenuRow {
   id: number;
@@ -739,6 +740,8 @@ function buildCalendarView(menu: LunchMenu): LunchMenuCalendarView {
     const existing = itemsByDate.get(item.date) ?? {
       date: item.date,
       day_name: weekdayLabel(item.date),
+      weekday_index: weekdayIndex(item.date),
+      is_placeholder: false,
       main_dishes: [],
       sides: [],
       nutrition: { calories: 0, protein_g: 0, fat_g: 0, sugar_g: 0 },
@@ -759,7 +762,7 @@ function buildCalendarView(menu: LunchMenu): LunchMenuCalendarView {
   }
 
   const weeks: LunchMenuCalendarView['weeks'] = [];
-  let currentWeek: LunchMenuCalendarDay[] = [];
+  let currentWeek = createEmptyWorkweek();
   let weekNumber = 1;
   const daysInMonth = new Date(menu.year, menu.month, 0).getDate();
 
@@ -770,23 +773,25 @@ function buildCalendarView(menu: LunchMenu): LunchMenuCalendarView {
       continue;
     }
 
-    if (weekday === 1 && currentWeek.length > 0) {
+    if (weekday === 1 && currentWeek.some((entry) => !entry.is_placeholder)) {
       weeks.push({ week_number: weekNumber, days: currentWeek });
-      currentWeek = [];
+      currentWeek = createEmptyWorkweek();
       weekNumber += 1;
     }
 
     const existing = itemsByDate.get(dateString);
-    currentWeek.push(existing ?? {
+    currentWeek[weekday - 1] = existing ?? {
       date: dateString,
       day_name: WEEKDAY_LABELS[weekday],
+      weekday_index: weekday,
+      is_placeholder: false,
       main_dishes: [],
       sides: [],
       nutrition: null,
-    });
+    };
   }
 
-  if (currentWeek.length > 0) {
+  if (currentWeek.some((entry) => !entry.is_placeholder)) {
     weeks.push({ week_number: weekNumber, days: currentWeek });
   }
 
@@ -803,4 +808,20 @@ function buildCalendarView(menu: LunchMenu): LunchMenuCalendarView {
 function weekdayLabel(dateString: string): string {
   const dayIndex = new Date(`${dateString}T00:00:00`).getDay();
   return WEEKDAY_LABELS[dayIndex];
+}
+
+function weekdayIndex(dateString: string): number {
+  return new Date(`${dateString}T00:00:00`).getDay();
+}
+
+function createEmptyWorkweek(): LunchMenuCalendarDay[] {
+  return WORKWEEK_DAY_INDEXES.map((dayIndex) => ({
+    date: null,
+    day_name: WEEKDAY_LABELS[dayIndex],
+    weekday_index: dayIndex,
+    is_placeholder: true,
+    main_dishes: [],
+    sides: [],
+    nutrition: null,
+  }));
 }

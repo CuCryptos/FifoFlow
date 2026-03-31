@@ -75,7 +75,9 @@ export function LunchMenus() {
   const selectedMenu = selectedMenuQuery.data ?? null;
   const selectedCalendar = selectedCalendarQuery.data ?? null;
   const selectedDay = useMemo(
-    () => selectedCalendar?.weeks.flatMap((week) => week.days).find((day) => day.date === selectedDayDate) ?? null,
+    () => selectedCalendar?.weeks
+      .flatMap((week) => week.days)
+      .find((day) => !day.is_placeholder && day.date === selectedDayDate) ?? null,
     [selectedCalendar, selectedDayDate],
   );
 
@@ -98,12 +100,14 @@ export function LunchMenus() {
   }, [historySelectionTouched, menus]);
 
   useEffect(() => {
-    const firstDay = selectedCalendar?.weeks.flatMap((week) => week.days)[0]?.date ?? null;
+    const firstDay = selectedCalendar?.weeks
+      .flatMap((week) => week.days)
+      .find((day) => !day.is_placeholder)?.date ?? null;
     if (!selectedCalendar) {
       setSelectedDayDate(null);
       return;
     }
-    if (!selectedDayDate || !selectedCalendar.weeks.some((week) => week.days.some((day) => day.date === selectedDayDate))) {
+    if (!selectedDayDate || !selectedCalendar.weeks.some((week) => week.days.some((day) => !day.is_placeholder && day.date === selectedDayDate))) {
       setSelectedDayDate(firstDay);
     }
   }, [selectedCalendar, selectedDayDate]);
@@ -752,42 +756,60 @@ export function LunchMenus() {
           >
             {selectedCalendar ? (
               <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].map((label) => (
+                    <div
+                      key={label}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500"
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
                 {selectedCalendar.weeks.map((week) => (
                   <div key={week.week_number} className="rounded-2xl border border-slate-200 bg-white p-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Week {week.week_number}</div>
                     <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                       {week.days.map((day) => (
-                        <button
-                          key={day.date}
-                          type="button"
-                          onClick={() => setSelectedDayDate(day.date)}
-                          className={`rounded-2xl border p-3 text-left transition ${
-                            day.date === selectedDayDate
-                              ? 'border-emerald-400 bg-emerald-50'
-                              : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-                          }`}
-                        >
-                          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{day.day_name}</div>
-                          <div className="mt-1 text-sm font-semibold text-slate-950">{day.date}</div>
-                          <div className="mt-3 space-y-2 text-sm text-slate-700">
-                            <div>
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Main dishes</div>
-                              <div className="mt-1">{day.main_dishes.length > 0 ? day.main_dishes.join(', ') : 'No mains yet'}</div>
-                            </div>
-                            <div>
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Sides</div>
-                              <div className="mt-1">{day.sides.length > 0 ? day.sides.join(', ') : 'No sides yet'}</div>
-                            </div>
-                            <div>
-                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Nutrition</div>
-                              <div className="mt-1 text-xs text-slate-600">
-                                {day.nutrition
-                                  ? `${day.nutrition.calories} cal • ${day.nutrition.protein_g.toFixed(0)}g P • ${day.nutrition.fat_g.toFixed(0)}g F • ${day.nutrition.sugar_g.toFixed(0)}g S`
-                                  : 'No nutrition yet'}
+                        day.is_placeholder ? (
+                          <div
+                            key={`placeholder-${week.week_number}-${day.weekday_index}`}
+                            aria-hidden="true"
+                            className="min-h-[216px] rounded-2xl border border-dashed border-slate-200 bg-slate-50/60"
+                          />
+                        ) : (
+                          <button
+                            key={day.date}
+                            type="button"
+                            onClick={() => setSelectedDayDate(day.date)}
+                            className={`rounded-2xl border p-3 text-left transition ${
+                              day.date === selectedDayDate
+                                ? 'border-emerald-400 bg-emerald-50'
+                                : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+                            }`}
+                          >
+                            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{day.day_name}</div>
+                            <div className="mt-1 text-sm font-semibold text-slate-950">{day.date}</div>
+                            <div className="mt-3 space-y-2 text-sm text-slate-700">
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Main dishes</div>
+                                <div className="mt-1">{day.main_dishes.length > 0 ? day.main_dishes.join(', ') : 'No mains yet'}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Sides</div>
+                                <div className="mt-1">{day.sides.length > 0 ? day.sides.join(', ') : 'No sides yet'}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Nutrition</div>
+                                <div className="mt-1 text-xs text-slate-600">
+                                  {day.nutrition
+                                    ? `${day.nutrition.calories} cal • ${day.nutrition.protein_g.toFixed(0)}g P • ${day.nutrition.fat_g.toFixed(0)}g F • ${day.nutrition.sugar_g.toFixed(0)}g S`
+                                    : 'No nutrition yet'}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </button>
+                          </button>
+                        )
                       ))}
                     </div>
                   </div>

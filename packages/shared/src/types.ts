@@ -1,6 +1,6 @@
-import type { CATEGORIES, UNITS, TRANSACTION_TYPES, TRANSACTION_REASONS } from './constants.js';
+import type { UNITS, TRANSACTION_TYPES, TRANSACTION_REASONS } from './constants.js';
 
-export type Category = (typeof CATEGORIES)[number];
+export type Category = string;
 export type Unit = (typeof UNITS)[number];
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 export type TransactionReason = (typeof TRANSACTION_REASONS)[number];
@@ -37,6 +37,15 @@ export interface Item {
   external_product_last_matched_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface InventoryCategory {
+  id: number;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  item_count: number;
+  count_session_count: number;
 }
 
 export interface Transaction {
@@ -880,8 +889,10 @@ export interface LunchMenuDayNutrition {
 }
 
 export interface LunchMenuCalendarDay {
-  date: string;
+  date: string | null;
   day_name: string;
+  weekday_index: number;
+  is_placeholder: boolean;
   main_dishes: string[];
   sides: string[];
   nutrition: LunchMenuDayNutrition | null;
