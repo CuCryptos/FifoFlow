@@ -826,6 +826,96 @@ export interface ForecastWithEntries extends Forecast {
   entries: ForecastEntry[];
 }
 
+export type LunchMenuStatus = 'draft' | 'published' | 'archived';
+export type LunchMenuDishType = 'main' | 'side';
+
+export interface LunchMenuItem {
+  id: number;
+  menu_id: number;
+  date: string;
+  dish_type: LunchMenuDishType;
+  dish_name: string;
+  recipe_id: number | null;
+  sort_order: number;
+  calories: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  sugar_g: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LunchMenu {
+  id: number;
+  venue_id: number | null;
+  year: number;
+  month: number;
+  name: string;
+  status: LunchMenuStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  items: LunchMenuItem[];
+}
+
+export interface LunchMenuListEntry {
+  id: number;
+  venue_id: number | null;
+  venue_name: string | null;
+  year: number;
+  month: number;
+  name: string;
+  status: LunchMenuStatus;
+  notes: string | null;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LunchMenuDayNutrition {
+  calories: number;
+  protein_g: number;
+  fat_g: number;
+  sugar_g: number;
+}
+
+export interface LunchMenuCalendarDay {
+  date: string;
+  day_name: string;
+  main_dishes: string[];
+  sides: string[];
+  nutrition: LunchMenuDayNutrition | null;
+}
+
+export interface LunchMenuCalendarWeek {
+  week_number: number;
+  days: LunchMenuCalendarDay[];
+}
+
+export interface LunchMenuCalendarView {
+  menu_id: number;
+  venue_id: number | null;
+  year: number;
+  month: number;
+  month_name: string;
+  weeks: LunchMenuCalendarWeek[];
+}
+
+export interface LunchMenuParsedDay {
+  date: string;
+  main_dishes: string[];
+  sides: string[];
+  raw_text: string | null;
+}
+
+export interface LunchMenuParseResult {
+  source_file_name: string;
+  year: number;
+  month: number;
+  days: LunchMenuParsedDay[];
+  errors: string[];
+}
+
 // Snack Bar Sales
 export interface Sale {
   id: number;

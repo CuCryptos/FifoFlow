@@ -70,6 +70,14 @@ import type {
   ExternalProductCatalog,
   ExternalProductMatch,
   ExternalProductSyncRun,
+  CreateLunchMenuInput,
+  BulkUpdateLunchMenuDaysInput,
+  ImportLunchMenuInput,
+  LunchMenu,
+  LunchMenuCalendarView,
+  LunchMenuListEntry,
+  LunchMenuParseResult,
+  UpdateLunchMenuInput,
 } from '@fifoflow/shared';
 
 const BASE = '/api';
@@ -1826,6 +1834,48 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ guest_count }),
       }),
+  },
+  lunchMenus: {
+    list: (params?: { venue_id?: number; year?: number; status?: 'draft' | 'published' | 'archived' }) => {
+      const qs = new URLSearchParams();
+      if (params?.venue_id) qs.set('venue_id', String(params.venue_id));
+      if (params?.year) qs.set('year', String(params.year));
+      if (params?.status) qs.set('status', params.status);
+      const query = qs.toString();
+      return fetchJson<LunchMenuListEntry[]>(`/lunch-menus${query ? `?${query}` : ''}`);
+    },
+    get: (id: number) => fetchJson<LunchMenu>(`/lunch-menus/${id}`),
+    getCalendar: (id: number) => fetchJson<LunchMenuCalendarView>(`/lunch-menus/${id}/calendar`),
+    uploadPdf: async (file: File): Promise<LunchMenuParseResult> => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${BASE}/lunch-menus/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: res.statusText }));
+        const msg = typeof error.error === 'string' ? error.error : res.statusText;
+        throw new Error(msg);
+      }
+      return res.json();
+    },
+    import: (data: ImportLunchMenuInput) =>
+      fetchJson<{ menu: LunchMenu; calendar: LunchMenuCalendarView }>('/lunch-menus/import', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    create: (data: CreateLunchMenuInput) =>
+      fetchJson<LunchMenu>('/lunch-menus', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: UpdateLunchMenuInput) =>
+      fetchJson<LunchMenu>(`/lunch-menus/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    updateDays: (id: number, data: BulkUpdateLunchMenuDaysInput) =>
+      fetchJson<{ menu: LunchMenu | null; calendar: LunchMenuCalendarView | null }>(`/lunch-menus/${id}/items/bulk`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: number) => fetchJson<void>(`/lunch-menus/${id}`, { method: 'DELETE' }),
+    exportPdfUrl: (id: number) => `${BASE}/lunch-menus/${id}/export/pdf`,
   },
   sales: {
     list: (params?: { start_date?: string; end_date?: string; item_id?: number }) => {

@@ -398,6 +398,51 @@ export function initializeDb(db: Database.Database): void {
       UPDATE forecast_product_mappings SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
+    CREATE TABLE IF NOT EXISTS lunch_menus (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id INTEGER REFERENCES venues(id) ON DELETE SET NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL CHECK(month >= 1 AND month <= 12),
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'archived')),
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(venue_id, year, month)
+    );
+
+    CREATE TABLE IF NOT EXISTS lunch_menu_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_id INTEGER NOT NULL REFERENCES lunch_menus(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      dish_type TEXT NOT NULL CHECK(dish_type IN ('main', 'side')),
+      dish_name TEXT NOT NULL,
+      recipe_id INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      calories INTEGER,
+      protein_g REAL,
+      fat_g REAL,
+      sugar_g REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_lunch_menus_venue_period ON lunch_menus(venue_id, year DESC, month DESC);
+    CREATE INDEX IF NOT EXISTS idx_lunch_menu_items_menu_date ON lunch_menu_items(menu_id, date, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_lunch_menu_items_recipe_id ON lunch_menu_items(recipe_id);
+
+    CREATE TRIGGER IF NOT EXISTS update_lunch_menus_timestamp
+    AFTER UPDATE ON lunch_menus
+    BEGIN
+      UPDATE lunch_menus SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS update_lunch_menu_items_timestamp
+    AFTER UPDATE ON lunch_menu_items
+    BEGIN
+      UPDATE lunch_menu_items SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
     CREATE TABLE IF NOT EXISTS protein_usage_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,

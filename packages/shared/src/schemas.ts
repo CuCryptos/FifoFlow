@@ -930,6 +930,160 @@ export type SaveForecastInput = z.infer<typeof saveForecastSchema>;
 export type SaveForecastMappingsBulkInput = z.infer<typeof saveForecastMappingsBulkSchema>;
 export type UpdateForecastEntryInput = z.infer<typeof updateForecastEntrySchema>;
 
+export const lunchMenuStatusSchema = z.enum(['draft', 'published', 'archived'] as const);
+export const lunchMenuDishTypeSchema = z.enum(['main', 'side'] as const);
+
+export const lunchMenuItemSchema = z.object({
+  id: z.number().int().positive(),
+  menu_id: z.number().int().positive(),
+  date: z.string().min(1),
+  dish_type: lunchMenuDishTypeSchema,
+  dish_name: z.string().min(1),
+  recipe_id: z.number().int().positive().nullable(),
+  sort_order: z.number().int().min(0),
+  calories: z.number().nullable(),
+  protein_g: z.number().nullable(),
+  fat_g: z.number().nullable(),
+  sugar_g: z.number().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const lunchMenuSchema = z.object({
+  id: z.number().int().positive(),
+  venue_id: z.number().int().positive().nullable(),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  name: z.string().min(1).max(200),
+  status: lunchMenuStatusSchema,
+  notes: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  items: z.array(lunchMenuItemSchema),
+});
+
+export const lunchMenuListEntrySchema = z.object({
+  id: z.number().int().positive(),
+  venue_id: z.number().int().positive().nullable(),
+  venue_name: z.string().nullable(),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  name: z.string().min(1).max(200),
+  status: lunchMenuStatusSchema,
+  notes: z.string().nullable(),
+  item_count: z.number().int().min(0),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const lunchMenuDayNutritionSchema = z.object({
+  calories: z.number(),
+  protein_g: z.number(),
+  fat_g: z.number(),
+  sugar_g: z.number(),
+});
+
+export const lunchMenuCalendarDaySchema = z.object({
+  date: z.string().min(1),
+  day_name: z.string().min(1),
+  main_dishes: z.array(z.string()),
+  sides: z.array(z.string()),
+  nutrition: lunchMenuDayNutritionSchema.nullable(),
+});
+
+export const lunchMenuCalendarWeekSchema = z.object({
+  week_number: z.number().int().min(1),
+  days: z.array(lunchMenuCalendarDaySchema),
+});
+
+export const lunchMenuCalendarViewSchema = z.object({
+  menu_id: z.number().int().positive(),
+  venue_id: z.number().int().positive().nullable(),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  month_name: z.string().min(1),
+  weeks: z.array(lunchMenuCalendarWeekSchema),
+});
+
+export const lunchMenuParsedDaySchema = z.object({
+  date: z.string().min(1),
+  main_dishes: z.array(z.string().min(1)).default([]),
+  sides: z.array(z.string().min(1)).default([]),
+  raw_text: z.string().nullable(),
+});
+
+export const lunchMenuParseResultSchema = z.object({
+  source_file_name: z.string().min(1),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  days: z.array(lunchMenuParsedDaySchema),
+  errors: z.array(z.string()),
+});
+
+export const lunchMenuEditableDishSchema = z.object({
+  dish_name: z.string().min(1).max(200),
+  recipe_id: z.number().int().positive().nullable().optional(),
+});
+
+export const lunchMenuDayNutritionInputSchema = z.object({
+  calories: z.number().min(0).nullable().optional(),
+  protein_g: z.number().min(0).nullable().optional(),
+  fat_g: z.number().min(0).nullable().optional(),
+  sugar_g: z.number().min(0).nullable().optional(),
+});
+
+export const lunchMenuDayEditSchema = z.object({
+  date: z.string().min(1),
+  mains: z.array(lunchMenuEditableDishSchema).default([]),
+  sides: z.array(lunchMenuEditableDishSchema).default([]),
+  nutrition: lunchMenuDayNutritionInputSchema.nullable().optional(),
+});
+
+export const bulkUpdateLunchMenuDaysSchema = z.object({
+  days: z.array(lunchMenuDayEditSchema).min(1),
+});
+
+export const createLunchMenuSchema = z.object({
+  venue_id: z.number().int().positive(),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  name: z.string().min(1).max(200).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateLunchMenuSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  status: lunchMenuStatusSchema.optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const importLunchMenuSchema = z.object({
+  menu_id: z.number().int().positive().optional(),
+  venue_id: z.number().int().positive(),
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  name: z.string().min(1).max(200).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  replace_existing: z.boolean().optional().default(true),
+  parsed_days: z.array(lunchMenuParsedDaySchema).min(1),
+});
+
+export type LunchMenuItemInput = z.infer<typeof lunchMenuItemSchema>;
+export type LunchMenuInput = z.infer<typeof lunchMenuSchema>;
+export type LunchMenuListEntryInput = z.infer<typeof lunchMenuListEntrySchema>;
+export type LunchMenuCalendarDayInput = z.infer<typeof lunchMenuCalendarDaySchema>;
+export type LunchMenuCalendarWeekInput = z.infer<typeof lunchMenuCalendarWeekSchema>;
+export type LunchMenuCalendarViewInput = z.infer<typeof lunchMenuCalendarViewSchema>;
+export type LunchMenuParsedDayInput = z.infer<typeof lunchMenuParsedDaySchema>;
+export type LunchMenuParseResultInput = z.infer<typeof lunchMenuParseResultSchema>;
+export type LunchMenuEditableDishInput = z.infer<typeof lunchMenuEditableDishSchema>;
+export type LunchMenuDayNutritionInput = z.infer<typeof lunchMenuDayNutritionInputSchema>;
+export type LunchMenuDayEditInput = z.infer<typeof lunchMenuDayEditSchema>;
+export type BulkUpdateLunchMenuDaysInput = z.infer<typeof bulkUpdateLunchMenuDaysSchema>;
+export type CreateLunchMenuInput = z.infer<typeof createLunchMenuSchema>;
+export type UpdateLunchMenuInput = z.infer<typeof updateLunchMenuSchema>;
+export type ImportLunchMenuInput = z.infer<typeof importLunchMenuSchema>;
+
 // Snack Bar Sales
 export const createSaleSchema = z.object({
   item_id: z.number().int().positive(),
