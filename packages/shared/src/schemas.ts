@@ -105,6 +105,28 @@ export const updateStorageAreaSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
 });
 
+export const itemStorageRowInputSchema = z.object({
+  area_id: z.number().int().positive(),
+  quantity: z.number().min(0),
+});
+
+export const replaceItemStorageSchema = z.object({
+  rows: z.array(itemStorageRowInputSchema).superRefine((rows, ctx) => {
+    const seen = new Set<number>();
+    rows.forEach((row, index) => {
+      if (seen.has(row.area_id)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'area_id'],
+          message: 'Each storage area can only appear once.',
+        });
+        return;
+      }
+      seen.add(row.area_id);
+    });
+  }),
+});
+
 export type CreateItemInput = z.infer<typeof createItemSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
@@ -152,6 +174,8 @@ export type UpdateVenueInput = z.infer<typeof updateVenueSchema>;
 
 export type CreateStorageAreaInput = z.infer<typeof createStorageAreaSchema>;
 export type UpdateStorageAreaInput = z.infer<typeof updateStorageAreaSchema>;
+export type ItemStorageRowInput = z.infer<typeof itemStorageRowInputSchema>;
+export type ReplaceItemStorageInput = z.infer<typeof replaceItemStorageSchema>;
 export type BulkUpdateItemsInput = z.infer<typeof bulkUpdateItemsSchema>;
 export type BulkDeleteItemsInput = z.infer<typeof bulkDeleteItemsSchema>;
 

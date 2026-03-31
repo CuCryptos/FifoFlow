@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import type { CreateItemInput, Item, MergeItemsInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
+import type { CreateItemInput, Item, ItemStorage, MergeItemsInput, ReplaceItemStorageInput, SetItemCountInput, UpdateItemInput } from '@fifoflow/shared';
 
 export type InventoryItemsQueryParams = {
   search?: string;
@@ -49,6 +49,14 @@ export function useItem(id: number) {
     queryKey: [...ITEMS_QUERY_KEY, id] as const,
     queryFn: () => api.items.get(id),
     enabled: id > 0,
+  });
+}
+
+export function useItemStorage(itemId: number) {
+  return useQuery({
+    queryKey: [...ITEMS_QUERY_KEY, itemId, 'storage'] as const,
+    queryFn: () => api.items.listStorage(itemId),
+    enabled: itemId > 0,
   });
 }
 
@@ -110,6 +118,25 @@ export function useDeleteItem() {
   return useMutation({
     mutationFn: (id: number) => api.items.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
+  });
+}
+
+export function useReplaceItemStorage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, data }: { itemId: number; data: ReplaceItemStorageInput }) =>
+      api.items.replaceStorage(itemId, data),
+    onSuccess: (result, variables) => {
+      qc.setQueryData<ItemStorage[]>([...ITEMS_QUERY_KEY, variables.itemId, 'storage'] as const, result.rows);
+      qc.setQueryData<ItemDetailCache | undefined>([...ITEMS_QUERY_KEY, variables.itemId] as const, (current) => (
+        current ? { ...current, item: result.item } : current
+      ));
+    },
+    onSettled: (_data, _error, variables) => {
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: [...ITEMS_QUERY_KEY, variables.itemId] as const });
+      qc.invalidateQueries({ queryKey: [...ITEMS_QUERY_KEY, variables.itemId, 'storage'] as const });
+    },
   });
 }
 

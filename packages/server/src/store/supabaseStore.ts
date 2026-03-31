@@ -596,6 +596,10 @@ export class SupabaseInventoryStore implements InventoryStore {
     return undefined;
   }
 
+  async replaceItemStorage(_itemId: number, _rows: Array<{ area_id: number; quantity: number }>): Promise<ItemStorage[]> {
+    return this.notImplemented('replaceItemStorage');
+  }
+
   // Vendors — stubs (not yet implemented for Supabase)
 
   async listVendors(): Promise<Vendor[]> { return []; }

@@ -157,6 +157,7 @@ export interface InventoryStore {
   listItemStorage(itemId: number): Promise<ItemStorage[]>;
   listAllItemStorage(): Promise<ItemStorage[]>;
   getItemStorageByArea(itemId: number, areaId: number): Promise<ItemStorage | undefined>;
+  replaceItemStorage(itemId: number, rows: Array<{ area_id: number; quantity: number }>): Promise<ItemStorage[]>;
 
   // Vendors
   listVendors(): Promise<Vendor[]>;

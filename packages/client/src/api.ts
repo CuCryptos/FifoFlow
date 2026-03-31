@@ -25,6 +25,7 @@ import type {
   CostReport,
   CloseCountSessionInput,
   CreateItemInput,
+  ReplaceItemStorageInput,
   CreateCountSessionInput,
   CreateStorageAreaInput,
   CreateVendorInput,
@@ -1225,6 +1226,8 @@ export const api = {
       fetchJson<void>(`/items/${id}`, { method: 'DELETE' }),
     listStorage: (itemId: number) =>
       fetchJson<ItemStorage[]>(`/items/${itemId}/storage`),
+    replaceStorage: (itemId: number, data: ReplaceItemStorageInput) =>
+      fetchJson<{ item: Item; rows: ItemStorage[] }>(`/items/${itemId}/storage`, { method: 'PUT', body: JSON.stringify(data) }),
     listAllStorage: () =>
       fetchJson<ItemStorage[]>(`/items/storage`),
     bulkUpdate: (data: {

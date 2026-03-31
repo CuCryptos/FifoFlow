@@ -237,6 +237,39 @@ describe('Items API', () => {
     });
   });
 
+  describe('PUT /api/items/:id/storage', () => {
+    it('replaces storage rows and rolls them up into the item total', async () => {
+      const areaA = Number(db.prepare("INSERT INTO storage_areas (name) VALUES (?)").run('2277 Bar Cage').lastInsertRowid);
+      const areaB = Number(db.prepare("INSERT INTO storage_areas (name) VALUES (?)").run('SOH Bar Cage').lastInsertRowid);
+      const result = db.prepare("INSERT INTO items (name, category, unit, current_qty) VALUES (?, ?, ?, ?)").run('Vodka', 'Liquor', 'bottle', 0);
+      const itemId = Number(result.lastInsertRowid);
+
+      const res = await request(app)
+        .put(`/api/items/${itemId}/storage`)
+        .send({
+          rows: [
+            { area_id: areaA, quantity: 6 },
+            { area_id: areaB, quantity: 4 },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.rows).toEqual([
+        expect.objectContaining({ area_id: areaA, area_name: '2277 Bar Cage', quantity: 6 }),
+        expect.objectContaining({ area_id: areaB, area_name: 'SOH Bar Cage', quantity: 4 }),
+      ]);
+      expect(res.body.item).toMatchObject({
+        id: itemId,
+        current_qty: 10,
+        storage_area_id: areaA,
+        storage_area_name: '2277 Bar Cage',
+        storage_location_count: 2,
+        storage_total_qty: 10,
+        storage_qty_delta: 0,
+      });
+    });
+  });
+
   describe('DELETE /api/items/:id', () => {
     it('deletes item with no transactions', async () => {
       const result = db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Ahi Tuna', 'Seafood', 'lb');

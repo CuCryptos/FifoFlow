@@ -986,6 +986,40 @@ export class SqliteInventoryStore implements InventoryStore {
     `).get(itemId, areaId) as ItemStorage | undefined;
   }
 
+  async replaceItemStorage(itemId: number, rows: Array<{ area_id: number; quantity: number }>): Promise<ItemStorage[]> {
+    const apply = this.db.transaction((normalizedRows: Array<{ area_id: number; quantity: number }>) => {
+      const positiveRows = normalizedRows
+        .filter((row) => row.quantity > 0)
+        .map((row) => ({
+          area_id: row.area_id,
+          quantity: Math.round(row.quantity * 1000) / 1000,
+        }));
+
+      this.db.prepare('DELETE FROM item_storage WHERE item_id = ?').run(itemId);
+
+      const insertStatement = this.db.prepare(`
+        INSERT INTO item_storage (item_id, area_id, quantity)
+        VALUES (?, ?, ?)
+      `);
+
+      for (const row of positiveRows) {
+        insertStatement.run(itemId, row.area_id, row.quantity);
+      }
+
+      const totalQty = positiveRows.reduce((sum, row) => sum + row.quantity, 0);
+      const primaryAreaId = positiveRows[0]?.area_id ?? null;
+
+      this.db.prepare(`
+        UPDATE items
+        SET current_qty = ?, storage_area_id = ?
+        WHERE id = ?
+      `).run(totalQty, primaryAreaId, itemId);
+    });
+
+    apply(rows);
+    return this.listItemStorage(itemId);
+  }
+
   // ── Vendors ──────────────────────────────────────────────────
 
   async listVendors(): Promise<Vendor[]> {

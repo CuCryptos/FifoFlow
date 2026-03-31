@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, mergeItemsSchema, tryConvertQuantity } from '@fifoflow/shared';
+import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, mergeItemsSchema, replaceItemStorageSchema, tryConvertQuantity } from '@fifoflow/shared';
 import type { Item, ItemCountAdjustmentResult, ItemStorage, MergeItemsResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
 import { createTransactionHandler } from './transactions.js';
 import { createVendorPriceRoutes } from './vendorPrices.js';
@@ -342,6 +342,33 @@ export function createItemRoutes(store: InventoryStore): Router {
     }
     const rows = await store.listItemStorage(Number(req.params.id));
     res.json(rows);
+  });
+
+  // PUT /api/items/:id/storage
+  router.put('/:id/storage', async (req, res) => {
+    const itemId = Number(req.params.id);
+    const item = await store.getItemById(itemId) as Item | undefined;
+    if (!item) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    const parsed = replaceItemStorageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    try {
+      const rows = await store.replaceItemStorage(itemId, parsed.data.rows);
+      const updatedItem = await store.getItemById(itemId) as Item;
+      res.json({
+        item: await enrichItem(store, updatedItem),
+        rows,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   // POST /api/items/:id/count

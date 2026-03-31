@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import type { Item, Transaction, Unit } from '@fifoflow/shared';
+import type { Item, ItemStorage, Transaction, Unit } from '@fifoflow/shared';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
-import { useUpdateItem } from '../../hooks/useItems';
+import { useItemStorage, useReplaceItemStorage, useUpdateItem } from '../../hooks/useItems';
 import { useToast } from '../../contexts/ToastContext';
 import { InventoryUnitEconomicsSummary, deriveInventoryUnitEconomics } from './InventoryUnitEconomicsSummary';
 import { ItemIdentifierEditor } from '../products/ItemIdentifierEditor';
@@ -15,6 +15,46 @@ function formatCurrency(value: number | null): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+type StorageDraftRow = {
+  key: string;
+  area_id: string;
+  quantity: string;
+};
+
+function roundStorageQuantity(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function buildStorageDraftRows(item: Item, rows?: ItemStorage[]): StorageDraftRow[] {
+  if (rows && rows.length > 0) {
+    return rows.map((row) => ({
+      key: `area-${row.area_id}`,
+      area_id: String(row.area_id),
+      quantity: String(row.quantity),
+    }));
+  }
+
+  if (item.storage_area_id != null && item.current_qty > 0) {
+    return [{
+      key: `area-${item.storage_area_id}`,
+      area_id: String(item.storage_area_id),
+      quantity: String(item.current_qty),
+    }];
+  }
+
+  return [];
+}
+
+function normalizeStorageRows(rows: Array<{ area_id: string | number; quantity: string | number }>) {
+  return rows
+    .map((row) => ({
+      area_id: Number(row.area_id),
+      quantity: roundStorageQuantity(Number(row.quantity)),
+    }))
+    .filter((row) => Number.isFinite(row.area_id) && row.area_id > 0 && Number.isFinite(row.quantity) && row.quantity > 0)
+    .sort((a, b) => a.area_id - b.area_id);
 }
 
 export function InventoryItemSidePanel({
@@ -82,6 +122,8 @@ export function InventoryItemSidePanel({
   });
 
   const updateItem = useUpdateItem();
+  const itemStorageQuery = useItemStorage(item.id);
+  const replaceItemStorage = useReplaceItemStorage();
   const { toast } = useToast();
   const [draft, setDraft] = useState<InventoryItemPanelDraft>({
     name: item.name,
@@ -126,6 +168,8 @@ export function InventoryItemSidePanel({
     item_size_unit: null,
     order_unit_price: null,
   });
+  const [storageDraftRows, setStorageDraftRows] = useState<StorageDraftRow[]>(() => buildStorageDraftRows(item));
+  const [storageBanner, setStorageBanner] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     setDraft({
@@ -167,7 +211,13 @@ export function InventoryItemSidePanel({
       item_size_unit: null,
       order_unit_price: null,
     });
+    setStorageBanner(null);
   }, [item]);
+
+  useEffect(() => {
+    setStorageDraftRows(buildStorageDraftRows(item, itemStorageQuery.data));
+    setStorageBanner(null);
+  }, [item.id, item.storage_area_id, item.current_qty, itemStorageQuery.data]);
 
   useEffect(() => {
     const timers: number[] = [];
@@ -188,9 +238,31 @@ export function InventoryItemSidePanel({
     };
   }, [groupBanner]);
 
+  useEffect(() => {
+    if (storageBanner?.tone !== 'success') {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setStorageBanner((current) => (current?.tone === 'success' ? null : current));
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [storageBanner]);
+
   const vendorName = vendors.find((vendor) => vendor.id === item.vendor_id)?.name ?? 'Unassigned';
   const venueName = venues.find((venue) => venue.id === item.venue_id)?.name ?? 'Unassigned';
   const areaName = areas.find((area) => area.id === item.storage_area_id)?.name ?? 'Unassigned';
+  const storageSourceRows = buildStorageDraftRows(item, itemStorageQuery.data);
+  const normalizedStorageSourceRows = normalizeStorageRows(storageSourceRows);
+  const normalizedStorageDraftRows = normalizeStorageRows(storageDraftRows);
+  const storageDraftTotal = normalizedStorageDraftRows.reduce((sum, row) => sum + row.quantity, 0);
+  const storageDraftDirty = JSON.stringify(normalizedStorageSourceRows) !== JSON.stringify(normalizedStorageDraftRows);
+  const storageSelectedAreaIds = storageDraftRows
+    .map((row) => Number(row.area_id))
+    .filter((areaId) => Number.isFinite(areaId) && areaId > 0);
+  const duplicateStorageAreaIds = storageSelectedAreaIds.filter((areaId, index) => storageSelectedAreaIds.indexOf(areaId) !== index);
+  const storageHasDuplicateAreas = duplicateStorageAreaIds.length > 0;
+  const storageHasBlankArea = storageDraftRows.some((row) => row.area_id === '');
+  const storageHasInvalidQuantity = storageDraftRows.some((row) => row.quantity === '' || !Number.isFinite(Number(row.quantity)) || Number(row.quantity) < 0);
   const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
   const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
   const currentEconomics = deriveInventoryUnitEconomics({
@@ -202,7 +274,7 @@ export function InventoryItemSidePanel({
     itemSizeValue: item.item_size_value,
     itemSizeUnit: item.item_size_unit,
   });
-  const assignmentFields: DraftField[] = ['category', 'vendor_id', 'venue_id', 'storage_area_id'];
+  const assignmentFields: DraftField[] = ['category', 'vendor_id', 'venue_id'];
   const identityFields: DraftField[] = ['name'];
   const orderingFields: DraftField[] = ['unit', 'reorder_level', 'reorder_qty', 'order_unit', 'qty_per_unit', 'inner_unit', 'item_size_value', 'item_size_unit', 'order_unit_price'];
   const changedFields = (Object.entries(draft) as Array<[DraftField, string]>)
@@ -247,6 +319,68 @@ export function InventoryItemSidePanel({
   const identityFieldStates = Object.fromEntries(identityFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
   const assignmentFieldStates = Object.fromEntries(assignmentFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
   const orderingFieldStates = Object.fromEntries(orderingFields.map((field) => [field, fieldStates[field]])) as Record<DraftField, FieldSaveState>;
+
+  const addStorageRow = () => {
+    const nextArea = areas.find((area) => !storageSelectedAreaIds.includes(area.id));
+    setStorageDraftRows((current) => [
+      ...current,
+      {
+        key: `draft-${Date.now()}-${current.length}`,
+        area_id: nextArea ? String(nextArea.id) : '',
+        quantity: '',
+      },
+    ]);
+  };
+
+  const updateStorageRow = (key: string, patch: Partial<StorageDraftRow>) => {
+    setStorageDraftRows((current) => current.map((row) => (
+      row.key === key ? { ...row, ...patch } : row
+    )));
+  };
+
+  const removeStorageRow = (key: string) => {
+    setStorageDraftRows((current) => current.filter((row) => row.key !== key));
+  };
+
+  const saveStorageRows = () => {
+    if (storageHasBlankArea || storageHasDuplicateAreas || storageHasInvalidQuantity) {
+      setStorageBanner({
+        tone: 'error',
+        message: 'Fix duplicate areas and empty or invalid quantities before saving area balances.',
+      });
+      return;
+    }
+
+    setStorageBanner(null);
+    replaceItemStorage.mutate(
+      {
+        itemId: item.id,
+        data: {
+          rows: storageDraftRows.map((row) => ({
+            area_id: Number(row.area_id),
+            quantity: Number(row.quantity),
+          })),
+        },
+      },
+      {
+        onSuccess: () => {
+          setStorageBanner({
+            tone: 'success',
+            message: 'Area balances saved.',
+          });
+          toast('Area balances saved.', 'success');
+        },
+        onError: (error) => {
+          const reason = error instanceof Error ? error.message : 'Unable to save area balances';
+          setStorageBanner({
+            tone: 'error',
+            message: reason,
+          });
+          toast(reason, 'error');
+        },
+      },
+    );
+  };
 
   const buildPatchForFields = (fields: DraftField[]) => {
     const patch: Record<string, string | number | null> = {};
@@ -411,7 +545,7 @@ export function InventoryItemSidePanel({
         <DetailTile label="On Hand" value={`${item.current_qty} ${item.unit}`} />
         <DetailTile label="Vendor" value={vendorName} />
         <DetailTile label="Venue" value={venueName} />
-        <DetailTile label="Storage Area" value={areaName} />
+        <DetailTile label="Primary Area" value={areaName} />
         <DetailTile label="Reorder Status" value={reorderStatus} />
       </div>
 
@@ -523,20 +657,107 @@ export function InventoryItemSidePanel({
             </select>
             <FieldStateHint state={fieldStates.venue_id} dirty={changedFields.includes('venue_id')} savedAt={fieldSavedAt.venue_id} rollbackReason={fieldRollbackReasons.venue_id} />
           </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Storage area</span>
-            <select
-              value={draft.storage_area_id}
-              onChange={(event) => setDraft((current) => ({ ...current, storage_area_id: event.target.value }))}
-              className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.storage_area_id)}`}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Area balances</div>
+            <div className="mt-1 text-sm text-slate-600">Split this item across multiple storage locations. Saved area balances roll up into the on-hand total automatically.</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right text-xs text-slate-500">
+              <div>Saved total: <span className="font-semibold text-slate-900">{item.current_qty} {item.unit}</span></div>
+              <div>Draft total: <span className="font-semibold text-slate-900">{roundStorageQuantity(storageDraftTotal)} {item.unit}</span></div>
+            </div>
+            <button
+              type="button"
+              onClick={saveStorageRows}
+              disabled={replaceItemStorage.isPending || !storageDraftDirty || storageHasBlankArea || storageHasDuplicateAreas || storageHasInvalidQuantity}
+              className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
-              <option value="">Unassigned</option>
-              {areas.map((area) => (
-                <option key={area.id} value={area.id}>{area.name}</option>
-              ))}
-            </select>
-            <FieldStateHint state={fieldStates.storage_area_id} dirty={changedFields.includes('storage_area_id')} savedAt={fieldSavedAt.storage_area_id} rollbackReason={fieldRollbackReasons.storage_area_id} />
-          </label>
+              {replaceItemStorage.isPending ? 'Saving...' : storageDraftDirty ? 'Save area balances' : 'No changes'}
+            </button>
+          </div>
+        </div>
+        {storageBanner && (
+          <StickyGroupBanner
+            tone={storageBanner.tone}
+            message={storageBanner.message}
+            onDismiss={() => setStorageBanner(null)}
+          />
+        )}
+        <div className="mt-3 space-y-3">
+          {itemStorageQuery.isLoading && storageDraftRows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+              Loading saved area balances...
+            </div>
+          ) : storageDraftRows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+              No storage locations yet. Add one or more areas like `2277 Bar Cage` and `SOH Bar Cage`, then save to roll them into the item total.
+            </div>
+          ) : (
+            storageDraftRows.map((row, index) => {
+              const rowAreaId = Number(row.area_id);
+              const rowDuplicate = row.area_id !== '' && duplicateStorageAreaIds.includes(rowAreaId);
+              const availableAreas = areas.filter((area) => area.id === rowAreaId || !storageSelectedAreaIds.includes(area.id));
+              return (
+                <div key={row.key} className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 md:grid-cols-[minmax(0,1fr)_180px_auto]">
+                  <label className="space-y-1 text-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Storage location {index + 1}</span>
+                    <select
+                      value={row.area_id}
+                      onChange={(event) => updateStorageRow(row.key, { area_id: event.target.value })}
+                      className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${rowDuplicate ? 'border border-amber-300 bg-amber-50' : 'border border-slate-200 bg-white'}`}
+                    >
+                      <option value="">Choose area</option>
+                      {availableAreas.map((area) => (
+                        <option key={area.id} value={area.id}>{area.name}</option>
+                      ))}
+                    </select>
+                    <div className={`text-xs ${rowDuplicate ? 'text-amber-700' : 'text-slate-500'}`}>
+                      {rowDuplicate ? 'This area is already assigned above.' : 'Each area can only appear once.'}
+                    </div>
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Quantity in area</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={row.quantity}
+                      onChange={(event) => updateStorageRow(row.key, { quantity: event.target.value })}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${row.quantity === '' || !Number.isFinite(Number(row.quantity)) || Number(row.quantity) < 0 ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                    />
+                    <div className="text-xs text-slate-500">Tracked in {item.unit}.</div>
+                  </label>
+                  <div className="flex items-end justify-end">
+                    <button
+                      type="button"
+                      onClick={() => removeStorageRow(row.key)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-slate-500">
+            Zero-quantity rows are removed on save, and the first saved area becomes the primary display area.
+          </div>
+          <button
+            type="button"
+            onClick={addStorageRow}
+            disabled={areas.length === 0}
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+          >
+            Add storage location
+          </button>
         </div>
       </div>
 
