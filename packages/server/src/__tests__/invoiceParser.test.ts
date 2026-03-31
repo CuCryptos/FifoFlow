@@ -127,6 +127,21 @@ describe('invoice transcript guardrails', () => {
       page_number: 2,
     }, transcript)).toBe(true);
   });
+
+  it('does not reject image-only pages that have no embedded transcript text', () => {
+    const transcript = buildInvoiceTranscriptContext(makePages([
+      {
+        pageNumber: 1,
+        extractedText: '',
+      },
+    ]));
+
+    expect(isInvoiceLineSupportedByTranscript({
+      vendor_item_name: 'ZZZ Smoke Tonic Water 200ml',
+      source_text: 'ZZZ SMOKE TONIC WATER 200ML',
+      page_number: 1,
+    }, transcript)).toBe(true);
+  });
 });
 
 function makePages(input: Array<{ pageNumber: number; extractedText: string }>): InvoiceDocumentPageEvidence[] {

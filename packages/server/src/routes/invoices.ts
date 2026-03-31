@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { InventoryStore } from '../store/types.js';
 import type { InvoiceLine, InvoiceParseResult } from '@fifoflow/shared';
 import { matchInvoiceLineToInventory, normalizeInvoiceItemName, tokenizeInvoiceItemName } from './invoiceMatching.js';
-import { buildInvoiceTranscript, extractPdfEvidence, type InvoiceDocumentPageEvidence } from './invoiceDocumentExtraction.js';
+import { extractPdfEvidence, type InvoiceDocumentPageEvidence } from './invoiceDocumentExtraction.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -71,16 +71,21 @@ export function parseInvoiceAiResponse(text: string): ParsedInvoiceEnvelope {
 }
 
 export function buildInvoiceTranscriptContext(pages: InvoiceDocumentPageEvidence[]): InvoiceTranscriptContext {
-  const fullTranscript = buildInvoiceTranscript(pages);
+  const extractedTranscript = pages
+    .map((page) => cleanExtractedTranscriptText(page.extractedText))
+    .filter((text) => text.length > 0)
+    .join('\n\n');
+  const fullTranscript = extractedTranscript;
   const normalizedTranscript = normalizeInvoiceItemName(fullTranscript);
   const transcriptTokens = new Set(tokenizeInvoiceItemName(fullTranscript));
   const pageTranscripts = new Map<number, { raw: string; normalized: string; tokens: Set<string> }>();
 
   for (const page of pages) {
+    const cleanedText = cleanExtractedTranscriptText(page.extractedText);
     pageTranscripts.set(page.pageNumber, {
-      raw: page.extractedText,
-      normalized: normalizeInvoiceItemName(page.extractedText),
-      tokens: new Set(tokenizeInvoiceItemName(page.extractedText)),
+      raw: cleanedText,
+      normalized: normalizeInvoiceItemName(cleanedText),
+      tokens: new Set(tokenizeInvoiceItemName(cleanedText)),
     });
   }
 
@@ -137,6 +142,10 @@ function normalizeLooseText(input: string): string {
     .replace(/\s+/g, ' ')
     .replace(/[^a-z0-9 ]+/g, ' ')
     .trim();
+}
+
+function cleanExtractedTranscriptText(input: string): string {
+  return input.trim();
 }
 
 function buildInvoiceParsePrompt(vendorNames: string, vendorOverrideName: string | null, pages: InvoiceDocumentPageEvidence[]): string {
