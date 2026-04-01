@@ -66,7 +66,7 @@ function drawDocument(doc: PDFKit.PDFDocument, menu: LunchMenu, options: LunchMe
     });
   });
 
-  drawFooter(doc, margin, pageHeight - margin - footerHeight + 6, usableWidth, menu.notes);
+  drawFooter(doc, margin, pageHeight - margin - footerHeight + 6, usableWidth);
 }
 
 function drawHeader(
@@ -184,7 +184,7 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
   doc.restore();
 }
 
-function drawFooter(doc: PDFKit.PDFDocument, x: number, y: number, width: number, notes: string | null): void {
+function drawFooter(doc: PDFKit.PDFDocument, x: number, y: number, width: number): void {
   doc.save();
   doc.moveTo(x, y).lineTo(x + width, y).lineWidth(1).strokeColor('#111827').stroke();
   doc.font('Helvetica').fontSize(7.8).fillColor('#4b5563').text('*Nutritional Information are Estimates Only.', x + 4, y + 6, {
@@ -198,13 +198,6 @@ function drawFooter(doc: PDFKit.PDFDocument, x: number, y: number, width: number
   doc.fillColor('#6b7280').circle(x + width / 2, y + 12, 1.5).fill();
   doc.circle(x + width / 2 - 10, y + 12, 1).fill();
   doc.circle(x + width / 2 + 10, y + 12, 1).fill();
-  if (notes?.trim()) {
-    doc.font('Helvetica').fontSize(7.2).fillColor('#6b7280').text(`Notes: ${notes.trim()}`, x + 4, y - 12, {
-      width: width - 8,
-      align: 'left',
-      ellipsis: true,
-    });
-  }
   doc.restore();
 }
 
