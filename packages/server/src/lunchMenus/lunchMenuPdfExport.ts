@@ -143,38 +143,30 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
     align: 'center',
   });
 
-  const contentTopY = y + dateBoxHeight + 8;
-  const nutritionY = day.nutrition ? y + height - 26 : y + height - 10;
-  const mainLines = wrapLines(day.mains.join(' / '), day.sides.length > 0 ? 30 : 28, day.sides.length > 0 ? 1 : 3);
-  const sideLines = day.sides.length > 0 ? wrapLines(day.sides.join(' • '), 26, 2) : [];
-  const sideBlockHeight = sideLines.length > 0 ? 18 : 0;
-  const sideBlockY = nutritionY - sideBlockHeight;
-  const separatorY = sideBlockY - 6;
-  if (mainLines.length > 0) {
-    doc.font('Helvetica-Bold').fontSize(sideLines.length > 0 ? 7.6 : 8.0).fillColor('#111827');
-    mainLines.forEach((line, index) => {
-      doc.text(line, x + 10, contentTopY + index * 8.2, {
-        width: width - 16,
-        align: 'center',
-        lineBreak: false,
-      });
+  const contentTopY = y + dateBoxHeight + 10;
+  const mainLine = wrapLines(day.mains.join(' / '), day.sides.length > 0 ? 31 : 29, 1);
+  const sideLine = day.sides.length > 0 ? wrapLines(day.sides.join(' • '), 34, 1) : [];
+  const sideY = contentTopY + 13;
+  const nutritionY = y + height - 21;
+
+  if (mainLine.length > 0) {
+    doc.font('Helvetica-Bold').fontSize(8.6).fillColor('#1f2937').text(mainLine[0], x + 10, contentTopY, {
+      width: width - 16,
+      align: 'center',
+      lineBreak: false,
     });
   }
 
-  if (sideLines.length > 0) {
-    doc.moveTo(x + 12, separatorY).lineTo(x + width - 12, separatorY).lineWidth(0.35).strokeColor('#d1d9e2').stroke();
-    doc.font('Helvetica').fontSize(5.9).fillColor('#475569');
-    sideLines.forEach((line, index) => {
-      doc.text(line, x + 8, sideBlockY + index * 6.4, {
-        width: width - 16,
-        align: 'center',
-        lineBreak: false,
-      });
+  if (sideLine.length > 0) {
+    doc.font('Helvetica').fontSize(6.4).fillColor('#64748b').text(sideLine[0], x + 10, sideY, {
+      width: width - 16,
+      align: 'center',
+      lineBreak: false,
     });
   }
 
   if (day.nutrition) {
-    doc.moveTo(x + 10, nutritionY - 3).lineTo(x + width - 10, nutritionY - 3).lineWidth(0.45).strokeColor('#c4cbd4').stroke();
+    doc.moveTo(x + 16, nutritionY - 4).lineTo(x + width - 16, nutritionY - 4).lineWidth(0.3).strokeColor('#dbe3ea').stroke();
     const parts = [
       day.nutrition.calories > 0 ? `${day.nutrition.calories} cal` : null,
       day.nutrition.protein_g > 0 ? `${Math.round(day.nutrition.protein_g)}g P` : null,
@@ -183,9 +175,10 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
     ].filter(Boolean);
 
     if (parts.length > 0) {
-      doc.font('Helvetica').fontSize(6.7).fillColor('#6b7280').text(parts.join(' • '), x + 8, nutritionY + 2, {
+      doc.font('Helvetica').fontSize(5.6).fillColor('#94a3b8').text(parts.join(' · '), x + 8, nutritionY, {
         width: width - 16,
         align: 'center',
+        lineBreak: false,
       });
     }
   }
