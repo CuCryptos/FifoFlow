@@ -145,22 +145,25 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
 
   const contentTopY = y + dateBoxHeight + 8;
   const nutritionY = day.nutrition ? y + height - 26 : y + height - 10;
+  const reservedSideHeight = day.sides.length > 0 ? 24 : 0;
+  const mainsBottomLimit = nutritionY - (reservedSideHeight > 0 ? reservedSideHeight + 8 : 8);
   let cursorY = contentTopY;
   if (day.mains.length > 0) {
     doc.font('Helvetica-Bold').fontSize(8.8).fillColor('#111827').text(day.mains.join('\n'), x + 10, cursorY, {
       width: width - 16,
       align: 'center',
-      height: Math.max(18, Math.min(36, nutritionY - cursorY - 18)),
+      height: Math.max(18, Math.min(36, mainsBottomLimit - cursorY)),
       ellipsis: true,
     });
-    cursorY = Math.max(cursorY + 22, doc.y + 4);
+    cursorY = Math.max(cursorY + 22, Math.min(doc.y + 4, mainsBottomLimit));
   }
 
-  if (day.sides.length > 0 && cursorY < nutritionY - 10) {
-    doc.font('Helvetica').fontSize(7.6).fillColor('#374151').text(day.sides.join(', '), x + 10, cursorY, {
+  if (day.sides.length > 0) {
+    const sideY = Math.max(cursorY + 3, nutritionY - reservedSideHeight);
+    doc.font('Helvetica').fontSize(7.6).fillColor('#374151').text(day.sides.join(', '), x + 10, sideY, {
       width: width - 20,
       align: 'center',
-      height: Math.max(12, nutritionY - cursorY - 6),
+      height: Math.max(12, nutritionY - sideY - 4),
       ellipsis: true,
     });
   }
