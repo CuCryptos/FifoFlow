@@ -11,6 +11,7 @@ export type InventoryItemsQueryParams = {
 type ItemDetailCache = { item: Item; transactions: any[] };
 
 const ITEMS_QUERY_KEY = ['items'] as const;
+const ITEM_CATEGORIES_QUERY_KEY = ['item-categories'] as const;
 const TRANSACTIONS_QUERY_KEY = ['transactions'] as const;
 const DASHBOARD_QUERY_KEY = ['dashboard'] as const;
 
@@ -71,7 +72,38 @@ export function useCreateItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateItemInput) => api.items.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
+    },
+  });
+}
+
+export function useItemCategories() {
+  return useQuery({
+    queryKey: ITEM_CATEGORIES_QUERY_KEY,
+    queryFn: () => api.items.listCategories(),
+  });
+}
+
+export function useCreateItemCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string }) => api.items.createCategory(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
+    },
+  });
+}
+
+export function useDeleteItemCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.items.deleteCategory(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+    },
   });
 }
 
@@ -109,6 +141,7 @@ export function useUpdateItem() {
     onSettled: (_data, _error, variables) => {
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: [...ITEMS_QUERY_KEY, variables.id] as const });
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
     },
   });
 }
@@ -117,7 +150,10 @@ export function useDeleteItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.items.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
+    },
   });
 }
 
@@ -164,7 +200,10 @@ export function useBulkUpdateItems() {
         storage_area_id?: number | null;
       };
     }) => api.items.bulkUpdate(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
+    },
   });
 }
 
@@ -174,6 +213,7 @@ export function useBulkDeleteItems() {
     mutationFn: (data: { ids: number[] }) => api.items.bulkDelete(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ITEMS_QUERY_KEY });
+      qc.invalidateQueries({ queryKey: ITEM_CATEGORIES_QUERY_KEY });
       qc.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY });
     },
   });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES } from '@fifoflow/shared';
 import type { Category } from '@fifoflow/shared';
+import { useItemCategories } from '../hooks/useItems';
 import {
   useCloseCountSession,
   useCountSessionChecklist,
@@ -24,6 +25,7 @@ function formatQty(value: number): string {
 
 export function Counts() {
   const { data: sessions } = useCountSessions();
+  const { data: inventoryCategories } = useItemCategories();
   const { data: openSession } = useOpenCountSession();
   const { data: entries } = useCountSessionEntries(openSession?.id);
   const { data: checklist } = useCountSessionChecklist(openSession?.id);
@@ -40,6 +42,7 @@ export function Counts() {
   const [entryNotes, setEntryNotes] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
   const [forceClose, setForceClose] = useState(false);
+  const categoryOptions = inventoryCategories?.map((entry) => entry.name) ?? CATEGORIES;
 
   const pendingChecklist = useMemo(
     () => (checklist ?? []).filter((item) => !item.counted),
@@ -184,7 +187,7 @@ export function Counts() {
                 className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
               >
                 <option value="">All Inventory Items</option>
-                {CATEGORIES.map((category) => (
+                {categoryOptions.map((category) => (
                   <option key={category} value={category}>
                     {category}
                   </option>

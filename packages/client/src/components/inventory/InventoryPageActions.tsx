@@ -13,6 +13,7 @@ export function InventoryPageActions({
   sortedItems,
   onOpenInvoiceUpload,
   onOpenAddItem,
+  onOpenManageCategories,
 }: {
   exportGroupBy: InventoryExportGroupBy;
   onExportGroupByChange: (value: InventoryExportGroupBy) => void;
@@ -24,6 +25,7 @@ export function InventoryPageActions({
   sortedItems: Item[];
   onOpenInvoiceUpload: () => void;
   onOpenAddItem: () => void;
+  onOpenManageCategories: () => void;
 }) {
   return (
     <>
@@ -85,6 +87,12 @@ export function InventoryPageActions({
         className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
       >
         Export Excel
+      </button>
+      <button
+        onClick={onOpenManageCategories}
+        className="rounded-full border border-slate-300 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+      >
+        Manage Categories
       </button>
       <button
         onClick={onOpenInvoiceUpload}

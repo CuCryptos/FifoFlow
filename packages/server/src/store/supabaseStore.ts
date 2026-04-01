@@ -5,6 +5,7 @@ import type {
   CountSessionChecklistItem,
   CountSessionEntry,
   CountSessionSummary,
+  CreateInventoryCategoryInput,
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
@@ -16,6 +17,7 @@ import type {
   ForecastEntry,
   ForecastProductMapping,
   ForecastWithEntries,
+  InventoryCategory,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
@@ -582,6 +584,18 @@ export class SupabaseInventoryStore implements InventoryStore {
 
   async countItemsInArea(_areaId: number): Promise<number> {
     return 0;
+  }
+
+  async listInventoryCategories(): Promise<InventoryCategory[]> {
+    return [];
+  }
+
+  async createInventoryCategory(_input: CreateInventoryCategoryInput): Promise<InventoryCategory> {
+    return this.notImplemented('createInventoryCategory');
+  }
+
+  async deleteInventoryCategory(_id: number): Promise<void> {
+    return this.notImplemented('deleteInventoryCategory');
   }
 
   async listItemStorage(_itemId: number): Promise<ItemStorage[]> {

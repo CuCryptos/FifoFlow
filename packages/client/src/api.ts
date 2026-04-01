@@ -74,6 +74,7 @@ import type {
   BulkUpdateLunchMenuDaysInput,
   GenerateLunchMenuInput,
   ImportLunchMenuInput,
+  InventoryCategory,
   LunchMenu,
   LunchMenuCalendarView,
   LunchMenuListEntry,
@@ -1253,6 +1254,12 @@ export const api = {
       fetchJson<{ deleted: number; skipped: number; skippedIds: number[] }>('/items/bulk', { method: 'DELETE', body: JSON.stringify(data) }),
     merge: (data: MergeItemsInput) =>
       fetchJson<MergeItemsResult>('/items/merge', { method: 'POST', body: JSON.stringify(data) }),
+    listCategories: () =>
+      fetchJson<InventoryCategory[]>('/items/categories'),
+    createCategory: (data: { name: string }) =>
+      fetchJson<InventoryCategory>('/items/categories', { method: 'POST', body: JSON.stringify(data) }),
+    deleteCategory: (id: number) =>
+      fetchJson<void>(`/items/categories/${id}`, { method: 'DELETE' }),
   },
   storageAreas: {
     list: () => fetchJson<StorageArea[]>('/storage-areas'),

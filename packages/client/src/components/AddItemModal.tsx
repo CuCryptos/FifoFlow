@@ -7,7 +7,13 @@ import { InventoryUnitEconomicsSummary } from './inventory/InventoryUnitEconomic
 import { useProductEnrichmentSearch } from '../hooks/useProductEnrichment';
 import { useVenueContext } from '../contexts/VenueContext';
 
-export function AddItemModal({ onClose }: { onClose: () => void }) {
+export function AddItemModal({
+  onClose,
+  categories,
+}: {
+  onClose: () => void;
+  categories: string[];
+}) {
   const { selectedVenueId } = useVenueContext();
   const [name, setName] = useState('');
   const [category, setCategory] = useState<Category>(CATEGORIES[0]);
@@ -191,7 +197,7 @@ export function AddItemModal({ onClose }: { onClose: () => void }) {
                       onChange={(e) => setCategory(e.target.value as Category)}
                       className="w-full bg-white border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20 focus:border-accent-indigo"
                     >
-                      {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                      {(categories.length > 0 ? categories : CATEGORIES).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                   </div>
                   <div>

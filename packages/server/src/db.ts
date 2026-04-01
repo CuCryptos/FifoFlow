@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CATEGORIES } from '@fifoflow/shared';
 import { initializeIntelligenceDb } from './intelligence/persistence/sqliteSchema.js';
 import { initializeRecipeCostDb } from './intelligence/recipeCost/persistence/sqliteSchema.js';
 import { initializeCanonicalIngredientDb } from './mapping/ingredients/persistence/sqliteSchema.js';
@@ -99,6 +100,13 @@ export function initializeDb(db: Database.Database): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS inventory_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS item_storage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL REFERENCES items(id),
@@ -155,6 +163,12 @@ export function initializeDb(db: Database.Database): void {
       UPDATE storage_areas SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
 
+    CREATE TRIGGER IF NOT EXISTS update_inventory_category_timestamp
+    AFTER UPDATE ON inventory_categories
+    BEGIN
+      UPDATE inventory_categories SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+
     CREATE TRIGGER IF NOT EXISTS update_vendor_timestamp
     AFTER UPDATE ON vendors
     BEGIN
@@ -182,6 +196,7 @@ export function initializeDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_count_session_items_item_id ON count_session_items(item_id);
     CREATE INDEX IF NOT EXISTS idx_item_storage_item_id ON item_storage(item_id);
     CREATE INDEX IF NOT EXISTS idx_item_storage_area_id ON item_storage(area_id);
+    CREATE INDEX IF NOT EXISTS idx_inventory_categories_name ON inventory_categories(name);
     CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders(vendor_id);
     CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
     CREATE TABLE IF NOT EXISTS vendor_prices (
@@ -740,6 +755,29 @@ export function initializeDb(db: Database.Database): void {
       SELECT id, ?, current_qty FROM items WHERE current_qty > 0
     `).run(generalId);
   }
+
+  const seedInventoryCategory = db.prepare(`
+    INSERT INTO inventory_categories (name)
+    VALUES (?)
+    ON CONFLICT(name) DO NOTHING
+  `);
+  for (const category of CATEGORIES) {
+    seedInventoryCategory.run(category);
+  }
+  db.exec(`
+    INSERT INTO inventory_categories (name)
+    SELECT DISTINCT category
+    FROM items
+    WHERE TRIM(COALESCE(category, '')) <> ''
+    ON CONFLICT(name) DO NOTHING;
+  `);
+  db.exec(`
+    INSERT INTO inventory_categories (name)
+    SELECT DISTINCT template_category
+    FROM count_sessions
+    WHERE TRIM(COALESCE(template_category, '')) <> ''
+    ON CONFLICT(name) DO NOTHING;
+  `);
 
   initializeIntelligenceDb(db);
   initializeRecipeCostDb(db);

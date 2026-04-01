@@ -7,6 +7,7 @@ import type {
   CountSessionChecklistItem,
   CountSessionEntry,
   CountSessionSummary,
+  CreateInventoryCategoryInput,
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
@@ -16,6 +17,7 @@ import type {
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
+  InventoryCategory,
   Forecast,
   ForecastEntry,
   ForecastProductMapping,
@@ -99,6 +101,14 @@ function costPerRecipeUnit(
 
 export class SqliteInventoryStore implements InventoryStore {
   constructor(private readonly db: Database.Database) {}
+
+  private ensureInventoryCategoryExists(category: string): void {
+    this.db.prepare(`
+      INSERT INTO inventory_categories (name)
+      VALUES (?)
+      ON CONFLICT(name) DO NOTHING
+    `).run(category.trim());
+  }
 
   async listItems(filters?: ItemListFilters): Promise<Item[]> {
     let sql = 'SELECT * FROM items WHERE 1=1';
@@ -198,9 +208,11 @@ export class SqliteInventoryStore implements InventoryStore {
       manufacturer_item_code = null,
     } = input;
 
+    const normalizedCategory = category.trim();
     const itemSizeText = item_size ?? (
       item_size_value && item_size_unit ? `${item_size_value} ${item_size_unit}` : null
     );
+    this.ensureInventoryCategoryExists(normalizedCategory);
 
     const result = this.db.prepare(
       `INSERT INTO items (
@@ -229,7 +241,7 @@ export class SqliteInventoryStore implements InventoryStore {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       name,
-      category,
+      normalizedCategory,
       unit,
       order_unit,
       order_unit_price,
@@ -256,9 +268,17 @@ export class SqliteInventoryStore implements InventoryStore {
   }
 
   async updateItem(id: number, updates: UpdateItemInput): Promise<Item> {
-    const fields = Object.entries(updates).filter(([, v]) => v !== undefined);
+    const normalizedUpdates: UpdateItemInput = {
+      ...updates,
+      ...(typeof updates.category === 'string' ? { category: updates.category.trim() } : {}),
+    };
+    const fields = Object.entries(normalizedUpdates).filter(([, v]) => v !== undefined);
     if (fields.length === 0) {
       return (await this.getItemById(id)) as Item;
+    }
+
+    if (typeof normalizedUpdates.category === 'string') {
+      this.ensureInventoryCategoryExists(normalizedUpdates.category);
     }
 
     const setClauses = fields.map(([key]) => `${key} = ?`).join(', ');
@@ -731,9 +751,17 @@ export class SqliteInventoryStore implements InventoryStore {
       storage_area_id?: number | null;
     },
   ): Promise<{ updated: number }> {
-    const fields = Object.entries(updates).filter(([, value]) => value !== undefined);
+    const normalizedUpdates = {
+      ...updates,
+      ...(typeof updates.category === 'string' ? { category: updates.category.trim() } : {}),
+    };
+    const fields = Object.entries(normalizedUpdates).filter(([, value]) => value !== undefined);
     if (fields.length === 0) {
       return { updated: 0 };
+    }
+
+    if (typeof normalizedUpdates.category === 'string') {
+      this.ensureInventoryCategoryExists(normalizedUpdates.category);
     }
 
     const placeholders = ids.map(() => '?').join(',');
@@ -954,6 +982,46 @@ export class SqliteInventoryStore implements InventoryStore {
       'SELECT COUNT(*) as count FROM item_storage WHERE area_id = ? AND quantity > 0'
     ).get(areaId) as { count: number };
     return row.count;
+  }
+
+  async listInventoryCategories(): Promise<InventoryCategory[]> {
+    return this.db.prepare(`
+      SELECT
+        ic.*,
+        COALESCE(item_counts.item_count, 0) AS item_count,
+        COALESCE(session_counts.count_session_count, 0) AS count_session_count
+      FROM inventory_categories ic
+      LEFT JOIN (
+        SELECT category, COUNT(*) AS item_count
+        FROM items
+        GROUP BY category
+      ) item_counts
+        ON item_counts.category = ic.name
+      LEFT JOIN (
+        SELECT template_category, COUNT(*) AS count_session_count
+        FROM count_sessions
+        WHERE template_category IS NOT NULL
+        GROUP BY template_category
+      ) session_counts
+        ON session_counts.template_category = ic.name
+      ORDER BY ic.name COLLATE NOCASE ASC
+    `).all() as InventoryCategory[];
+  }
+
+  async createInventoryCategory(input: CreateInventoryCategoryInput): Promise<InventoryCategory> {
+    const result = this.db.prepare('INSERT INTO inventory_categories (name) VALUES (?)').run(input.name.trim());
+    return this.db.prepare(`
+      SELECT
+        ic.*,
+        0 AS item_count,
+        0 AS count_session_count
+      FROM inventory_categories ic
+      WHERE ic.id = ?
+    `).get(result.lastInsertRowid) as InventoryCategory;
+  }
+
+  async deleteInventoryCategory(id: number): Promise<void> {
+    this.db.prepare('DELETE FROM inventory_categories WHERE id = ?').run(id);
   }
 
   // ── Item Storage ──────────────────────────────────────────────────

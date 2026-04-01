@@ -61,11 +61,13 @@ describe('Items API', () => {
       expect(res.body.id).toBeDefined();
     });
 
-    it('rejects invalid category', async () => {
+    it('accepts a custom inventory category and persists it for future use', async () => {
       const res = await request(app)
         .post('/api/items')
         .send({ name: 'Test', category: 'InvalidCat', unit: 'lb' });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(201);
+      const categoryRow = db.prepare('SELECT name FROM inventory_categories WHERE name = ?').get('InvalidCat') as { name: string } | undefined;
+      expect(categoryRow?.name).toBe('InvalidCat');
     });
 
     it('rejects missing name', async () => {
@@ -130,6 +132,46 @@ describe('Items API', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].name).toBe('Jasmine Rice');
+    });
+  });
+
+  describe('GET /api/items/categories', () => {
+    it('lists inventory categories with usage counts', async () => {
+      const seafoodId = (db.prepare('SELECT id FROM inventory_categories WHERE name = ?').get('Seafood') as { id: number }).id;
+      db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Ahi Tuna', 'Seafood', 'lb');
+      db.prepare("INSERT INTO count_sessions (name, template_category, notes) VALUES (?, ?, ?)").run('Seafood Count', 'Seafood', null);
+
+      const res = await request(app).get('/api/items/categories');
+      expect(res.status).toBe(200);
+      const seafood = res.body.find((entry: any) => entry.id === seafoodId);
+      expect(seafood).toMatchObject({
+        name: 'Seafood',
+        item_count: 1,
+        count_session_count: 1,
+      });
+    });
+
+    it('creates and deletes an unused inventory category', async () => {
+      const created = await request(app)
+        .post('/api/items/categories')
+        .send({ name: 'Paper Goods' });
+      expect(created.status).toBe(201);
+      expect(created.body.name).toBe('Paper Goods');
+
+      const deleted = await request(app).delete(`/api/items/categories/${created.body.id}`);
+      expect(deleted.status).toBe(204);
+    });
+
+    it('blocks deleting a category still assigned to items', async () => {
+      const created = await request(app)
+        .post('/api/items/categories')
+        .send({ name: 'Specialty Produce' });
+      expect(created.status).toBe(201);
+
+      db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('Meyer Lemon', 'Specialty Produce', 'each');
+
+      const deleted = await request(app).delete(`/api/items/categories/${created.body.id}`);
+      expect(deleted.status).toBe(409);
     });
   });
 

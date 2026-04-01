@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useItems, useItem, useReorderSuggestions, useBulkUpdateItems, useBulkDeleteItems, useMergeItems } from '../hooks/useItems';
+import { useItems, useItem, useReorderSuggestions, useBulkUpdateItems, useBulkDeleteItems, useItemCategories, useMergeItems } from '../hooks/useItems';
 import {
   useInventoryWorkflow,
   type InventoryWorkflowFocus,
@@ -32,6 +32,7 @@ import {
 } from '../components/workflow/WorkflowPrimitives';
 
 const AddItemModal = lazy(async () => ({ default: (await import('../components/AddItemModal')).AddItemModal }));
+const ManageCategoriesModal = lazy(async () => ({ default: (await import('../components/ManageCategoriesModal')).ManageCategoriesModal }));
 const ManageAreasModal = lazy(async () => ({ default: (await import('../components/ManageAreasModal')).ManageAreasModal }));
 const ManageVendorsModal = lazy(async () => ({ default: (await import('../components/ManageVendorsModal')).ManageVendorsModal }));
 const ManageVenuesModal = lazy(async () => ({ default: (await import('../components/ManageVenuesModal')).ManageVenuesModal }));
@@ -109,6 +110,8 @@ export function Inventory() {
     setBulkStorageAreaId,
     showAddModal,
     setShowAddModal,
+    showCategoriesModal,
+    setShowCategoriesModal,
     showAreasModal,
     setShowAreasModal,
     showVendorsModal,
@@ -130,6 +133,7 @@ export function Inventory() {
   } = useInventoryWorkflow();
 
   const { selectedVenueId } = useVenueContext();
+  const { data: inventoryCategories } = useItemCategories();
   const { data: areas } = useStorageAreas();
   const { data: allItemStorage } = useAllItemStorage();
   const { data: vendors } = useVendors();
@@ -322,6 +326,7 @@ export function Inventory() {
   };
 
   const currentFocus = INVENTORY_FOCUS_COPY[workflowFocus];
+  const categoryOptions = inventoryCategories?.map((entry) => entry.name) ?? [];
   const laneCards: Array<{ focus: InventoryWorkflowFocus; count: number }> = [
     { focus: 'all', count: workflowCounts.cards.total },
     { focus: 'needs_attention', count: workflowCounts.cards.needsAttention },
@@ -349,6 +354,7 @@ export function Inventory() {
           sortedItems={sortedItems}
           onOpenInvoiceUpload={() => setShowInvoiceUpload(true)}
           onOpenAddItem={() => setShowAddModal(true)}
+          onOpenManageCategories={() => setShowCategoriesModal(true)}
         />
       )}
     >
@@ -364,6 +370,7 @@ export function Inventory() {
         onSearchChange={setSearch}
         category={category}
         onCategoryChange={setCategory}
+        categories={categoryOptions}
         areaFilter={areaFilter}
         onAreaFilterChange={setAreaFilter}
         areas={areas ?? []}
@@ -398,6 +405,7 @@ export function Inventory() {
           selectedCount={selectedCount}
           bulkCategory={bulkCategory}
           onBulkCategoryChange={setBulkCategory}
+          categories={categoryOptions}
           bulkVendorId={bulkVendorId}
           onBulkVendorIdChange={setBulkVendorId}
           bulkVenueId={bulkVenueId}
@@ -585,6 +593,7 @@ export function Inventory() {
               areas={areas ?? []}
               vendors={vendors ?? []}
               venues={venues ?? []}
+              categories={categoryOptions}
             />
           )}
         </SlideOver>
@@ -592,7 +601,10 @@ export function Inventory() {
 
       <Suspense fallback={null}>
         {showAddModal && (
-          <AddItemModal onClose={() => setShowAddModal(false)} />
+          <AddItemModal categories={categoryOptions} onClose={() => setShowAddModal(false)} />
+        )}
+        {showCategoriesModal && (
+          <ManageCategoriesModal onClose={() => setShowCategoriesModal(false)} />
         )}
         {showAreasModal && (
           <ManageAreasModal onClose={() => setShowAreasModal(false)} />

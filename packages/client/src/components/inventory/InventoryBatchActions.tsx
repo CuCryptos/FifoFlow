@@ -1,10 +1,10 @@
-import { CATEGORIES } from '@fifoflow/shared';
 import { WorkflowPanel } from '../workflow/WorkflowPrimitives';
 
 export function InventoryBatchActions({
   selectedCount,
   bulkCategory,
   onBulkCategoryChange,
+  categories,
   bulkVendorId,
   onBulkVendorIdChange,
   bulkVenueId,
@@ -26,6 +26,7 @@ export function InventoryBatchActions({
   selectedCount: number;
   bulkCategory: string;
   onBulkCategoryChange: (value: string) => void;
+  categories: string[];
   bulkVendorId: string;
   onBulkVendorIdChange: (value: string) => void;
   bulkVenueId: string;
@@ -61,7 +62,7 @@ export function InventoryBatchActions({
             className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-indigo/20"
           >
             <option value="">Reassign category…</option>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>

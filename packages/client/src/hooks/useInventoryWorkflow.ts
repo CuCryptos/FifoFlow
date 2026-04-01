@@ -67,6 +67,7 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
   const [bulkStorageAreaId, setBulkStorageAreaId] = useState('');
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [showAreasModal, setShowAreasModal] = useState(false);
   const [showVendorsModal, setShowVendorsModal] = useState(false);
   const [showVenuesModal, setShowVenuesModal] = useState(false);
@@ -107,6 +108,7 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
 
   const closeDialogs = useCallback(() => {
     setShowAddModal(false);
+    setShowCategoriesModal(false);
     setShowAreasModal(false);
     setShowVendorsModal(false);
     setShowVenuesModal(false);
@@ -148,6 +150,8 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
     setBulkStorageAreaId,
     showAddModal,
     setShowAddModal,
+    showCategoriesModal,
+    setShowCategoriesModal,
     showAreasModal,
     setShowAreasModal,
     showVendorsModal,
@@ -183,6 +187,7 @@ export function useInventoryWorkflow(options: UseInventoryWorkflowOptions = {}) 
     selectedItemId,
     search,
     showAddModal,
+    showCategoriesModal,
     showAreasModal,
     showDeleteConfirm,
     showInvoiceUpload,

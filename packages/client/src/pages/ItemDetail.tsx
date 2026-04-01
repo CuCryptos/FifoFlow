@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useItem, useUpdateItem, useDeleteItem, useSetItemCount } from '../hooks/useItems';
+import { useItem, useUpdateItem, useDeleteItem, useSetItemCount, useItemCategories } from '../hooks/useItems';
 import { useItemStorage } from '../hooks/useStorageAreas';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { getCompatibleUnits, convertQuantity } from '@fifoflow/shared';
@@ -27,6 +27,7 @@ export function ItemDetail() {
   const deleteItem = useDeleteItem();
   const setItemCount = useSetItemCount();
   const { data: itemStorage } = useItemStorage(Number(id));
+  const { data: inventoryCategories } = useItemCategories();
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editCategory, setEditCategory] = useState<Category>(CATEGORIES[0]);
@@ -48,6 +49,7 @@ export function ItemDetail() {
 
   const item = data?.item;
   const transactions = data?.transactions ?? [];
+  const categoryOptions = inventoryCategories?.map((entry) => entry.name) ?? CATEGORIES;
 
   useEffect(() => {
     if (item) {
@@ -209,7 +211,7 @@ export function ItemDetail() {
                 onChange={(e) => setEditCategory(e.target.value as Category)}
                 className={inputClass}
               >
-                {CATEGORIES.map((c) => (
+                {categoryOptions.map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </select>

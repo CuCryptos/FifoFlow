@@ -5,6 +5,7 @@ import type {
   CountSessionChecklistItem,
   CountSessionEntry,
   CountSessionSummary,
+  CreateInventoryCategoryInput,
   CreateCountSessionInput,
   CreateItemInput,
   CreateOrderInput,
@@ -15,6 +16,7 @@ import type {
   ForecastEntry,
   ForecastProductMapping,
   ForecastWithEntries,
+  InventoryCategory,
   ItemCountAdjustmentResult,
   Item,
   ItemStorage,
@@ -139,6 +141,11 @@ export interface InventoryStore {
   updateStorageArea(id: number, input: UpdateStorageAreaInput): Promise<StorageArea>;
   deleteStorageArea(id: number): Promise<void>;
   countItemsInArea(areaId: number): Promise<number>;
+
+  // Inventory Categories
+  listInventoryCategories(): Promise<InventoryCategory[]>;
+  createInventoryCategory(input: CreateInventoryCategoryInput): Promise<InventoryCategory>;
+  deleteInventoryCategory(id: number): Promise<void>;
 
   // Bulk operations
   bulkUpdateItems(

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, mergeItemsSchema, replaceItemStorageSchema, tryConvertQuantity } from '@fifoflow/shared';
-import type { Item, ItemCountAdjustmentResult, ItemStorage, MergeItemsResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
+import { createInventoryCategorySchema, createItemSchema, setItemCountSchema, updateItemSchema, bulkUpdateItemsSchema, bulkDeleteItemsSchema, mergeItemsSchema, replaceItemStorageSchema, tryConvertQuantity } from '@fifoflow/shared';
+import type { InventoryCategory, Item, ItemCountAdjustmentResult, ItemStorage, MergeItemsResult, ReorderSuggestion, Transaction, Unit } from '@fifoflow/shared';
 import { createTransactionHandler } from './transactions.js';
 import { createVendorPriceRoutes } from './vendorPrices.js';
 import type { InventoryStore } from '../store/types.js';
@@ -145,6 +145,56 @@ async function enrichItem(store: InventoryStore, item: Item): Promise<ItemReadMo
 
 export function createItemRoutes(store: InventoryStore): Router {
   const router = Router();
+
+  router.get('/categories', async (_req, res) => {
+    const categories = await store.listInventoryCategories();
+    res.json(categories);
+  });
+
+  router.post('/categories', async (req, res) => {
+    const parsed = createInventoryCategorySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    try {
+      const category = await store.createInventoryCategory(parsed.data);
+      res.status(201).json(category);
+    } catch (err: any) {
+      if (typeof err?.message === 'string' && err.message.toLowerCase().includes('unique')) {
+        res.status(409).json({ error: 'Inventory category already exists' });
+        return;
+      }
+      res.status(400).json({ error: err?.message ?? 'Failed to create inventory category' });
+    }
+  });
+
+  router.delete('/categories/:id', async (req, res) => {
+    const categoryId = Number(req.params.id);
+    if (!Number.isInteger(categoryId) || categoryId <= 0) {
+      res.status(400).json({ error: 'Invalid category id' });
+      return;
+    }
+
+    const categories = await store.listInventoryCategories();
+    const category = categories.find((entry) => entry.id === categoryId) as InventoryCategory | undefined;
+    if (!category) {
+      res.status(404).json({ error: 'Inventory category not found' });
+      return;
+    }
+    if (category.item_count > 0) {
+      res.status(409).json({ error: 'Cannot delete a category that is still assigned to inventory items' });
+      return;
+    }
+    if (category.count_session_count > 0) {
+      res.status(409).json({ error: 'Cannot delete a category that is still used by count session templates' });
+      return;
+    }
+
+    await store.deleteInventoryCategory(categoryId);
+    res.status(204).send();
+  });
 
   // POST /api/items/merge — merge multiple items into one
   router.post('/merge', async (req, res) => {

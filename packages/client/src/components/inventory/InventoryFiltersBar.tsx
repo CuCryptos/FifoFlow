@@ -1,4 +1,3 @@
-import { CATEGORIES } from '@fifoflow/shared';
 import type { InventoryWorkflowFocus, InventorySortField as SortField } from '../../hooks/useInventoryWorkflow';
 import { WorkflowChip, WorkflowFocusBar, WorkflowPanel } from '../workflow/WorkflowPrimitives';
 import { INVENTORY_FOCUS_COPY } from './InventoryLaneCard';
@@ -19,6 +18,7 @@ export function InventoryFiltersBar({
   onSearchChange,
   category,
   onCategoryChange,
+  categories,
   areaFilter,
   onAreaFilterChange,
   areas,
@@ -39,6 +39,7 @@ export function InventoryFiltersBar({
   onSearchChange: (value: string) => void;
   category: string;
   onCategoryChange: (value: string) => void;
+  categories: string[];
   areaFilter: string;
   onAreaFilterChange: (value: string) => void;
   areas: Array<{ id: number; name: string }>;
@@ -79,7 +80,7 @@ export function InventoryFiltersBar({
             className="w-full bg-transparent text-sm text-slate-900 focus:outline-none"
           >
             <option value="">All Categories</option>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>

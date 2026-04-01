@@ -63,12 +63,14 @@ export function InventoryItemSidePanel({
   areas,
   vendors,
   venues,
+  categories,
 }: {
   item: Item;
   transactions: Transaction[];
   areas: Array<{ id: number; name: string }>;
   vendors: Array<{ id: number; name: string }>;
   venues: Array<{ id: number; name: string }>;
+  categories: string[];
 }) {
   type InventoryItemPanelDraft = {
     name: string;
@@ -623,7 +625,7 @@ export function InventoryItemSidePanel({
               onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value as Item['category'] }))}
               className={`w-full rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10 ${fieldClassName(fieldStates.category)}`}
             >
-              {CATEGORIES.map((categoryOption) => (
+              {(categories.length > 0 ? categories : CATEGORIES).map((categoryOption) => (
                 <option key={categoryOption} value={categoryOption}>{categoryOption}</option>
               ))}
             </select>
