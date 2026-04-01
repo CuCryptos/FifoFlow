@@ -58,7 +58,7 @@ function drawDocument(doc: PDFKit.PDFDocument, menu: LunchMenu, options: LunchMe
   drawHeader(doc, margin, margin, usableWidth, venueName, title, monthName, menu.year);
   drawWeekdayHeaders(doc, margin, startY, cellWidth, weekdayHeaderHeight);
 
-  const weeks = buildCalendar(menu);
+  const weeks = buildLunchMenuPdfCalendar(menu);
   weeks.forEach((week, weekIndex) => {
     const y = startY + weekdayHeaderHeight + weekIndex * cellHeight;
     week.forEach((day, dayIndex) => {
@@ -143,28 +143,29 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
     align: 'center',
   });
 
-  let cursorY = y + 14;
+  const contentTopY = y + dateBoxHeight + 8;
+  const nutritionY = day.nutrition ? y + height - 26 : y + height - 10;
+  let cursorY = contentTopY;
   if (day.mains.length > 0) {
     doc.font('Helvetica-Bold').fontSize(8.8).fillColor('#111827').text(day.mains.join('\n'), x + 10, cursorY, {
       width: width - 16,
       align: 'center',
-      height: 34,
+      height: Math.max(18, Math.min(36, nutritionY - cursorY - 18)),
       ellipsis: true,
     });
-    cursorY = Math.max(cursorY + 25, doc.y + 3);
+    cursorY = Math.max(cursorY + 22, doc.y + 4);
   }
 
-  if (day.sides.length > 0) {
+  if (day.sides.length > 0 && cursorY < nutritionY - 10) {
     doc.font('Helvetica').fontSize(7.6).fillColor('#374151').text(day.sides.join(', '), x + 10, cursorY, {
       width: width - 20,
       align: 'center',
-      height: 23,
+      height: Math.max(12, nutritionY - cursorY - 6),
       ellipsis: true,
     });
   }
 
   if (day.nutrition) {
-    const nutritionY = y + height - 26;
     doc.moveTo(x + 10, nutritionY - 3).lineTo(x + width - 10, nutritionY - 3).lineWidth(0.45).strokeColor('#c4cbd4').stroke();
     const parts = [
       day.nutrition.calories > 0 ? `${day.nutrition.calories} cal` : null,
@@ -201,7 +202,7 @@ function drawFooter(doc: PDFKit.PDFDocument, x: number, y: number, width: number
   doc.restore();
 }
 
-function buildCalendar(menu: LunchMenu): Array<Array<CalendarDayData | null>> {
+export function buildLunchMenuPdfCalendar(menu: LunchMenu): Array<Array<CalendarDayData | null>> {
   const byDate = new Map<string, CalendarDayData>();
 
   for (const item of menu.items) {
@@ -245,6 +246,9 @@ function buildCalendar(menu: LunchMenu): Array<Array<CalendarDayData | null>> {
       while (currentWeek.length < 5) currentWeek.push(null);
       result.push(currentWeek);
       currentWeek = [];
+    }
+    if (currentWeek.length === 0 && weekday > 1) {
+      while (currentWeek.length < weekday - 1) currentWeek.push(null);
     }
     currentWeek.push(byDate.get(isoDate) ?? {
       date: isoDate,
