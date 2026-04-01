@@ -145,26 +145,31 @@ function drawDayCell(doc: PDFKit.PDFDocument, x: number, y: number, width: numbe
 
   const contentTopY = y + dateBoxHeight + 8;
   const nutritionY = day.nutrition ? y + height - 26 : y + height - 10;
-  const reservedSideHeight = day.sides.length > 0 ? 24 : 0;
-  const mainsBottomLimit = nutritionY - (reservedSideHeight > 0 ? reservedSideHeight + 8 : 8);
-  let cursorY = contentTopY;
-  if (day.mains.length > 0) {
-    doc.font('Helvetica-Bold').fontSize(8.8).fillColor('#111827').text(day.mains.join('\n'), x + 10, cursorY, {
-      width: width - 16,
-      align: 'center',
-      height: Math.max(18, Math.min(36, mainsBottomLimit - cursorY)),
-      ellipsis: true,
+  const mainLines = wrapLines(day.mains.join(' / '), day.sides.length > 0 ? 30 : 28, day.sides.length > 0 ? 1 : 3);
+  const sideLines = day.sides.length > 0 ? wrapLines(day.sides.join(' • '), 26, 2) : [];
+  const sideBlockHeight = sideLines.length > 0 ? 18 : 0;
+  const sideBlockY = nutritionY - sideBlockHeight;
+  const separatorY = sideBlockY - 6;
+  if (mainLines.length > 0) {
+    doc.font('Helvetica-Bold').fontSize(sideLines.length > 0 ? 7.6 : 8.0).fillColor('#111827');
+    mainLines.forEach((line, index) => {
+      doc.text(line, x + 10, contentTopY + index * 8.2, {
+        width: width - 16,
+        align: 'center',
+        lineBreak: false,
+      });
     });
-    cursorY = Math.max(cursorY + 22, Math.min(doc.y + 4, mainsBottomLimit));
   }
 
-  if (day.sides.length > 0) {
-    const sideY = Math.max(cursorY + 3, nutritionY - reservedSideHeight);
-    doc.font('Helvetica').fontSize(7.6).fillColor('#374151').text(day.sides.join(', '), x + 10, sideY, {
-      width: width - 20,
-      align: 'center',
-      height: Math.max(12, nutritionY - sideY - 4),
-      ellipsis: true,
+  if (sideLines.length > 0) {
+    doc.moveTo(x + 12, separatorY).lineTo(x + width - 12, separatorY).lineWidth(0.35).strokeColor('#d1d9e2').stroke();
+    doc.font('Helvetica').fontSize(5.9).fillColor('#475569');
+    sideLines.forEach((line, index) => {
+      doc.text(line, x + 8, sideBlockY + index * 6.4, {
+        width: width - 16,
+        align: 'center',
+        lineBreak: false,
+      });
     });
   }
 
@@ -268,6 +273,62 @@ export function buildLunchMenuPdfCalendar(menu: LunchMenu): Array<Array<Calendar
   }
 
   return result;
+}
+
+function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return [];
+  }
+
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+    } else {
+      lines.push(truncateWithEllipsis(word, maxChars));
+      current = '';
+    }
+
+    if (lines.length === maxLines) {
+      return lines.map((line, index) => (index === maxLines - 1 ? truncateWithEllipsis(line, maxChars) : line));
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+
+  return lines.slice(0, maxLines).map((line, index) => {
+    if (index < maxLines - 1) {
+      return line;
+    }
+    const remainder = [line, ...lines.slice(maxLines)].join(' ');
+    return truncateWithEllipsis(remainder, maxChars);
+  });
+}
+
+function truncateWithEllipsis(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  if (maxChars <= 1) {
+    return text.slice(0, maxChars);
+  }
+  return `${text.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
 function countWeeks(year: number, month: number): number {
