@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { Item, StorageArea } from '@fifoflow/shared';
+import { deriveInventoryOnHandValue } from '../components/inventory/InventoryUnitEconomicsSummary';
 
 export type GroupBy = 'storage_area' | 'venue' | 'vendor';
 export type BarMode = 'combined' | 'split_bar';
@@ -101,8 +102,11 @@ function buildRows(items: Item[], groupBy: GroupBy, areaLookup: Map<number, stri
       item.order_unit_price != null && item.qty_per_unit != null && item.qty_per_unit > 0
         ? item.order_unit_price / item.qty_per_unit
         : item.order_unit_price;
-    const totalValue =
-      item.order_unit_price != null && item.current_qty > 0 ? item.order_unit_price * item.current_qty : null;
+    const totalValue = deriveInventoryOnHandValue({
+      currentQty: item.current_qty,
+      orderUnitPrice: item.order_unit_price,
+      qtyPerUnit: item.qty_per_unit,
+    });
 
     return {
       Name: item.name,

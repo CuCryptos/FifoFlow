@@ -23,6 +23,7 @@ import { InventoryPagination } from '../components/inventory/InventoryPagination
 import { InventoryPageActions } from '../components/inventory/InventoryPageActions';
 import { InventoryQueueCard } from '../components/inventory/InventoryQueueCard';
 import { InventoryQueueHeader } from '../components/inventory/InventoryQueueHeader';
+import { deriveInventoryOnHandValue } from '../components/inventory/InventoryUnitEconomicsSummary';
 import {
   WorkflowEmptyState,
   WorkflowMetricCard,
@@ -485,9 +486,11 @@ export function Inventory() {
                 const missingVenue = workflowCounts.missingVenue.has(item.id);
                 const missingStorageArea = workflowCounts.missingStorageArea.has(item.id);
                 const orderingIncomplete = workflowCounts.orderingIncomplete.has(item.id);
-                const totalValue = item.order_unit_price != null && item.current_qty > 0
-                  ? item.order_unit_price * item.current_qty
-                  : null;
+                const totalValue = deriveInventoryOnHandValue({
+                  currentQty: item.current_qty,
+                  orderUnitPrice: item.order_unit_price,
+                  qtyPerUnit: item.qty_per_unit,
+                });
                 const venueName = venues?.find((venue) => venue.id === item.venue_id)?.name ?? 'Venue missing';
                 const storageName = item.storage_area_id != null
                   ? areaNameLookup.get(item.storage_area_id) ?? 'Area assigned'

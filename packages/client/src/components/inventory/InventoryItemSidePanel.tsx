@@ -4,7 +4,7 @@ import type { Item, ItemStorage, Transaction, Unit } from '@fifoflow/shared';
 import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { useItemStorage, useReplaceItemStorage, useUpdateItem } from '../../hooks/useItems';
 import { useToast } from '../../contexts/ToastContext';
-import { InventoryUnitEconomicsSummary, deriveInventoryUnitEconomics } from './InventoryUnitEconomicsSummary';
+import { InventoryUnitEconomicsSummary, deriveInventoryOnHandValue, deriveInventoryUnitEconomics } from './InventoryUnitEconomicsSummary';
 import { ItemIdentifierEditor } from '../products/ItemIdentifierEditor';
 
 function formatCurrency(value: number | null): string {
@@ -266,7 +266,11 @@ export function InventoryItemSidePanel({
   const storageHasBlankArea = storageDraftRows.some((row) => row.area_id === '');
   const storageHasInvalidQuantity = storageDraftRows.some((row) => row.quantity === '' || !Number.isFinite(Number(row.quantity)) || Number(row.quantity) < 0);
   const reorderStatus = item.reorder_level != null && item.current_qty <= item.reorder_level ? 'Needs reorder' : 'In range';
-  const totalValue = item.order_unit_price != null ? item.order_unit_price * item.current_qty : null;
+  const totalValue = deriveInventoryOnHandValue({
+    currentQty: item.current_qty,
+    orderUnitPrice: item.order_unit_price,
+    qtyPerUnit: item.qty_per_unit,
+  });
   const currentEconomics = deriveInventoryUnitEconomics({
     baseUnit: item.unit,
     orderUnit: item.order_unit,

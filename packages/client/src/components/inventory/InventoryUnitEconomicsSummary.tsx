@@ -32,6 +32,26 @@ export interface InventoryUnitEconomicsModel {
   warnings: string[];
 }
 
+export function deriveInventoryOnHandValue(input: {
+  currentQty: NumberValue;
+  orderUnitPrice: NumberValue;
+  qtyPerUnit: NumberValue;
+}): number | null {
+  const currentQty = parseNumber(input.currentQty);
+  const purchasePrice = parseNumber(input.orderUnitPrice);
+  const unitsPerPurchase = parseNumber(input.qtyPerUnit);
+
+  if (currentQty == null || purchasePrice == null || currentQty <= 0) {
+    return null;
+  }
+
+  if (unitsPerPurchase != null && unitsPerPurchase > 0) {
+    return currentQty * (purchasePrice / unitsPerPurchase);
+  }
+
+  return currentQty * purchasePrice;
+}
+
 function parseNumber(value: NumberValue): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
