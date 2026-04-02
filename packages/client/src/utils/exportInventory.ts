@@ -31,6 +31,7 @@ type ExportSection = 'Alcohol' | 'Non-Alcohol' | 'Other Inventory';
 
 const ALCOHOL_CATEGORIES = new Set(['Beer', 'Wine', 'Spirits', 'Ready to Drink']);
 const NON_ALCOHOL_CATEGORIES = new Set(['Mixer', 'Mixers', 'Non-Alcoholic', 'Beverages']);
+const OTHER_INVENTORY_CATEGORIES = new Set(['Glassware', 'Bar Supplies']);
 const SECTION_ORDER: ExportSection[] = ['Alcohol', 'Non-Alcohol', 'Other Inventory'];
 const ALCOHOL_NAME_PATTERNS = [
   /\bale\b/i,
@@ -81,6 +82,9 @@ function groupByLabel(groupBy: GroupBy): string {
 function classifyBarSection(item: Item): ExportSection {
   if (NON_ALCOHOL_CATEGORIES.has(item.category)) {
     return 'Non-Alcohol';
+  }
+  if (OTHER_INVENTORY_CATEGORIES.has(item.category)) {
+    return 'Other Inventory';
   }
   if (ALCOHOL_NAME_PATTERNS.some((pattern) => pattern.test(item.name))) {
     return 'Alcohol';
