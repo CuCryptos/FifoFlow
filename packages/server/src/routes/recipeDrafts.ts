@@ -11,6 +11,8 @@ import {
 import { SQLiteRecipeBuilderRepository } from '../recipes/builder/index.js';
 import type { RecipeBuilderRequest } from '../recipes/builder/types.js';
 import { SQLiteRecipePromotionRepository, executeRecipePromotion } from '../recipes/promotion/index.js';
+import { SQLiteCanonicalIngredientRepository } from '../mapping/ingredients/canonicalIngredientRepositories.js';
+import { normalizeIngredientLookup, resolveCanonicalIngredient } from '../mapping/ingredients/canonicalIngredientResolver.js';
 
 interface RecipeDraftSummaryRow extends RecipeBuilderDraftRecipe {
   source_type: RecipeBuilderJob['source_type'];
@@ -37,6 +39,7 @@ interface DraftRowPayload {
   canonical_ingredient_id: number | string | null;
   canonical_ingredient_name: string | null;
   canonical_match_status: RecipeBuilderResolutionRow['canonical_match_status'] | null;
+  canonical_match_reason: string | null;
   inventory_mapping_status: RecipeBuilderResolutionRow['inventory_mapping_status'] | null;
   review_status: RecipeBuilderResolutionRow['review_status'] | null;
   mapping_explanation: string | null;
@@ -91,7 +94,11 @@ function deriveDraftCostability(input: {
   completenessStatus: RecipeBuilderDraftRecipe['completeness_status'];
   unresolvedCanonicalCount: number;
   unresolvedInventoryCount: number;
+  fallbackCanonicalCount: number;
 }): RecipeBuilderDraftRecipe['costability_status'] {
+  if (input.fallbackCanonicalCount > 0) {
+    return 'NEEDS_REVIEW';
+  }
   if (input.completenessStatus === 'READY' && input.unresolvedCanonicalCount === 0 && input.unresolvedInventoryCount === 0) {
     return 'COSTABLE';
   }
@@ -148,6 +155,112 @@ async function resolveCanonicalFromInventoryItem(db: Database.Database, itemId: 
   };
 }
 
+async function resolveCanonicalForDraftIngredient(db: Database.Database, input: {
+  itemId: number | null;
+  itemName: string | null;
+  unit: string | null;
+  templateCanonicalIngredientId: number | null;
+}): Promise<{
+  canonical_ingredient_id: number | null;
+  canonical_name: string | null;
+  canonical_match_reason: string | null;
+  canonical_confidence: RecipeBuilderResolutionRow['canonical_confidence'];
+  fallback_created: boolean;
+}> {
+  if (input.templateCanonicalIngredientId != null) {
+    return {
+      canonical_ingredient_id: input.templateCanonicalIngredientId,
+      canonical_name: null,
+      canonical_match_reason: 'template_mapping',
+      canonical_confidence: 'HIGH',
+      fallback_created: false,
+    };
+  }
+
+  if (input.itemId == null) {
+    return {
+      canonical_ingredient_id: null,
+      canonical_name: null,
+      canonical_match_reason: null,
+      canonical_confidence: 'LOW',
+      fallback_created: false,
+    };
+  }
+
+  const mappedCanonical = await resolveCanonicalFromInventoryItem(db, input.itemId);
+  if (mappedCanonical.canonical_ingredient_id != null) {
+    return {
+      canonical_ingredient_id: mappedCanonical.canonical_ingredient_id,
+      canonical_name: mappedCanonical.canonical_name,
+      canonical_match_reason: 'inventory_mapping',
+      canonical_confidence: 'HIGH',
+      fallback_created: false,
+    };
+  }
+
+  const rawItemName = input.itemName?.trim() ?? '';
+  if (!rawItemName) {
+    return {
+      canonical_ingredient_id: null,
+      canonical_name: null,
+      canonical_match_reason: null,
+      canonical_confidence: 'LOW',
+      fallback_created: false,
+    };
+  }
+
+  const canonicalRepository = new SQLiteCanonicalIngredientRepository(db);
+  const resolvedFromName = await resolveCanonicalIngredient(rawItemName, canonicalRepository);
+  if (resolvedFromName.status === 'matched' && resolvedFromName.matched_canonical_ingredient_id != null) {
+    return {
+      canonical_ingredient_id: Number(resolvedFromName.matched_canonical_ingredient_id),
+      canonical_name: resolvedFromName.matched_canonical_name,
+      canonical_match_reason: 'inventory_name_lookup',
+      canonical_confidence: 'MEDIUM',
+      fallback_created: false,
+    };
+  }
+
+  const normalizedName = normalizeIngredientLookup(rawItemName);
+  const sourceHash = `inventory-fallback:${normalizedName}`;
+  canonicalRepository.upsertCanonicalIngredient({
+    canonical_name: rawItemName,
+    normalized_canonical_name: normalizedName,
+    category: 'inventory_fallback',
+    base_unit: input.unit ?? 'each',
+    perishable_flag: false,
+    active: true,
+    source_hash: sourceHash,
+  });
+  const fallbackCanonical = canonicalRepository.getCanonicalIngredientByName(rawItemName);
+  if (!fallbackCanonical) {
+    return {
+      canonical_ingredient_id: null,
+      canonical_name: null,
+      canonical_match_reason: null,
+      canonical_confidence: 'LOW',
+      fallback_created: false,
+    };
+  }
+
+  canonicalRepository.upsertIngredientAlias({
+    canonical_ingredient_id: fallbackCanonical.id,
+    alias: rawItemName,
+    normalized_alias: normalizedName,
+    alias_type: 'inventory_item_name',
+    active: true,
+    source_hash: sourceHash,
+  });
+
+  return {
+    canonical_ingredient_id: Number(fallbackCanonical.id),
+    canonical_name: fallbackCanonical.canonical_name,
+    canonical_match_reason: 'inventory_fallback',
+    canonical_confidence: 'LOW',
+    fallback_created: true,
+  };
+}
+
 function sanitizeIngredientRows(input: UpsertRecipeDraftInput): UpsertRecipeDraftInput['ingredients'] {
   return input.ingredients.filter((ingredient) => {
     const hasItem = ingredient.item_id != null;
@@ -156,6 +269,34 @@ function sanitizeIngredientRows(input: UpsertRecipeDraftInput): UpsertRecipeDraf
     const hasTemplateIdentity = Boolean(ingredient.template_ingredient_name);
     return hasItem || hasQuantity || hasUnit || hasTemplateIdentity;
   });
+}
+
+function detailToUpsertRecipeDraftInput(detail: NonNullable<ReturnType<typeof loadDraftDetail>>): UpsertRecipeDraftInput {
+  return {
+    draft_name: detail.draft_name,
+    draft_notes: detail.draft_notes,
+    source_recipe_type: detail.source_recipe_type ?? 'dish',
+    creation_mode: detail.source_type === 'template' ? 'template' : 'blank',
+    source_template_id: detail.source_template_id,
+    source_template_version_id: detail.source_template_version_id,
+    yield_quantity: detail.yield_quantity,
+    yield_unit: detail.yield_unit as UpsertRecipeDraftInput['yield_unit'],
+    serving_quantity: detail.serving_quantity,
+    serving_unit: detail.serving_unit as UpsertRecipeDraftInput['serving_unit'],
+    serving_count: detail.serving_count,
+    ingredients: detail.ingredient_rows.map((row) => ({
+      item_id: row.item_id == null ? null : Number(row.item_id),
+      quantity: row.quantity,
+      unit: row.unit as UpsertRecipeDraftInput['ingredients'][number]['unit'],
+      template_ingredient_name: row.template_ingredient_name,
+      template_quantity: row.template_quantity,
+      template_unit: row.template_unit as UpsertRecipeDraftInput['ingredients'][number]['template_unit'],
+      template_sort_order: row.template_sort_order,
+      template_canonical_ingredient_id: row.template_ingredient_name != null && row.canonical_ingredient_id != null
+        ? Number(row.canonical_ingredient_id)
+        : null,
+    })),
+  };
 }
 
 async function persistDraft(
@@ -260,16 +401,23 @@ async function persistDraft(
     review_status: RecipeBuilderResolutionRow['review_status'];
     explanation_text: string;
   }> = [];
+  let fallbackCanonicalCount = 0;
 
   for (const [index, ingredient] of sanitizedIngredients.entries()) {
     const itemName = ingredient.item_id != null ? itemsById.get(Number(ingredient.item_id)) ?? null : null;
-    const canonicalFromInventory = ingredient.item_id != null
-      ? await resolveCanonicalFromInventoryItem(db, Number(ingredient.item_id))
-      : { canonical_ingredient_id: null, canonical_name: null };
-    const canonicalIngredientId = ingredient.template_canonical_ingredient_id ?? canonicalFromInventory.canonical_ingredient_id ?? null;
+    const canonicalResolution = await resolveCanonicalForDraftIngredient(db, {
+      itemId: ingredient.item_id ?? null,
+      itemName,
+      unit: ingredient.unit ?? null,
+      templateCanonicalIngredientId: ingredient.template_canonical_ingredient_id ?? null,
+    });
+    const canonicalIngredientId = canonicalResolution.canonical_ingredient_id;
     const canonicalMatchStatus: RecipeBuilderResolutionRow['canonical_match_status'] = canonicalIngredientId != null ? 'matched' : 'no_match';
     const inventoryResolved = ingredient.item_id != null;
     const quantityResolved = ingredient.quantity != null && ingredient.unit != null;
+    if (canonicalResolution.fallback_created) {
+      fallbackCanonicalCount += 1;
+    }
     const reviewStatus: RecipeBuilderResolutionRow['review_status'] = !quantityResolved
       ? 'BLOCKED'
       : canonicalIngredientId != null && inventoryResolved
@@ -312,10 +460,8 @@ async function persistDraft(
     resolutionRowsInput.push({
       canonical_ingredient_id: canonicalIngredientId,
       canonical_match_status: canonicalMatchStatus,
-      canonical_confidence: canonicalIngredientId != null ? 'HIGH' : 'LOW',
-      canonical_match_reason: canonicalIngredientId != null
-        ? (ingredient.template_canonical_ingredient_id != null ? 'template_mapping' : 'inventory_mapping')
-        : null,
+      canonical_confidence: canonicalResolution.canonical_confidence,
+      canonical_match_reason: canonicalResolution.canonical_match_reason,
       inventory_item_id: ingredient.item_id ?? null,
       inventory_mapping_status: inventoryResolved ? 'MAPPED' : 'UNMAPPED',
       recipe_mapping_status: 'UNMAPPED',
@@ -372,6 +518,7 @@ async function persistDraft(
       completenessStatus,
       unresolvedCanonicalCount,
       unresolvedInventoryCount,
+      fallbackCanonicalCount,
     }),
     ingredient_row_count: sanitizedIngredients.length,
     ready_row_count: readyRowCount,
@@ -472,6 +619,7 @@ function loadDraftDetail(db: Database.Database, draftId: number) {
         r.canonical_ingredient_id,
         c.canonical_name,
         r.canonical_match_status,
+        r.canonical_match_reason,
         r.inventory_mapping_status,
         r.review_status,
         r.explanation_text
@@ -498,6 +646,7 @@ function loadDraftDetail(db: Database.Database, draftId: number) {
     canonical_ingredient_id: number | null;
     canonical_name: string | null;
     canonical_match_status: RecipeBuilderResolutionRow['canonical_match_status'] | null;
+    canonical_match_reason: string | null;
     inventory_mapping_status: RecipeBuilderResolutionRow['inventory_mapping_status'] | null;
     review_status: RecipeBuilderResolutionRow['review_status'] | null;
     explanation_text: string | null;
@@ -521,6 +670,7 @@ function loadDraftDetail(db: Database.Database, draftId: number) {
       canonical_ingredient_id: row.canonical_ingredient_id,
       canonical_ingredient_name: row.canonical_name,
       canonical_match_status: row.canonical_match_status,
+      canonical_match_reason: row.canonical_match_reason,
       inventory_mapping_status: row.inventory_mapping_status,
       review_status: row.review_status,
       mapping_explanation: row.explanation_text,
@@ -635,6 +785,19 @@ export function createRecipeDraftRoutes(db: Database.Database): Router {
     const activeLink = db.prepare(
       'SELECT recipe_id FROM recipe_builder_promotion_links WHERE recipe_builder_draft_recipe_id = ? AND active = 1 LIMIT 1',
     ).get(draftId) as { recipe_id: number } | undefined;
+
+    const detailBeforePromotion = loadDraftDetail(db, draftId);
+    if (!detailBeforePromotion) {
+      res.status(404).json({ error: 'Recipe draft not found.' });
+      return;
+    }
+
+    await persistDraft(
+      db,
+      builderRepository,
+      detailToUpsertRecipeDraftInput(detailBeforePromotion),
+      { draftId: existing.id, jobId: existing.recipe_builder_job_id },
+    );
 
     const result = await executeRecipePromotion({
       recipe_builder_job_id: existing.recipe_builder_job_id,

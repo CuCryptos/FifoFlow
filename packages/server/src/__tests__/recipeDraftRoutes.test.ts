@@ -246,6 +246,62 @@ describe('Recipe draft routes', () => {
     });
   });
 
+  it('promotes an inventory-backed draft by creating a fallback canonical identity when none exists', async () => {
+    const itemId = Number(
+      db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)")
+        .run('Beef - Beef Tenderloin Steaks Premium 5 oz', 'Protein', 'each')
+        .lastInsertRowid,
+    );
+
+    const created = await request(app)
+      .post('/api/recipe-drafts')
+      .send({
+        draft_name: '5oz Tenderloin',
+        draft_notes: null,
+        source_recipe_type: 'dish',
+        creation_mode: 'blank',
+        source_template_id: null,
+        source_template_version_id: null,
+        yield_quantity: 1,
+        yield_unit: 'each',
+        serving_quantity: 5,
+        serving_unit: 'oz',
+        serving_count: 1,
+        ingredients: [{
+          item_id: itemId,
+          quantity: 1,
+          unit: 'each',
+          template_ingredient_name: null,
+          template_quantity: null,
+          template_unit: null,
+          template_sort_order: null,
+          template_canonical_ingredient_id: null,
+        }],
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      completeness_status: 'READY',
+      costability_status: 'NEEDS_REVIEW',
+    });
+    expect(created.body.ingredient_rows[0]).toMatchObject({
+      item_id: itemId,
+      canonical_match_reason: 'inventory_fallback',
+      review_status: 'READY',
+    });
+
+    const draftId = Number(created.body.id);
+    const promoted = await request(app).post(`/api/recipe-drafts/${draftId}/promote`).send({});
+
+    expect(promoted.status).toBe(200);
+    expect(promoted.body.promotion).toMatchObject({
+      created_new_recipe: true,
+      created_new_version: true,
+    });
+    expect(promoted.body.draft.ingredient_rows[0].review_status).toBe('READY');
+    expect(promoted.body.draft.ingredient_rows[0].canonical_ingredient_id).not.toBeNull();
+  });
+
   it('rejects promotion for dish drafts missing serving math', async () => {
     const itemId = Number(db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)").run('White Wine', 'Wine', 'bottle').lastInsertRowid);
     const canonicalId = insertCanonicalIngredient(db, { canonical_name: 'white wine', category: 'wine', base_unit: 'ml' });
