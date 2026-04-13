@@ -340,4 +340,64 @@ describe('Recipe draft routes', () => {
       expect.arrayContaining(['MISSING_SERVING_QUANTITY', 'MISSING_SERVING_UNIT', 'MISSING_SERVING_COUNT']),
     );
   });
+
+  it('deletes an unpromoted draft even when historical promotion events exist', async () => {
+    const itemId = Number(
+      db.prepare("INSERT INTO items (name, category, unit) VALUES (?, ?, ?)")
+        .run('Taro Filling', 'Prep', 'bag')
+        .lastInsertRowid,
+    );
+    const canonicalId = insertCanonicalIngredient(db, { canonical_name: 'taro filling', category: 'prep', base_unit: 'oz' });
+
+    const created = await request(app)
+      .post('/api/recipe-drafts')
+      .send({
+        draft_name: 'Taro Roll',
+        draft_notes: null,
+        source_recipe_type: 'dish',
+        creation_mode: 'blank',
+        source_template_id: null,
+        source_template_version_id: null,
+        yield_quantity: 12,
+        yield_unit: 'bag',
+        serving_quantity: 1,
+        serving_unit: 'each',
+        serving_count: null,
+        ingredients: [{
+          item_id: itemId,
+          quantity: 1,
+          unit: 'bag',
+          template_ingredient_name: null,
+          template_quantity: null,
+          template_unit: null,
+          template_sort_order: null,
+          template_canonical_ingredient_id: canonicalId,
+        }],
+      });
+
+    const draftId = Number(created.body.id);
+    const jobId = Number(created.body.recipe_builder_job_id);
+
+    db.prepare(
+      `
+        INSERT INTO recipe_promotion_events (
+          recipe_builder_job_id,
+          recipe_builder_draft_recipe_id,
+          action_type,
+          status,
+          promoted_recipe_id,
+          promoted_recipe_version_id,
+          notes,
+          created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+    ).run(jobId, draftId, 'PROMOTION_EVALUATED', 'REVIEW_READY', null, null, 'failed promote attempt', 'tester');
+
+    const response = await request(app).delete(`/api/recipe-drafts/${draftId}`);
+
+    expect(response.status).toBe(204);
+    expect(db.prepare('SELECT id FROM recipe_builder_draft_recipes WHERE id = ?').get(draftId)).toBeUndefined();
+    expect(db.prepare('SELECT id FROM recipe_builder_jobs WHERE id = ?').get(jobId)).toBeUndefined();
+    expect(db.prepare('SELECT id FROM recipe_promotion_events WHERE recipe_builder_draft_recipe_id = ?').all(draftId)).toHaveLength(0);
+  });
 });

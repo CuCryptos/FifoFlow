@@ -763,7 +763,21 @@ export function createRecipeDraftRoutes(db: Database.Database): Router {
       return;
     }
 
-    db.prepare('DELETE FROM recipe_builder_jobs WHERE id = ?').run(existing.recipe_builder_job_id);
+    const deletePromotionEvents = db.prepare(
+      'DELETE FROM recipe_promotion_events WHERE recipe_builder_draft_recipe_id = ? OR recipe_builder_job_id = ?',
+    );
+    const deletePromotionLinks = db.prepare(
+      'DELETE FROM recipe_builder_promotion_links WHERE recipe_builder_draft_recipe_id = ?',
+    );
+    const deleteJob = db.prepare('DELETE FROM recipe_builder_jobs WHERE id = ?');
+
+    const tx = db.transaction(() => {
+      deletePromotionEvents.run(draftId, existing.recipe_builder_job_id);
+      deletePromotionLinks.run(draftId);
+      deleteJob.run(existing.recipe_builder_job_id);
+    });
+
+    tx();
     res.status(204).send();
   });
 
