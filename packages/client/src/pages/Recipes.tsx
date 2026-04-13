@@ -3013,7 +3013,7 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
         toast('Draft deleted', 'success');
         onDone();
       },
-      onError: (err) => toast(err.message, 'error'),
+      onError: (err) => toast(`Could not delete draft: ${err.message}`, 'error'),
     });
   };
 
@@ -3667,6 +3667,11 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
               {promoteDraft.error.message}
             </div>
           )}
+          {deleteDraft.error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              Could not delete this draft. {deleteDraft.error.message}
+            </div>
+          )}
         </div>
       </div>
 
@@ -3688,7 +3693,7 @@ function RecipeForm({ draftId: initialDraftId, onDone }: { draftId?: number; onD
             disabled={isPending}
             className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-50 disabled:opacity-40"
           >
-            Delete Draft
+            {deleteDraft.isPending ? 'Deleting...' : 'Delete Draft'}
           </button>
         ) : null}
         <button
