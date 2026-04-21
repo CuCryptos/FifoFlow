@@ -1200,8 +1200,14 @@ export interface IntelligenceRefreshPayload {
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     ...options,
   });
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent('fifoflow:unauthenticated'));
+    const error = await res.json().catch(() => ({ error: 'Not authenticated' }));
+    throw new Error(typeof error.error === 'string' ? error.error : 'Not authenticated');
+  }
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));
     const msg = typeof error.error === 'string' ? error.error : res.statusText;

@@ -3,7 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from './contexts/ToastContext';
 import { VenueProvider } from './contexts/VenueContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './hooks/useAuth';
 import { Layout } from './components/Layout';
+import { LoginPage } from './pages/LoginPage';
 
 const OperatingMemo = lazy(async () => ({ default: (await import('./pages/OperatingMemo')).OperatingMemo }));
 const Dashboard = lazy(async () => ({ default: (await import('./pages/Dashboard')).Dashboard }));
@@ -33,6 +36,21 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AuthedApp />
+    </AuthProvider>
+  );
+}
+
+function AuthedApp() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return <div className="min-h-screen bg-[#0F1419]" />;
+  }
+  if (!user) {
+    return <LoginPage />;
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
