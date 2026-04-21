@@ -18,9 +18,12 @@ import {
   ListChecks,
   ShieldAlert,
   Beef,
+  LogOut,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useVenueContext } from '../contexts/VenueContext';
 import { useVenues } from '../hooks/useVenues';
+import { useAuth } from '../hooks/useAuth';
 import { ManageVenuesModal } from './ManageVenuesModal';
 
 const navItems = [
@@ -44,6 +47,13 @@ export function Layout() {
   const { selectedVenueId, setSelectedVenueId } = useVenueContext();
   const { data: venues } = useVenues();
   const [manageVenuesOpen, setManageVenuesOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
+
+  async function handleLogout() {
+    await logout();
+    queryClient.clear();
+  }
 
   return (
     <div className="min-h-screen bg-bg-page">
@@ -108,8 +118,22 @@ export function Layout() {
           ))}
         </nav>
 
-        {/* Bottom section — collapse toggle */}
-        <div className="absolute bottom-0 w-full p-4">
+        {/* Bottom section — user + collapse toggle */}
+        <div className="absolute bottom-0 w-full p-4 space-y-2">
+          {user && (
+            <button
+              onClick={handleLogout}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-muted hover:bg-sidebar-hover hover:text-white transition-colors ${
+                sidebarCollapsed ? 'justify-center' : ''
+              }`}
+              title={sidebarCollapsed ? `Log out ${user.name}` : undefined}
+            >
+              <LogOut size={18} />
+              {!sidebarCollapsed && (
+                <span className="text-sm truncate flex-1 text-left">{user.name}</span>
+              )}
+            </button>
+          )}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="w-full flex items-center justify-center text-text-muted hover:text-white transition-colors"
@@ -190,8 +214,20 @@ export function Layout() {
               ))}
             </nav>
 
-            {/* Bottom section — collapse toggle (not needed on mobile, but keeps consistent structure) */}
-            <div className="absolute bottom-0 w-full p-4">
+            {/* Bottom section — user + close */}
+            <div className="absolute bottom-0 w-full p-4 space-y-2">
+              {user && (
+                <button
+                  onClick={async () => {
+                    setMobileOpen(false);
+                    await handleLogout();
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-text-muted hover:bg-sidebar-hover hover:text-white transition-colors"
+                >
+                  <LogOut size={18} />
+                  <span className="text-sm truncate flex-1 text-left">{user.name}</span>
+                </button>
+              )}
               <button
                 onClick={() => setMobileOpen(false)}
                 className="w-full flex items-center justify-center text-text-muted hover:text-white transition-colors"
