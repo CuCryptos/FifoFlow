@@ -44,8 +44,11 @@ export function findValidSession(
     .get(id) as Record<string, unknown> | undefined;
   if (!row) return null;
 
-  const expiresAt = new Date(row.expires_at as string);
-  if (expiresAt.getTime() <= now.getTime()) {
+  // Use SQL datetime comparison for accuracy (handles SQLite datetime format)
+  const isExpired = db
+    .prepare('SELECT ? > ? as expired')
+    .get(now.toISOString(), row.expires_at as string) as { expired: number | boolean };
+  if (isExpired.expired) {
     deleteSession(db, id);
     return null;
   }
