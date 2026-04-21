@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CATEGORIES } from '@fifoflow/shared';
+import { initializeAuthDb } from './auth/schema.js';
 import { initializeIntelligenceDb } from './intelligence/persistence/sqliteSchema.js';
 import { initializeRecipeCostDb } from './intelligence/recipeCost/persistence/sqliteSchema.js';
 import { initializeCanonicalIngredientDb } from './mapping/ingredients/persistence/sqliteSchema.js';
@@ -779,6 +780,7 @@ export function initializeDb(db: Database.Database): void {
     ON CONFLICT(name) DO NOTHING;
   `);
 
+  initializeAuthDb(db);
   initializeIntelligenceDb(db);
   initializeRecipeCostDb(db);
   initializeCanonicalIngredientDb(db);
