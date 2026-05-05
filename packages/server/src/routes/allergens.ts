@@ -12,6 +12,7 @@ import {
 } from '../allergy/allergenRepositories.js';
 import { AllergenQueryService } from '../allergy/allergenQueryService.js';
 import { refreshAllergyDocumentProductMatches } from '../allergy/allergenMatchService.js';
+import { AllergenRollupService } from '../allergy/allergenRollupService.js';
 
 const ALLERGEN_STATUSES = new Set<AllergenStatus>(['contains', 'may_contain', 'free_of', 'unknown']);
 const ALLERGEN_CONFIDENCES = new Set<AllergenConfidence>(['verified', 'high', 'moderate', 'low', 'unverified', 'unknown']);
@@ -24,6 +25,7 @@ const DOCUMENT_MATCH_SIGNAL_TIERS = new Set<DocumentMatchSignalTier>(['high', 'm
 export function createAllergenRoutes(db: Database.Database): Router {
   const repository = new SQLiteAllergenRepository(db);
   const queryService = new AllergenQueryService(repository);
+  const rollupService = new AllergenRollupService(repository);
   const router = Router();
 
   router.get('/reference', (_req, res) => {
@@ -48,6 +50,10 @@ export function createAllergenRoutes(db: Database.Database): Router {
         needs_review: parseOptionalBoolean(req.query.needs_review),
       }),
     });
+  });
+
+  router.get('/chart', (req, res) => {
+    res.json(repository.getAllergenChart(parseOptionalNumber(req.query.venue_id) ?? null));
   });
 
   router.get('/items/:itemId', (req, res) => {
@@ -85,6 +91,7 @@ export function createAllergenRoutes(db: Database.Database): Router {
         res.status(404).json({ error: 'Item not found' });
         return;
       }
+      rollupService.rebuildActiveDishRecipeRollups();
       res.json(detail);
     } catch (error: any) {
       res.status(400).json({ error: error.message ?? 'Failed to update item allergen profile' });
@@ -110,6 +117,7 @@ export function createAllergenRoutes(db: Database.Database): Router {
         res.status(404).json({ error: 'Item not found' });
         return;
       }
+      rollupService.rebuildActiveDishRecipeRollups();
       res.json(detail);
     } catch (error: any) {
       res.status(400).json({ error: error.message ?? 'Failed to add allergen evidence' });

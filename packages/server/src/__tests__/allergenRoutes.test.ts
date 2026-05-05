@@ -113,6 +113,46 @@ describe('Allergen routes', () => {
     );
   });
 
+  it('returns an operational allergen chart across inventory and recipes', async () => {
+    seedRecipeRollupSlice(db);
+
+    const response = await request(app).get('/api/allergens/chart?venue_id=1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.summary).toMatchObject({
+      inventory_item_count: 3,
+      recipe_count: 1,
+    });
+    expect(response.body.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          row_type: 'inventory_item',
+          item_id: 1,
+          name: 'Salmon Portion',
+          contains_count: 1,
+        }),
+        expect.objectContaining({
+          row_type: 'recipe',
+          recipe_version_id: 50,
+          name: 'Sesame Salmon Plate',
+          contains_count: 1,
+        }),
+      ]),
+    );
+
+    const recipeRow = response.body.rows.find((row: any) => row.row_type === 'recipe');
+    expect(recipeRow.cells).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          allergen_code: 'sesame',
+          status: 'contains',
+          confidence: 'verified',
+          source_item_ids: [1],
+        }),
+      ]),
+    );
+  });
+
   it('queries chart products from structured item profiles and document evidence', async () => {
     const response = await request(app)
       .post('/api/allergens/query')
@@ -369,4 +409,62 @@ function getAllergenId(db: Database.Database, code: string): number {
     throw new Error(`Missing allergen seed for ${code}`);
   }
   return row.id;
+}
+
+function seedRecipeRollupSlice(db: Database.Database): void {
+  const milkId = getAllergenId(db, 'milk');
+  const sesameId = getAllergenId(db, 'sesame');
+
+  db.prepare(`
+    INSERT INTO canonical_ingredients (
+      id,
+      canonical_name,
+      normalized_canonical_name,
+      category,
+      base_unit,
+      perishable_flag,
+      active,
+      source_hash
+    ) VALUES (900, 'salmon portion', 'salmon portion', 'protein', 'each', 1, 1, 'test:salmon portion')
+  `).run();
+  db.prepare(`
+    INSERT INTO recipes (id, name, type)
+    VALUES (40, 'Sesame Salmon Plate', 'dish')
+  `).run();
+  db.prepare(`
+    INSERT INTO recipe_versions (id, recipe_id, version_number, status)
+    VALUES (50, 40, 1, 'active')
+  `).run();
+  db.prepare(`
+    INSERT INTO recipe_ingredients (
+      id,
+      recipe_version_id,
+      line_index,
+      raw_ingredient_text,
+      canonical_ingredient_id,
+      inventory_item_id,
+      quantity_normalized,
+      unit_normalized
+    ) VALUES (60, 50, 0, 'Salmon Portion', 900, 1, 1, 'each')
+  `).run();
+  db.prepare(`
+    INSERT INTO recipe_allergen_rollups (
+      recipe_version_id,
+      allergen_id,
+      worst_status,
+      min_confidence,
+      source_item_ids,
+      source_paths,
+      needs_review
+    ) VALUES
+      (50, ?, 'free_of', 'high', ?, ?, 0),
+      (50, ?, 'contains', 'verified', ?, ?, 0)
+  `).run(
+    milkId,
+    JSON.stringify([1]),
+    JSON.stringify(['ingredient:Salmon Portion:item:Salmon Portion:free_of']),
+    sesameId,
+    JSON.stringify([1]),
+    JSON.stringify(['ingredient:Salmon Portion:item:Salmon Portion:contains']),
+  );
 }

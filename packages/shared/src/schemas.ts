@@ -26,6 +26,8 @@ export const createItemSchema = z.object({
   upc: z.string().max(64).nullable().optional(),
   sysco_supc: z.string().max(64).nullable().optional(),
   manufacturer_item_code: z.string().max(128).nullable().optional(),
+  ingredient_statement: z.string().max(20_000).nullable().optional(),
+  allergen_statement: z.string().max(10_000).nullable().optional(),
 });
 
 export const updateItemSchema = z.object({
@@ -52,6 +54,8 @@ export const updateItemSchema = z.object({
   upc: z.string().max(64).nullable().optional(),
   sysco_supc: z.string().max(64).nullable().optional(),
   manufacturer_item_code: z.string().max(128).nullable().optional(),
+  ingredient_statement: z.string().max(20_000).nullable().optional(),
+  allergen_statement: z.string().max(10_000).nullable().optional(),
 });
 
 export const createTransactionSchema = z.object({

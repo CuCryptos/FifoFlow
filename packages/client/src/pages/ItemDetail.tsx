@@ -8,6 +8,7 @@ import type { Category, Unit } from '@fifoflow/shared';
 import { TransactionForm } from '../components/TransactionForm';
 import { VendorPricesSection } from '../components/VendorPricesSection';
 import { InventoryUnitEconomicsSummary } from '../components/inventory/InventoryUnitEconomicsSummary';
+import { InventoryItemAllergenSection } from '../components/inventory/InventoryItemAllergenSection';
 
 function formatCurrency(value: number | null): string {
   if (value === null) return '\u2014';
@@ -506,6 +507,8 @@ export function ItemDetail() {
           </div>
         )}
       </div>
+
+      <InventoryItemAllergenSection item={item} />
 
       {/* Transaction form + Cycle count — side by side */}
       <div className="grid md:grid-cols-2 gap-4">

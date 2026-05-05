@@ -618,9 +618,30 @@ function buildAllergenLookup(allergens: AllergenReferenceEntry[]): Map<string, s
   for (const allergen of allergens) {
     lookup.set(normalizeKey(allergen.code), allergen.code);
     lookup.set(normalizeKey(allergen.name), allergen.code);
+    for (const alias of ALLERGEN_IMPORT_ALIASES[allergen.code] ?? []) {
+      lookup.set(normalizeKey(alias), allergen.code);
+    }
   }
   return lookup;
 }
+
+const ALLERGEN_IMPORT_ALIASES: Record<string, string[]> = {
+  wheat: ['semolina', 'spelt', 'farro', 'wheat flour'],
+  gluten: ['barley', 'rye', 'malt', 'wheat gluten'],
+  milk: ['dairy', 'whey', 'casein', 'caseinate', 'lactose', 'butter', 'cream', 'cheese'],
+  egg: ['eggs', 'albumin', 'albumen'],
+  peanut: ['peanuts', 'groundnut'],
+  tree_nut: ['tree nuts', 'almond', 'cashew', 'walnut', 'pecan', 'hazelnut', 'pistachio', 'macadamia', 'brazil nut', 'pine nut'],
+  soy: ['soya', 'soybean', 'soybeans', 'soy lecithin', 'edamame', 'tofu', 'tamari'],
+  fish: ['anchovy', 'anchovies', 'bonito', 'cod', 'salmon', 'tuna', 'trout'],
+  shellfish: ['crustacean', 'shrimp', 'prawn', 'crab', 'lobster'],
+  sesame: ['tahini'],
+  celery: ['celeriac'],
+  lupin: ['lupine'],
+  mollusk: ['mollusc', 'clam', 'oyster', 'mussel', 'scallop', 'squid', 'octopus'],
+  sulfites: ['sulfite', 'sulphite', 'sulphites', 'sulfur dioxide'],
+  corn: ['maize'],
+};
 
 async function parseImportFile(file: File, allergenLookup: Map<string, string>): Promise<{
   products: ProductEnrichmentManualImportProductInput[];

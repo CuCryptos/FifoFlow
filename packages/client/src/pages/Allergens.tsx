@@ -4,6 +4,8 @@ import { Search } from 'lucide-react';
 import { useVenueContext } from '../contexts/VenueContext';
 import { WorkflowEmptyState, WorkflowMetricCard, WorkflowMetricGrid, WorkflowPage, WorkflowPanel, WorkflowStatusPill } from '../components/workflow/WorkflowPrimitives';
 import { AllergenReviewQueue } from '../components/allergens/AllergenReviewQueue';
+import { AllergenChartMatrix } from '../components/allergens/AllergenChartMatrix';
+import { AllergenDocumentLibrary } from '../components/allergens/AllergenDocumentLibrary';
 import { GuestSafetyQueryPanel } from '../components/allergens/GuestSafetyQueryPanel';
 import { ProductEnrichmentQueue } from '../components/products/ProductEnrichmentQueue';
 import { useAllergenItems, useAllergenReference, useAllergenReviewQueue } from '../hooks/useAllergens';
@@ -177,6 +179,10 @@ export function Allergens() {
 
         <GuestSafetyQueryPanel allergens={allergens} venueId={selectedVenueId} />
       </div>
+
+      <AllergenChartMatrix venueId={selectedVenueId} />
+
+      <AllergenDocumentLibrary venueId={selectedVenueId} />
 
       <ProductEnrichmentQueue venueId={selectedVenueId} allergens={allergens} />
     </WorkflowPage>

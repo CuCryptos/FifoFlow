@@ -33,6 +33,8 @@ export interface Item {
   upc: string | null;
   sysco_supc: string | null;
   manufacturer_item_code: string | null;
+  ingredient_statement: string | null;
+  allergen_statement: string | null;
   external_product_confidence: ExternalProductMatchConfidence | null;
   external_product_last_matched_at: string | null;
   created_at: string;

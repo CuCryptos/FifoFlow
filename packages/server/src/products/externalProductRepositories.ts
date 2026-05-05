@@ -585,7 +585,9 @@ export class ExternalProductRepository {
             gtin = COALESCE(?, gtin),
             upc = COALESCE(?, upc),
             sysco_supc = COALESCE(?, sysco_supc),
-            manufacturer_item_code = COALESCE(?, manufacturer_item_code)
+            manufacturer_item_code = COALESCE(?, manufacturer_item_code),
+            ingredient_statement = COALESCE(?, ingredient_statement),
+            allergen_statement = COALESCE(?, allergen_statement)
         WHERE id = ?
       `).run(
         row.brand_name ?? null,
@@ -594,6 +596,8 @@ export class ExternalProductRepository {
         row.upc ?? null,
         row.sysco_supc ?? null,
         row.vendor_item_code ?? null,
+        row.ingredient_statement ?? null,
+        row.allergen_statement ?? null,
         exactByIdentifiers.id,
       );
       return { item_id: exactByIdentifiers.id, created: false };
@@ -616,7 +620,9 @@ export class ExternalProductRepository {
             gtin = COALESCE(?, gtin),
             upc = COALESCE(?, upc),
             sysco_supc = COALESCE(?, sysco_supc),
-            manufacturer_item_code = COALESCE(?, manufacturer_item_code)
+            manufacturer_item_code = COALESCE(?, manufacturer_item_code),
+            ingredient_statement = COALESCE(?, ingredient_statement),
+            allergen_statement = COALESCE(?, allergen_statement)
         WHERE id = ?
       `).run(
         row.brand_name ?? null,
@@ -625,6 +631,8 @@ export class ExternalProductRepository {
         row.upc ?? null,
         row.sysco_supc ?? null,
         row.vendor_item_code ?? null,
+        row.ingredient_statement ?? null,
+        row.allergen_statement ?? null,
         nameMatch.id,
       );
       return { item_id: nameMatch.id, created: false };
@@ -657,8 +665,10 @@ export class ExternalProductRepository {
         gtin,
         upc,
         sysco_supc,
-        manufacturer_item_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        manufacturer_item_code,
+        ingredient_statement,
+        allergen_statement
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       inventoryName,
       inferredCategory,
@@ -676,6 +686,8 @@ export class ExternalProductRepository {
       row.upc ?? null,
       row.sysco_supc ?? null,
       row.vendor_item_code ?? null,
+      row.ingredient_statement ?? null,
+      row.allergen_statement ?? null,
     );
 
     return { item_id: Number(result.lastInsertRowid), created: true };
@@ -1259,6 +1271,12 @@ export class ExternalProductRepository {
         created_by
       ) VALUES (?, ?, 'external_product', ?, ?, ?)
     `);
+    const updateItemStatements = this.db.prepare(`
+      UPDATE items
+      SET ingredient_statement = COALESCE(ingredient_statement, ?),
+          allergen_statement = COALESCE(allergen_statement, ?)
+      WHERE id = ?
+    `);
 
     const result = this.db.transaction(() => {
       let importedRows = 0;
@@ -1331,6 +1349,12 @@ export class ExternalProductRepository {
           skipped_allergen_ids: skippedAllergens,
         }),
         input.created_by ?? null,
+      );
+
+      updateItemStatements.run(
+        match.external_product.ingredient_statement ?? null,
+        match.external_product.allergen_statement ?? null,
+        itemId,
       );
 
       return {
@@ -1537,6 +1561,15 @@ function sanitizeManualImportRow(
   row: ManualExternalProductImportRow,
   defaults: ExternalProductImportDefaults = {},
 ): ManualExternalProductImportRow {
+  const ingredientStatement = normalizeNullableText(row.ingredient_statement);
+  const allergenStatement = normalizeNullableText(row.allergen_statement);
+  const explicitClaims = row.allergen_claims?.map((claim) => ({
+    allergen_code: claim.allergen_code.trim(),
+    status: claim.status,
+    confidence: claim.confidence ?? 'unverified',
+    source_excerpt: normalizeNullableText(claim.source_excerpt),
+  })).filter((claim) => claim.allergen_code.length > 0) ?? [];
+
   return {
     external_key: normalizeNullableText(row.external_key),
     gtin: normalizeNullableText(row.gtin),
@@ -1563,17 +1596,104 @@ function sanitizeManualImportRow(
     venue_name: normalizeNullableText(row.venue_name),
     create_item_if_missing: row.create_item_if_missing ?? true,
     make_default_vendor_price: row.make_default_vendor_price ?? true,
-    ingredient_statement: normalizeNullableText(row.ingredient_statement),
-    allergen_statement: normalizeNullableText(row.allergen_statement),
+    ingredient_statement: ingredientStatement,
+    allergen_statement: allergenStatement,
     source_url: normalizeNullableText(row.source_url),
     raw_payload_json: normalizeNullableText(row.raw_payload_json),
-    allergen_claims: row.allergen_claims?.map((claim) => ({
-      allergen_code: claim.allergen_code.trim(),
-      status: claim.status,
-      confidence: claim.confidence ?? 'unverified',
-      source_excerpt: normalizeNullableText(claim.source_excerpt),
-    })).filter((claim) => claim.allergen_code.length > 0) ?? [],
+    allergen_claims: mergeAllergenClaims([
+      ...explicitClaims,
+      ...deriveAllergenClaimsFromStatements({
+        ingredient_statement: ingredientStatement,
+        allergen_statement: allergenStatement,
+      }, explicitClaims),
+    ]),
   };
+}
+
+const DERIVED_ALLERGEN_TERMS: Record<string, string[]> = {
+  wheat: ['wheat', 'semolina', 'spelt', 'farro', 'wheat flour'],
+  gluten: ['gluten', 'barley', 'rye', 'malt', 'wheat gluten'],
+  milk: ['milk', 'dairy', 'whey', 'casein', 'caseinate', 'lactose', 'butter', 'cream', 'cheese'],
+  egg: ['egg', 'eggs', 'albumin', 'albumen'],
+  peanut: ['peanut', 'peanuts', 'groundnut'],
+  tree_nut: ['almond', 'cashew', 'walnut', 'pecan', 'hazelnut', 'pistachio', 'macadamia', 'brazil nut', 'pine nut'],
+  soy: ['soy', 'soya', 'soybean', 'soybeans', 'soy lecithin', 'edamame', 'tofu', 'tamari'],
+  fish: ['fish', 'anchovy', 'anchovies', 'bonito', 'cod', 'salmon', 'tuna', 'trout'],
+  shellfish: ['shellfish', 'crustacean', 'shrimp', 'prawn', 'crab', 'lobster'],
+  sesame: ['sesame', 'tahini'],
+  mustard: ['mustard'],
+  celery: ['celery', 'celeriac'],
+  lupin: ['lupin', 'lupine'],
+  mollusk: ['mollusk', 'mollusc', 'clam', 'oyster', 'mussel', 'scallop', 'squid', 'octopus'],
+  sulfites: ['sulfite', 'sulfites', 'sulphite', 'sulphites', 'sulfur dioxide'],
+  coconut: ['coconut'],
+  corn: ['corn', 'maize'],
+};
+
+function deriveAllergenClaimsFromStatements(
+  input: { ingredient_statement: string | null; allergen_statement: string | null },
+  explicitClaims: ManualExternalProductImportAllergenClaimInput[],
+): ManualExternalProductImportAllergenClaimInput[] {
+  const explicitCodes = new Set(explicitClaims.map((claim) => normalizeAllergenKey(claim.allergen_code)));
+  const text = [input.ingredient_statement, input.allergen_statement].filter(Boolean).join(' ');
+  if (!text) {
+    return [];
+  }
+
+  const claims: ManualExternalProductImportAllergenClaimInput[] = [];
+  for (const [allergenCode, terms] of Object.entries(DERIVED_ALLERGEN_TERMS)) {
+    if (explicitCodes.has(normalizeAllergenKey(allergenCode))) {
+      continue;
+    }
+    const matchedTerm = terms.find((term) => containsAllergenTerm(text, term));
+    if (!matchedTerm) {
+      continue;
+    }
+    claims.push({
+      allergen_code: allergenCode,
+      status: 'contains',
+      confidence: 'moderate',
+      source_excerpt: `Derived from ingredient/allergen statement term "${matchedTerm}".`,
+    });
+  }
+  return claims;
+}
+
+function containsAllergenTerm(text: string, term: string): boolean {
+  const normalizedText = ` ${normalizeAllergenSearchText(text)} `;
+  const normalizedTerm = normalizeAllergenSearchText(term);
+  if (!normalizedText.includes(` ${normalizedTerm} `)) {
+    return false;
+  }
+
+  const negativePatterns = [
+    `free of ${normalizedTerm}`,
+    `${normalizedTerm} free`,
+    `no ${normalizedTerm}`,
+    `without ${normalizedTerm}`,
+  ];
+  return !negativePatterns.some((pattern) => normalizedText.includes(` ${pattern} `));
+}
+
+function normalizeAllergenSearchText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function mergeAllergenClaims(claims: ManualExternalProductImportAllergenClaimInput[]): ManualExternalProductImportAllergenClaimInput[] {
+  const byCode = new Map<string, ManualExternalProductImportAllergenClaimInput>();
+  for (const claim of claims) {
+    const key = normalizeAllergenKey(claim.allergen_code);
+    if (!key || byCode.has(key)) {
+      continue;
+    }
+    byCode.set(key, claim);
+  }
+  return Array.from(byCode.values());
 }
 
 function buildExternalKey(row: ManualExternalProductImportRow): string {

@@ -46,6 +46,8 @@ export function initializeDb(db: Database.Database): void {
       upc TEXT,
       sysco_supc TEXT,
       manufacturer_item_code TEXT,
+      ingredient_statement TEXT,
+      allergen_statement TEXT,
       external_product_confidence TEXT CHECK(external_product_confidence IN ('high','medium','low')),
       external_product_last_matched_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -578,6 +580,8 @@ export function initializeDb(db: Database.Database): void {
   addColumnIfMissing('upc', 'TEXT');
   addColumnIfMissing('sysco_supc', 'TEXT');
   addColumnIfMissing('manufacturer_item_code', 'TEXT');
+  addColumnIfMissing('ingredient_statement', 'TEXT');
+  addColumnIfMissing('allergen_statement', 'TEXT');
   addColumnIfMissing('external_product_confidence', "TEXT CHECK(external_product_confidence IN ('high','medium','low'))");
   addColumnIfMissing('external_product_last_matched_at', 'TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_items_storage_area_id ON items(storage_area_id)');

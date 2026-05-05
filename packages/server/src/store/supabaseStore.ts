@@ -252,6 +252,8 @@ export class SupabaseInventoryStore implements InventoryStore {
       upc = null,
       sysco_supc = null,
       manufacturer_item_code = null,
+      ingredient_statement = null,
+      allergen_statement = null,
     } = _input;
 
     const payload = {
@@ -279,6 +281,8 @@ export class SupabaseInventoryStore implements InventoryStore {
       upc,
       sysco_supc,
       manufacturer_item_code,
+      ingredient_statement,
+      allergen_statement,
     };
 
     const rows = await this.request<Item[]>({

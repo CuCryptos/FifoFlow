@@ -206,6 +206,8 @@ export class SqliteInventoryStore implements InventoryStore {
       upc = null,
       sysco_supc = null,
       manufacturer_item_code = null,
+      ingredient_statement = null,
+      allergen_statement = null,
     } = input;
 
     const normalizedCategory = category.trim();
@@ -237,8 +239,10 @@ export class SqliteInventoryStore implements InventoryStore {
         gtin,
         upc,
         sysco_supc,
-        manufacturer_item_code
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        manufacturer_item_code,
+        ingredient_statement,
+        allergen_statement
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       name,
       normalizedCategory,
@@ -262,6 +266,8 @@ export class SqliteInventoryStore implements InventoryStore {
       upc,
       sysco_supc,
       manufacturer_item_code,
+      ingredient_statement,
+      allergen_statement,
     );
 
     return this.db.prepare('SELECT * FROM items WHERE id = ?').get(result.lastInsertRowid) as Item;

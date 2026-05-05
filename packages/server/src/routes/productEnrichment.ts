@@ -2,6 +2,8 @@ import { Router } from 'express';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { CATEGORIES, UNITS, updateItemSchema, updateVendorPriceSchema } from '@fifoflow/shared';
+import { AllergenRollupService } from '../allergy/allergenRollupService.js';
+import { SQLiteAllergenRepository } from '../allergy/allergenRepositories.js';
 import { ExternalProductMatchService } from '../products/externalProductMatchService.js';
 import { ExternalProductRepository } from '../products/externalProductRepositories.js';
 
@@ -98,6 +100,7 @@ const catalogSyncSchema = z.object({
 export function createProductEnrichmentRoutes(db: Database.Database): Router {
   const repository = new ExternalProductRepository(db);
   const matchService = new ExternalProductMatchService(repository);
+  const allergenRollupService = new AllergenRollupService(new SQLiteAllergenRepository(db));
   const router = Router();
 
   router.get('/catalogs', (_req, res) => {
@@ -328,6 +331,7 @@ export function createProductEnrichmentRoutes(db: Database.Database): Router {
 
     try {
       const result = repository.importAllergenClaimsForMatch(itemId, parsed.data.external_product_match_id, parsed.data);
+      allergenRollupService.rebuildActiveDishRecipeRollups();
       res.json(result);
     } catch (error: any) {
       const message = error?.message ?? 'Unable to import allergen claims';

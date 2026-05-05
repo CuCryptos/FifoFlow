@@ -5,6 +5,7 @@ import { CATEGORIES, UNITS } from '@fifoflow/shared';
 import { useItemStorage, useReplaceItemStorage, useUpdateItem } from '../../hooks/useItems';
 import { useToast } from '../../contexts/ToastContext';
 import { InventoryUnitEconomicsSummary, deriveInventoryOnHandValue, deriveInventoryUnitEconomics } from './InventoryUnitEconomicsSummary';
+import { InventoryItemAllergenSection } from './InventoryItemAllergenSection';
 import { ItemIdentifierEditor } from '../products/ItemIdentifierEditor';
 
 function formatCurrency(value: number | null): string {
@@ -556,6 +557,8 @@ export function InventoryItemSidePanel({
       </div>
 
       <ItemIdentifierEditor itemId={item.id} item={item} compact />
+
+      <InventoryItemAllergenSection item={item} compact />
 
       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="flex items-center justify-between gap-3">

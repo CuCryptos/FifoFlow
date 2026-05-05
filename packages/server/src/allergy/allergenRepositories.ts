@@ -292,6 +292,56 @@ export interface RecipeDetailRecord {
   rollups: RecipeRollupRecord[];
 }
 
+export interface AllergenChartCell {
+  allergen_id: number;
+  allergen_code: string;
+  allergen_name: string;
+  category: string;
+  status: AllergenStatus;
+  confidence: AllergenConfidence;
+  needs_review: boolean;
+  notes: string | null;
+  evidence_count: number;
+  source_item_ids: number[];
+  source_paths: string[];
+  last_reviewed_at: string | null;
+}
+
+export interface AllergenChartRow {
+  row_type: 'inventory_item' | 'recipe';
+  row_id: string;
+  item_id: number | null;
+  recipe_id: number | null;
+  recipe_version_id: number | null;
+  name: string;
+  category_label: string;
+  vendor_name: string | null;
+  venue_name: string | null;
+  version_number: number | null;
+  ingredient_count: number | null;
+  contains_count: number;
+  may_contain_count: number;
+  unknown_count: number;
+  low_confidence_count: number;
+  evidence_count: number;
+  needs_review: boolean;
+  cells: AllergenChartCell[];
+}
+
+export interface AllergenChartSnapshot {
+  allergens: AllergenReference[];
+  rows: AllergenChartRow[];
+  summary: {
+    inventory_item_count: number;
+    recipe_count: number;
+    needs_review_count: number;
+    contains_cell_count: number;
+    may_contain_cell_count: number;
+    unknown_cell_count: number;
+    low_confidence_cell_count: number;
+  };
+}
+
 export interface ItemProfileUpdateInput {
   allergen_code: string;
   status: AllergenStatus;
@@ -364,6 +414,27 @@ export class SQLiteAllergenRepository {
       ...row,
       is_active: Boolean(row.is_active),
     })) as AllergenReference[];
+  }
+
+  getAllergenChart(venueId?: number | null): AllergenChartSnapshot {
+    const allergens = this.listAllergensReference();
+    const itemRows = this.buildInventoryChartRows(allergens, venueId ?? null);
+    const recipeRows = this.buildRecipeChartRows(allergens, venueId ?? null);
+    const rows = [...itemRows, ...recipeRows];
+
+    return {
+      allergens,
+      rows,
+      summary: {
+        inventory_item_count: itemRows.length,
+        recipe_count: recipeRows.length,
+        needs_review_count: rows.filter((row) => row.needs_review).length,
+        contains_cell_count: rows.reduce((sum, row) => sum + row.contains_count, 0),
+        may_contain_cell_count: rows.reduce((sum, row) => sum + row.may_contain_count, 0),
+        unknown_cell_count: rows.reduce((sum, row) => sum + row.unknown_count, 0),
+        low_confidence_cell_count: rows.reduce((sum, row) => sum + row.low_confidence_count, 0),
+      },
+    };
   }
 
   listItemProfiles(filters: ItemProfileFilters): ItemListEntry[] {
@@ -1480,6 +1551,238 @@ export class SQLiteAllergenRepository {
       input.created_by ?? null,
     );
   }
+
+  private buildInventoryChartRows(allergens: AllergenReference[], venueId: number | null): AllergenChartRow[] {
+    const items = this.db.prepare(
+      `
+        SELECT
+          i.id,
+          i.name,
+          i.category,
+          v.name AS vendor_name,
+          ven.name AS venue_name
+        FROM items i
+        LEFT JOIN vendors v ON v.id = i.vendor_id
+        LEFT JOIN venues ven ON ven.id = i.venue_id
+        WHERE (? IS NULL OR i.venue_id = ?)
+        ORDER BY i.name COLLATE NOCASE ASC, i.id ASC
+      `,
+    ).all(venueId, venueId) as Array<{
+      id: number;
+      name: string;
+      category: string;
+      vendor_name: string | null;
+      venue_name: string | null;
+    }>;
+
+    if (items.length === 0) {
+      return [];
+    }
+
+    const itemIds = items.map((item) => item.id);
+    const placeholders = itemIds.map(() => '?').join(', ');
+    const profileRows = this.db.prepare(
+      `
+        SELECT
+          ia.item_id,
+          ia.allergen_id,
+          ia.status,
+          ia.confidence,
+          ia.notes,
+          ia.last_reviewed_at
+        FROM item_allergens ia
+        WHERE ia.item_id IN (${placeholders})
+      `,
+    ).all(...itemIds) as Array<{
+      item_id: number;
+      allergen_id: number;
+      status: AllergenStatus;
+      confidence: AllergenConfidence;
+      notes: string | null;
+      last_reviewed_at: string | null;
+    }>;
+
+    const evidenceRows = this.db.prepare(
+      `
+        SELECT
+          ia.item_id,
+          ia.allergen_id,
+          COUNT(ae.id) AS evidence_count
+        FROM item_allergens ia
+        LEFT JOIN allergen_evidence ae ON ae.item_allergen_id = ia.id
+        WHERE ia.item_id IN (${placeholders})
+        GROUP BY ia.item_id, ia.allergen_id
+      `,
+    ).all(...itemIds) as Array<{ item_id: number; allergen_id: number; evidence_count: number }>;
+
+    const profileByKey = new Map(profileRows.map((row) => [`${row.item_id}:${row.allergen_id}`, row]));
+    const evidenceByKey = new Map(evidenceRows.map((row) => [`${row.item_id}:${row.allergen_id}`, Number(row.evidence_count ?? 0)]));
+
+    return items.map((item) => {
+      const cells = allergens.map((allergen) => {
+        const profile = profileByKey.get(`${item.id}:${allergen.id}`) ?? null;
+        const status = profile?.status ?? 'unknown';
+        const confidence = profile?.confidence ?? 'unknown';
+        return {
+          allergen_id: allergen.id,
+          allergen_code: allergen.code,
+          allergen_name: allergen.name,
+          category: allergen.category,
+          status,
+          confidence,
+          needs_review: status === 'unknown' || isLowConfidence(confidence),
+          notes: profile?.notes ?? null,
+          evidence_count: evidenceByKey.get(`${item.id}:${allergen.id}`) ?? 0,
+          source_item_ids: [item.id],
+          source_paths: profile ? [`item:${item.name}:${allergen.code}:${status}`] : [`item:${item.name}:${allergen.code}:missing_profile`],
+          last_reviewed_at: profile?.last_reviewed_at ?? null,
+        } satisfies AllergenChartCell;
+      });
+
+      return buildChartRow({
+        row_type: 'inventory_item',
+        row_id: `item-${item.id}`,
+        item_id: item.id,
+        recipe_id: null,
+        recipe_version_id: null,
+        name: item.name,
+        category_label: item.category,
+        vendor_name: item.vendor_name,
+        venue_name: item.venue_name,
+        version_number: null,
+        ingredient_count: null,
+        cells,
+      });
+    });
+  }
+
+  private buildRecipeChartRows(allergens: AllergenReference[], venueId: number | null): AllergenChartRow[] {
+    const venueFilter = venueId == null
+      ? ''
+      : `
+        AND EXISTS (
+          SELECT 1
+          FROM recipe_ingredients rif
+          INNER JOIN items ii ON ii.id = rif.inventory_item_id
+          WHERE rif.recipe_version_id = rv.id
+            AND ii.venue_id = ?
+        )
+      `;
+    const params = venueId == null ? [] : [venueId];
+    const recipes = this.db.prepare(
+      `
+        SELECT
+          rv.id AS recipe_version_id,
+          rv.recipe_id,
+          r.name AS recipe_name,
+          r.type AS recipe_type,
+          rv.version_number,
+          rv.status,
+          COUNT(ri.id) AS ingredient_count
+        FROM recipe_versions rv
+        INNER JOIN recipes r ON r.id = rv.recipe_id
+        LEFT JOIN recipe_ingredients ri ON ri.recipe_version_id = rv.id
+        WHERE r.type = 'dish'
+          AND rv.status = 'active'
+          ${venueFilter}
+        GROUP BY rv.id, rv.recipe_id, r.name, r.type, rv.version_number, rv.status
+        ORDER BY r.name COLLATE NOCASE ASC, rv.version_number DESC
+      `,
+    ).all(...params) as Array<{
+      recipe_version_id: number;
+      recipe_id: number;
+      recipe_name: string;
+      recipe_type: string;
+      version_number: number;
+      status: string;
+      ingredient_count: number;
+    }>;
+
+    if (recipes.length === 0) {
+      return [];
+    }
+
+    const recipeVersionIds = recipes.map((recipe) => recipe.recipe_version_id);
+    const placeholders = recipeVersionIds.map(() => '?').join(', ');
+    const rollupRows = this.db.prepare(
+      `
+        SELECT
+          recipe_version_id,
+          allergen_id,
+          worst_status,
+          min_confidence,
+          source_item_ids,
+          source_paths,
+          needs_review,
+          computed_at
+        FROM recipe_allergen_rollups
+        WHERE recipe_version_id IN (${placeholders})
+      `,
+    ).all(...recipeVersionIds) as Array<{
+      recipe_version_id: number;
+      allergen_id: number;
+      worst_status: AllergenStatus;
+      min_confidence: AllergenConfidence;
+      source_item_ids: string;
+      source_paths: string;
+      needs_review: number;
+      computed_at: string;
+    }>;
+    const rollupByKey = new Map(rollupRows.map((row) => [`${row.recipe_version_id}:${row.allergen_id}`, row]));
+
+    return recipes.map((recipe) => {
+      const cells = allergens.map((allergen) => {
+        const rollup = rollupByKey.get(`${recipe.recipe_version_id}:${allergen.id}`) ?? null;
+        const status = rollup?.worst_status ?? 'unknown';
+        const confidence = rollup?.min_confidence ?? 'unknown';
+        return {
+          allergen_id: allergen.id,
+          allergen_code: allergen.code,
+          allergen_name: allergen.name,
+          category: allergen.category,
+          status,
+          confidence,
+          needs_review: rollup ? Boolean(rollup.needs_review) : true,
+          notes: null,
+          evidence_count: 0,
+          source_item_ids: rollup ? parseNumberList(rollup.source_item_ids) : [],
+          source_paths: rollup ? parseStringList(rollup.source_paths) : [`recipe:${recipe.recipe_name}:${allergen.code}:missing_rollup`],
+          last_reviewed_at: rollup?.computed_at ?? null,
+        } satisfies AllergenChartCell;
+      });
+
+      return buildChartRow({
+        row_type: 'recipe',
+        row_id: `recipe-${recipe.recipe_version_id}`,
+        item_id: null,
+        recipe_id: recipe.recipe_id,
+        recipe_version_id: recipe.recipe_version_id,
+        name: recipe.recipe_name,
+        category_label: 'Recipe',
+        vendor_name: null,
+        venue_name: null,
+        version_number: recipe.version_number,
+        ingredient_count: Number(recipe.ingredient_count ?? 0),
+        cells,
+      });
+    });
+  }
+}
+
+function buildChartRow(input: Omit<AllergenChartRow, 'contains_count' | 'may_contain_count' | 'unknown_count' | 'low_confidence_count' | 'evidence_count' | 'needs_review'>): AllergenChartRow {
+  return {
+    ...input,
+    contains_count: input.cells.filter((cell) => cell.status === 'contains').length,
+    may_contain_count: input.cells.filter((cell) => cell.status === 'may_contain').length,
+    unknown_count: input.cells.filter((cell) => cell.status === 'unknown').length,
+    low_confidence_count: input.cells.filter((cell) => isLowConfidence(cell.confidence)).length,
+    evidence_count: input.cells.reduce((sum, cell) => sum + cell.evidence_count, 0),
+    needs_review: input.cells.some((cell) => cell.needs_review),
+  };
+}
+
+function isLowConfidence(confidence: AllergenConfidence): boolean {
+  return confidence === 'low' || confidence === 'unverified' || confidence === 'unknown';
 }
 
 function normalizeRecipeSummaryRow(row: Record<string, unknown>): RecipeSummaryRecord {

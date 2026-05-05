@@ -38,6 +38,14 @@ export function useAllergenItem(itemId: number) {
   });
 }
 
+export function useAllergenChart(venueId?: number | null) {
+  return useQuery({
+    queryKey: ['allergens', 'chart', venueId ?? 'all'],
+    queryFn: () => api.allergens.chart(venueId),
+    staleTime: 30_000,
+  });
+}
+
 export function useAllergenDocument(documentId: number) {
   return useQuery({
     queryKey: ['allergens', 'documents', documentId],
@@ -69,6 +77,7 @@ export function useUpdateAllergenItemProfile() {
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'chart'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'reference'] }),
@@ -86,6 +95,7 @@ export function useAddAllergenEvidence() {
     onSuccess: async (_data, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'chart'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'review-queue'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'documents'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'items', variables.itemId] }),

@@ -359,6 +359,17 @@ export interface AllergyDocumentPayload {
   updated_at: string;
 }
 
+export interface AllergyDocumentReprocessPayload {
+  document_id: number;
+  match_table_available: boolean;
+  product_count: number;
+  processed_product_count: number;
+  locked_product_count: number;
+  inserted_match_count: number;
+  no_match_count: number;
+  skipped_reason: string | null;
+}
+
 export interface AllergyChatItemPayload {
   product_id: number;
   product_name: string;
@@ -479,6 +490,56 @@ export interface AllergenItemDetailPayload {
   evidence: AllergenItemEvidencePayload[];
   match_aliases: AllergenItemMatchAliasPayload[];
   linked_document_products: AllergenItemLinkedDocumentProductPayload[];
+}
+
+export interface AllergenChartCellPayload {
+  allergen_id: number;
+  allergen_code: string;
+  allergen_name: string;
+  category: string;
+  status: 'contains' | 'may_contain' | 'free_of' | 'unknown';
+  confidence: 'verified' | 'high' | 'moderate' | 'low' | 'unverified' | 'unknown';
+  needs_review: boolean;
+  notes: string | null;
+  evidence_count: number;
+  source_item_ids: number[];
+  source_paths: string[];
+  last_reviewed_at: string | null;
+}
+
+export interface AllergenChartRowPayload {
+  row_type: 'inventory_item' | 'recipe';
+  row_id: string;
+  item_id: number | null;
+  recipe_id: number | null;
+  recipe_version_id: number | null;
+  name: string;
+  category_label: string;
+  vendor_name: string | null;
+  venue_name: string | null;
+  version_number: number | null;
+  ingredient_count: number | null;
+  contains_count: number;
+  may_contain_count: number;
+  unknown_count: number;
+  low_confidence_count: number;
+  evidence_count: number;
+  needs_review: boolean;
+  cells: AllergenChartCellPayload[];
+}
+
+export interface AllergenChartPayload {
+  allergens: AllergenReferencePayload[];
+  rows: AllergenChartRowPayload[];
+  summary: {
+    inventory_item_count: number;
+    recipe_count: number;
+    needs_review_count: number;
+    contains_cell_count: number;
+    may_contain_cell_count: number;
+    unknown_cell_count: number;
+    low_confidence_cell_count: number;
+  };
 }
 
 export interface ProductEnrichmentExternalProductPayload extends ExternalProduct {
@@ -1398,6 +1459,10 @@ export const api = {
       return fetchJson<{ items: AllergenItemListEntryPayload[] }>(`/allergens/items${query ? `?${query}` : ''}`);
     },
     getItem: (itemId: number) => fetchJson<AllergenItemDetailPayload>(`/allergens/items/${itemId}`),
+    chart: (venueId?: number | null) => {
+      const qs = venueId != null ? `?venue_id=${venueId}` : '';
+      return fetchJson<AllergenChartPayload>(`/allergens/chart${qs}`);
+    },
     getDocument: (documentId: number) => fetchJson<AllergenDocumentDetailPayload>(`/allergens/documents/${documentId}`),
     reviewQueue: () => fetchJson<AllergenReviewQueuePayload>('/allergens/review-queue'),
     updateItemProfile: (itemId: number, profiles: AllergenItemProfileUpdateInput[]) =>
@@ -1701,6 +1766,10 @@ export const api = {
         throw new Error(typeof error.error === 'string' ? error.error : res.statusText);
       }
     },
+    reprocessDocument: (documentId: number) =>
+      fetchJson<AllergyDocumentReprocessPayload>(`/allergy-assistant/documents/${documentId}/reprocess`, {
+        method: 'POST',
+      }),
     ask: (input: { question: string; venue_id?: number | null; document_ids?: number[] }) =>
       fetchJson<AllergyChatResponsePayload>('/allergy-assistant/chat', {
         method: 'POST',

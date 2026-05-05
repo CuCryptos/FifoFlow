@@ -153,6 +153,8 @@ function makeItem(id: number, name: string): Item {
     upc: null,
     sysco_supc: null,
     manufacturer_item_code: null,
+    ingredient_statement: null,
+    allergen_statement: null,
     external_product_confidence: null,
     external_product_last_matched_at: null,
     created_at: now,

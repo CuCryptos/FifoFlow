@@ -109,7 +109,9 @@ export function useImportProductEnrichmentAllergens() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['product-enrichment', 'items', variables.itemId] }),
         queryClient.invalidateQueries({ queryKey: ['product-enrichment', 'review-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['items'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'items'] }),
+        queryClient.invalidateQueries({ queryKey: ['allergens', 'chart'] }),
         queryClient.invalidateQueries({ queryKey: ['allergens', 'items', variables.itemId] }),
       ]);
     },
