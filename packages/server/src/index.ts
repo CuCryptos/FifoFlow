@@ -27,19 +27,54 @@ import { createProteinUsageRoutes } from './routes/proteinUsage.js';
 import { createLunchMenuRoutes } from './routes/lunchMenus.js';
 import { createSqliteInventoryStore } from './store/sqliteStore.js';
 import { createSupabaseInventoryStoreFromEnv } from './store/supabaseStore.js';
+import cookieParser from 'cookie-parser';
+import { createAuthRoutes } from './routes/auth.js';
+import { createRequireAuth } from './middleware/requireAuth.js';
+import { loginLimiter, globalLimiter, aiLimiter } from './middleware/rateLimiters.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({ credentials: true }));
 app.use(express.json());
+
+const COOKIE_SECRET = process.env.COOKIE_SECRET;
+if (process.env.NODE_ENV === 'production' && !COOKIE_SECRET) {
+  console.error('COOKIE_SECRET is required in production');
+  process.exit(1);
+}
+app.use(cookieParser(COOKIE_SECRET ?? 'dev-insecure-secret-change-me'));
 
 const storeDriver = (process.env.INVENTORY_STORE_DRIVER ?? 'sqlite').toLowerCase();
 const store = storeDriver === 'supabase'
   ? createSupabaseInventoryStoreFromEnv()
   : createSqliteInventoryStore(getDb());
+
+const db = getDb();
+const requireAuth = createRequireAuth(db);
+
+// Public, unlimited
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', store: storeDriver });
+});
+
+// Auth routes: login is rate-limited by IP; logout/me are light
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth', createAuthRoutes(db));
+
+// Everything below requires auth
+app.use('/api', requireAuth);
+
+// Global per-user limiter for authed traffic
+app.use('/api', globalLimiter);
+
+// AI-endpoint limiter (stricter)
+app.use('/api/forecasts', aiLimiter);
+app.use('/api/invoices', aiLimiter);
+app.use('/api/recipe-intelligence', aiLimiter);
+app.use('/api/allergy-assistant', aiLimiter);
 
 app.use('/api/items', createItemRoutes(store));
 app.use('/api/transactions', createTransactionRoutes(store));
@@ -65,10 +100,6 @@ app.use('/api/allergens', createAllergenRoutes(getDb()));
 app.use('/api/product-enrichment', createProductEnrichmentRoutes(getDb()));
 app.use('/api/protein-usage', createProteinUsageRoutes(getDb()));
 app.use('/api/lunch-menus', createLunchMenuRoutes(getDb()));
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', store: storeDriver });
-});
 
 // In production, serve the Vite-built client
 if (process.env.NODE_ENV === 'production') {

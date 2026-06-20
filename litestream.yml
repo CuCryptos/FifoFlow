@@ -1,0 +1,11 @@
+dbs:
+  - path: /data/fifoflow.db
+    replicas:
+      - type: s3
+        endpoint: https://nyc3.digitaloceanspaces.com
+        bucket: fifoflow-backups
+        path: prod/fifoflow
+        region: us-east-1
+        retention: 720h
+        snapshot-interval: 24h
+        sync-interval: 10s
